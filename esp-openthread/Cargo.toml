@@ -1,0 +1,19 @@
+[package]
+name = "esp-openthread"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+esp-ieee802154 = { git = "https://github.com/esp-rs/esp-ieee802154.git", branch = "improve-for-openthread" }
+esp-openthread-sys = { path = "../esp-openthread-sys" }
+log = "0.4.17"
+critical-section = "1.1.1"
+fugit = "0.3.7"
+
+# TODO update in ieee802154 first!
+esp32c6-hal = { version = "0.4.0", optional = true }
+esp32h2-hal = { version = "0.2.0", optional = true }
+
+[features]
+esp32c6 = [ "esp-ieee802154/esp32c6", "esp32c6-hal"]
+esp32h2 = [ "esp-ieee802154/esp32h2", "esp32h2-hal"]
