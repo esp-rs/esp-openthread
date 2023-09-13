@@ -1,24 +1,17 @@
-//! Currently just uses the plain OpenThread API
+//! Currently mostly uses the plain OpenThread API
 
 #![no_std]
 #![no_main]
 
 use esp_backtrace as _;
 use esp_ieee802154::Ieee802154;
-use esp_openthread::sys::{
-    bindings::{
-        otChangedFlags, otDatasetSetActive, otExtendedPanId, otInstance, otInstanceInitSingle,
-        otIp6GetUnicastAddresses, otIp6SetEnabled, otMeshLocalPrefix, otNetworkKey, otNetworkName,
-        otOperationalDataset, otOperationalDatasetComponents, otPskc, otSecurityPolicy,
-        otSetStateChangedCallback, otTaskletsArePending, otTaskletsProcess, otThreadSetEnabled,
-        otTimestamp,
-    },
-    c_types,
+use esp_openthread::sys::bindings::{
+    otDatasetSetActive, otExtendedPanId, otMeshLocalPrefix, otNetworkKey, otNetworkName,
+    otOperationalDataset, otOperationalDatasetComponents, otPskc, otSecurityPolicy, otTimestamp,
 };
-use esp_println::{print, println};
-use hal::{
-    clock::ClockControl, peripherals::Peripherals, prelude::*, systimer, Rng,
-};
+use esp_openthread::NetworkInterfaceUnicastAddress;
+use esp_println::println;
+use hal::{clock::ClockControl, peripherals::Peripherals, prelude::*, systimer, Rng};
 
 #[entry]
 fn main() -> ! {
@@ -33,20 +26,19 @@ fn main() -> ! {
     let systimer = systimer::SystemTimer::new(peripherals.SYSTIMER);
     let (_, _, radio) = peripherals.RADIO.split();
     let mut ieee802154 = Ieee802154::new(radio, &mut system.radio_clock_control);
-    let openthread = esp_openthread::OpenThread::new(
+    let mut openthread = esp_openthread::OpenThread::new(
         &mut ieee802154,
         systimer.alarm0,
         Rng::new(peripherals.RNG),
     );
 
+    let mut callback = |flags| println!("{:?}", flags);
+    openthread.set_change_callback(Some(&mut callback));
+
+    let instance = openthread.instance;
+
     unsafe {
         // see https://openthread.io/codelabs/openthread-apis#7
-
-        let instance = otInstanceInitSingle();
-        println!("otInstanceInitSingle done....");
-
-        let res = otSetStateChangedCallback(instance, Some(change_callback), core::ptr::null_mut());
-        println!("otSetStateChangedCallback {res}");
 
         let dataset = otOperationalDataset {
             mActiveTimestamp: otTimestamp {
@@ -99,53 +91,26 @@ fn main() -> ! {
         let res = otDatasetSetActive(instance, &dataset);
         println!("otDatasetSetActive {res}");
 
-        let res = otIp6SetEnabled(instance, true);
-        println!("otIp6SetEnabled {res}");
+        openthread.ipv6_set_enabled(true).unwrap();
 
-        let res = otThreadSetEnabled(instance, true);
-        println!("otThreadSetEnabled {res}");
+        openthread.thread_set_enabled(true).unwrap();
 
-        print_address(instance);
+        let addrs: heapless::Vec<NetworkInterfaceUnicastAddress, 5> =
+            openthread.ipv6_get_unicast_addresses();
+
+        print_link_local_address(addrs);
 
         loop {
-            openthread.process(instance);
-            if otTaskletsArePending(instance) {
-                otTaskletsProcess(instance);
-            }
+            openthread.process();
+            openthread.run_tasklets();
         }
     }
 }
 
-unsafe extern "C" fn change_callback(flags: otChangedFlags, _context: *mut crate::c_types::c_void) {
-    println!("change_callback otChangedFlags={:32b}", flags);
-}
-
-fn print_address(instance: *mut otInstance) {
-    unsafe {
-        let mut addr = otIp6GetUnicastAddresses(instance);
-
-        loop {
-            let a = &*addr;
-
-            let octets = a.mAddress.mFields.m8;
-            if octets[0] == 0xfe && octets[1] == 0x80 {
-                print!("Link local address ");
-                let mut i = 0;
-                for o in octets {
-                    print!("{:02x}", o);
-                    if i % 2 == 1 && i != 15 {
-                        print!(":");
-                    }
-                    i += 1;
-                }
-                println!();
-            }
-
-            if a.mNext.is_null() {
-                break;
-            }
-
-            addr = a.mNext;
+fn print_link_local_address(addrs: heapless::Vec<NetworkInterfaceUnicastAddress, 5>) {
+    for addr in addrs {
+        if addr.address.segments()[0] == 0xfe80 {
+            println!("{}", addr.address);
         }
     }
 }

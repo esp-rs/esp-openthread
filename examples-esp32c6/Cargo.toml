@@ -9,6 +9,8 @@ license = "MIT OR Apache-2.0"
 hal = { package = "esp32c6-hal", version = "0.5.0" }
 esp-backtrace = { version = "0.8.0", features = ["esp32c6", "panic-handler", "exception-handler", "print-uart"] }
 esp-println       = { version = "0.6.0", features = ["esp32c6", "log"] }
-esp-ieee802154 = { git = "https://github.com/esp-rs/esp-ieee802154.git", rev = "8c2cdd5ddac32ddd7e37269c3fc8a66063564ed3", features = ["esp32c6"] }
+heapless = "0.7.16"
+no-std-net = "0.6.0"
 
+esp-ieee802154 = { git = "https://github.com/esp-rs/esp-ieee802154.git", rev = "8c2cdd5ddac32ddd7e37269c3fc8a66063564ed3", features = ["esp32c6"] }
 esp-openthread = { path = "../esp-openthread", features = ["esp32c6"] }
