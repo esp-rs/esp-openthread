@@ -1,21 +1,22 @@
-/// Just holds settings in RAM
+/// We just hold settings in RAM for now
 
+#[used]
 static mut SETTINGS: [(usize, [u8; 255]); 255] = [(0usize, [0u8; 255]); 255];
 
-pub fn set_data(index: usize, data: &[u8]) {
-    log::info!("{:02x?}", data);
-    unsafe {
-        SETTINGS[index].0 = data.len();
-        SETTINGS[index].1[..data.len()].copy_from_slice(data);
-    }
-}
+// pub fn set_data(index: usize, data: &[u8]) {
+//     log::info!("{:02x?}", data);
+//     unsafe {
+//         SETTINGS[index].0 = data.len();
+//         SETTINGS[index].1[..data.len()].copy_from_slice(data);
+//     }
+// }
 
-pub fn get_data(index: usize) -> &'static [u8] {
-    unsafe {
-        log::info!("{:02x?}", &SETTINGS[index].1[..SETTINGS[index].0]);
-        &SETTINGS[index].1[..SETTINGS[index].0]
-    }
-}
+// pub fn get_data(index: usize) -> &'static [u8] {
+//     unsafe {
+//         log::info!("{:02x?}", &SETTINGS[index].1[..SETTINGS[index].0]);
+//         &SETTINGS[index].1[..SETTINGS[index].0]
+//     }
+// }
 
 // for now using OT_SETTINGS_RAM ... this implementation is very wrong apparently
 

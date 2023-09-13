@@ -7,7 +7,7 @@ mod radio;
 mod settings;
 mod timer;
 
-use core::{borrow::BorrowMut, cell::RefCell};
+use core::{borrow::BorrowMut, cell::RefCell, marker::PhantomData};
 
 use critical_section::Mutex;
 use esp_hal::systimer::{Alarm, Target};
@@ -28,7 +28,7 @@ use sys::bindings::{
 
 use crate::timer::current_millis;
 
-static RADIO: Mutex<RefCell<Option<Ieee802154>>> = Mutex::new(RefCell::new(None));
+static RADIO: Mutex<RefCell<Option<&'static mut Ieee802154>>> = Mutex::new(RefCell::new(None));
 
 static SETTINGS: Mutex<RefCell<Option<NetworkSettings>>> = Mutex::new(RefCell::new(None));
 
@@ -61,20 +61,26 @@ struct NetworkSettings {
 }
 
 #[non_exhaustive]
-pub struct OpenThread {}
+pub struct OpenThread<'a> {
+    _phantom: PhantomData<&'a ()>,
+}
 
-impl OpenThread {
-    pub fn new(mut radio: Ieee802154, timer: Alarm<Target, 0>, rng: esp_hal::Rng) -> Self {
+impl<'a> OpenThread<'a> {
+    pub fn new(radio: &'a mut Ieee802154, timer: Alarm<Target, 0>, rng: esp_hal::Rng) -> Self {
         timer::install_isr(timer);
         entropy::init_rng(rng);
 
         radio.set_tx_done_callback_fn(radio::trigger_tx_done);
 
         critical_section::with(|cs| {
-            RADIO.borrow_ref_mut(cs).replace(radio);
+            RADIO
+                .borrow_ref_mut(cs)
+                .replace(unsafe { core::mem::transmute(radio) });
         });
 
-        Self {}
+        Self {
+            _phantom: PhantomData,
+        }
     }
 
     /// Run due timers, get and forward received messages
@@ -89,7 +95,6 @@ impl OpenThread {
 
                 log::error!("RCV {:02x?}", &raw.data[1..][..len as usize]);
 
-
                 RCV_FRAME_PSDU[..len as usize].copy_from_slice(&raw.data[1..][..len as usize]);
                 RCV_FRAME.mLength = len as u16;
                 RCV_FRAME.mRadioType = 1; // ????
@@ -102,6 +107,15 @@ impl OpenThread {
                 otPlatRadioReceiveDone(instance, &mut RCV_FRAME, otError_OT_ERROR_NONE);
             }
         }
+    }
+}
+
+impl<'a> Drop for OpenThread<'a> {
+    fn drop(&mut self) {
+        critical_section::with(|cs| {
+            RADIO.borrow_ref_mut(cs).take();
+            SETTINGS.borrow_ref_mut(cs).take();
+        });
     }
 }
 

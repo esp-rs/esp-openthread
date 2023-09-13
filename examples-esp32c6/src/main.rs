@@ -8,17 +8,16 @@ use esp_ieee802154::Ieee802154;
 use esp_openthread::sys::{
     bindings::{
         otChangedFlags, otDatasetSetActive, otExtendedPanId, otInstance, otInstanceInitSingle,
-        otIp6GetUnicastAddresses, otIp6SetEnabled, otMeshLocalPrefix, otNetworkKey,
-        otNetworkName, otOperationalDataset, otOperationalDatasetComponents, otPskc,
-        otSecurityPolicy, otSetStateChangedCallback, otTaskletsArePending, otTaskletsProcess,
-        otThreadSetEnabled, otTimestamp,
+        otIp6GetUnicastAddresses, otIp6SetEnabled, otMeshLocalPrefix, otNetworkKey, otNetworkName,
+        otOperationalDataset, otOperationalDatasetComponents, otPskc, otSecurityPolicy,
+        otSetStateChangedCallback, otTaskletsArePending, otTaskletsProcess, otThreadSetEnabled,
+        otTimestamp,
     },
     c_types,
 };
 use esp_println::{print, println};
 use hal::{
-    clock::ClockControl, peripherals::Peripherals, prelude::*, systimer, timer::TimerGroup, Rng,
-    Rtc,
+    clock::ClockControl, peripherals::Peripherals, prelude::*, systimer, Rng,
 };
 
 #[entry]
@@ -27,33 +26,18 @@ fn main() -> ! {
 
     let peripherals = Peripherals::take();
     let mut system = peripherals.PCR.split();
-    let clocks = ClockControl::boot_defaults(system.clock_control).freeze();
+    let _clocks = ClockControl::boot_defaults(system.clock_control).freeze();
 
-    // Disable the RTC and TIMG watchdog timers
-    let mut rtc = Rtc::new(peripherals.LP_CLKRST);
-    let timer_group0 = TimerGroup::new(
-        peripherals.TIMG0,
-        &clocks,
-        &mut system.peripheral_clock_control,
-    );
-    let mut wdt0 = timer_group0.wdt;
-    let timer_group1 = TimerGroup::new(
-        peripherals.TIMG1,
-        &clocks,
-        &mut system.peripheral_clock_control,
-    );
-    let mut wdt1 = timer_group1.wdt;
-    rtc.swd.disable();
-    rtc.rwdt.disable();
-    wdt0.disable();
-    wdt1.disable();
-    println!("Hello world!");
+    println!("Initializing");
 
     let systimer = systimer::SystemTimer::new(peripherals.SYSTIMER);
     let (_, _, radio) = peripherals.RADIO.split();
-    let ieee802154 = Ieee802154::new(radio, &mut system.radio_clock_control);
-    let openthread =
-        esp_openthread::OpenThread::new(ieee802154, systimer.alarm0, Rng::new(peripherals.RNG));
+    let mut ieee802154 = Ieee802154::new(radio, &mut system.radio_clock_control);
+    let openthread = esp_openthread::OpenThread::new(
+        &mut ieee802154,
+        systimer.alarm0,
+        Rng::new(peripherals.RNG),
+    );
 
     unsafe {
         // see https://openthread.io/codelabs/openthread-apis#7
@@ -133,7 +117,7 @@ fn main() -> ! {
 }
 
 unsafe extern "C" fn change_callback(flags: otChangedFlags, _context: *mut crate::c_types::c_void) {
-    println!("change_callback !!!!!!!!!!!! {:32b}", flags);
+    println!("change_callback otChangedFlags={:32b}", flags);
 }
 
 fn print_address(instance: *mut otInstance) {
