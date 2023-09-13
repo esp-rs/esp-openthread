@@ -8,7 +8,7 @@ The OpenThread libraries are pre-compiled for convenience. Find the build script
 
 - Provide MTD functionality.
 
-## May-be later goals
+## Maybe later goals
 
 - Provide sleepy end-device support
 - Provide FTD functionality
@@ -21,7 +21,7 @@ The OpenThread libraries are pre-compiled for convenience. Find the build script
 
 This is only tested on ESP32-C6. Only very basic functionality is tested.
 
-There are no Rust-wrappers yet. You need to use the raw bindings. (like the example does)
+There are only few Rust-wrapper. Until everything is wrapped you need to use the raw bindings for more advanced functionality.
 
 ## Testing
 
@@ -51,24 +51,20 @@ Done
 
 Flash the example to an ESP32-C6. It should output something like
 ```
-otInstanceInitSingle done....
-otSetStateChangedCallback 0
-otDatasetSetActive 0
-otIp6SetEnabled 0
-otThreadSetEnabled 0
-Link local address fe80:0000:0000:0000:8cfb:9cc1:bc88:c204
-change_callback !!!!!!!!!!!!    10001000001111101001100011101
-change_callback !!!!!!!!!!!!   100000000000000000001010100100
+Initializing
+fe80::906d:1cce:1bc9:8d07
+ChangedFlags(Ipv6AddressAdded | ThreadRoleChanged | ThreadLlAddressChanged | ThreadMeshLocalAddressChanged | ThreadKeySequenceChanged | ThreadNetworkDataChanged | Ipv6MulticastSubscribed | ThreadPanIdChanged | ThreadNetworkNameChanged | ThreadExtendedPanIdChanged | ThreadNetworkKeyChanged | ThreadNetworkInterfaceStateChanged | ActiveDatasetChanged)
+ChangedFlags(ThreadRoleChanged | ThreadRlocAdded | ThreadPartitionIdChanged | ThreadNetworkDataChanged | PendingDatasetChanged)
 ```
 
 Please note the link-local address.
 
 Back in the OT-CLI ping the device (using the address from above)
 ```
-> ping fe80:0000:0000:0000:8cfb:9cc1:bc88:c204
+> ping fe80::906d:1cce:1bc9:8d07
 
-16 bytes from fe80:0:0:0:8cfb:9cc1:bc88:c204: icmp_seq=28 hlim=64 time=19ms
-1 packets transmitted, 1 packets received. Packet loss = 0.0%. Round-trip min/avg/max = 19/19.0/19 ms.
+16 bytes from fe80:0:0:0:906d:1cce:1bc9:8d07: icmp_seq=15 hlim=64 time=13ms
+1 packets transmitted, 1 packets received. Packet loss = 0.0%. Round-trip min/avg/max = 13/13.0/13 ms.
 Done
 ```
 
