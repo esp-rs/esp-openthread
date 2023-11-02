@@ -3,6 +3,10 @@
 #![no_std]
 #![no_main]
 
+use core::cell::RefCell;
+use core::pin::pin;
+
+use critical_section::Mutex;
 use esp_backtrace as _;
 use esp_ieee802154::Ieee802154;
 use esp_openthread::NetworkInterfaceUnicastAddress;
@@ -30,10 +34,12 @@ fn main() -> ! {
         Rng::new(peripherals.RNG),
     );
 
-    let mut callback = |flags| println!("{:?}", flags);
+    let changed = Mutex::new(RefCell::new(false));
+    let mut callback = |flags| {
+        println!("{:?}", flags);
+        critical_section::with(|cs| *changed.borrow_ref_mut(cs) = true);
+    };
     openthread.set_change_callback(Some(&mut callback));
-
-    // see https://openthread.io/codelabs/openthread-apis#7
 
     let dataset = OperationalDataset {
         active_timestamp: Some(ThreadTimestamp {
@@ -60,18 +66,47 @@ fn main() -> ! {
     let addrs: heapless::Vec<NetworkInterfaceUnicastAddress, 5> =
         openthread.ipv6_get_unicast_addresses();
 
-    print_link_local_address(addrs);
+    print_all_addresses(addrs);
 
+    let mut socket = openthread.get_udp_socket::<512>().unwrap();
+    let mut socket = pin!(socket);
+    socket.bind(1212).unwrap();
+
+    let mut buffer = [0u8; 512];
     loop {
         openthread.process();
         openthread.run_tasklets();
+
+        let (len, from, port) = socket.receive(&mut buffer).unwrap();
+        if len > 0 {
+            println!(
+                "received {:02x?} from {:?} port {}",
+                &buffer[..len],
+                from,
+                port
+            );
+
+            socket.send(from, 1212, b"Hello").unwrap();
+            println!("Sent message");
+        }
+
+        critical_section::with(|cs| {
+            let mut c = changed.borrow_ref_mut(cs);
+            if *c {
+                let addrs: heapless::Vec<NetworkInterfaceUnicastAddress, 5> =
+                    openthread.ipv6_get_unicast_addresses();
+
+                print_all_addresses(addrs);
+                *c = false;
+            }
+        });
     }
 }
 
-fn print_link_local_address(addrs: heapless::Vec<NetworkInterfaceUnicastAddress, 5>) {
+fn print_all_addresses(addrs: heapless::Vec<NetworkInterfaceUnicastAddress, 5>) {
+    println!("Currently assigned addresses");
     for addr in addrs {
-        if addr.address.segments()[0] == 0xfe80 {
-            println!("{}", addr.address);
-        }
+        println!("{}", addr.address);
     }
+    println!();
 }

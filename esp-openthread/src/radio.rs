@@ -218,7 +218,7 @@ pub extern "C" fn otPlatRadioTransmit(
     let frame = unsafe { &*frame };
     let data = unsafe { core::slice::from_raw_parts(frame.mPsdu, frame.mLength as usize) };
 
-    log::error!(
+    log::trace!(
         "otPlatRadioTransmit channel={} {:02x?}",
         frame.mChannel,
         &data
