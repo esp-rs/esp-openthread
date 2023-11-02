@@ -16,13 +16,13 @@ fn main() -> ! {
     esp_println::logger::init_logger_from_env();
 
     let peripherals = Peripherals::take();
-    let mut system = peripherals.PCR.split();
+    let mut system = peripherals.SYSTEM.split();
     let _clocks = ClockControl::boot_defaults(system.clock_control).freeze();
 
     println!("Initializing");
 
     let systimer = systimer::SystemTimer::new(peripherals.SYSTIMER);
-    let (.., radio) = peripherals.RADIO.split();
+    let radio = peripherals.IEEE802154;
     let mut ieee802154 = Ieee802154::new(radio, &mut system.radio_clock_control);
     let mut openthread = esp_openthread::OpenThread::new(
         &mut ieee802154,
