@@ -52,20 +52,45 @@ Done
 Flash the example to an ESP32-C6. It should output something like
 ```
 Initializing
-fe80::906d:1cce:1bc9:8d07
+Currently assigned addresses
+fdde:ad00:beef:0:f9ee:5d6d:7fe6:daab
+fe80::6cec:6ace:f5ff:30bc
+
 ChangedFlags(Ipv6AddressAdded | ThreadRoleChanged | ThreadLlAddressChanged | ThreadMeshLocalAddressChanged | ThreadKeySequenceChanged | ThreadNetworkDataChanged | Ipv6MulticastSubscribed | ThreadPanIdChanged | ThreadNetworkNameChanged | ThreadExtendedPanIdChanged | ThreadNetworkKeyChanged | ThreadNetworkInterfaceStateChanged | ActiveDatasetChanged)
+Currently assigned addresses
+fdde:ad00:beef:0:f9ee:5d6d:7fe6:daab
+fe80::6cec:6ace:f5ff:30bc
+
 ChangedFlags(ThreadRoleChanged | ThreadRlocAdded | ThreadPartitionIdChanged | ThreadNetworkDataChanged | PendingDatasetChanged)
+Currently assigned addresses
+fdde:ad00:beef::ff:fe00:8019
+fdde:ad00:beef:0:f9ee:5d6d:7fe6:daab
+fe80::6cec:6ace:f5ff:30bc
 ```
 
-Please note the link-local address.
+Please note the link-local address. (fe80::...)
 
 Back in the OT-CLI ping the device (using the address from above)
 ```
-> ping fe80::906d:1cce:1bc9:8d07
+> ping fe80::6cec:6ace:f5ff:30bc
 
 16 bytes from fe80:0:0:0:906d:1cce:1bc9:8d07: icmp_seq=15 hlim=64 time=13ms
 1 packets transmitted, 1 packets received. Packet loss = 0.0%. Round-trip min/avg/max = 13/13.0/13 ms.
 Done
 ```
 
-So it connected and you can successfully ping the device 🎉
+Now send and receive a UDP message
+```
+> udp open
+
+Done
+> udp bind :: 1212
+
+Done
+> udp send fe80::6cec:6ace:f5ff:30bc 1212 Hello
+
+Done
+5 bytes from fe80::6cec:6ace:f5ff:30bc 1212 Hello
+```
+
+So it connected and you can successfully ping the device. Receiving and sending UDP packets also works. 🎉
