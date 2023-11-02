@@ -34,7 +34,7 @@ pub fn set_timer_target(when: u32) {
         let mut timer = TIMER.borrow_ref_mut(cs);
         let timer = timer.as_mut().unwrap();
         timer.set_target(timestamp);
-        timer.interrupt_enable(true);
+        timer.enable_interrupt(true);
     });
 }
 
@@ -43,7 +43,7 @@ pub fn stop() {
         let mut timer = TIMER.borrow_ref_mut(cs);
         let timer = timer.as_mut().unwrap();
         timer.clear_interrupt();
-        timer.interrupt_enable(false);
+        timer.enable_interrupt(false);
     });
 }
 
