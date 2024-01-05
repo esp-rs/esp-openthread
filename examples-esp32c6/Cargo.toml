@@ -10,11 +10,11 @@ debug = true
 
 [dependencies]
 hal = { package = "esp32c6-hal", version = "0.7.0" }
-esp-backtrace = { version = "0.9.0", features = ["esp32c6", "panic-handler", "exception-handler", "print-uart"] }
-esp-println       = { version = "0.7.0", features = ["esp32c6", "log"] }
+esp-backtrace = { version = "0.10.0", features = ["esp32c6", "panic-handler", "exception-handler", "print-uart"] }
+esp-println       = { version = "0.8.0", features = ["esp32c6", "log"] }
 heapless = "0.8.0"
 no-std-net = "0.6.0"
 critical-section = "1.1.0"
 
-esp-ieee802154 = { git = "https://github.com/esp-rs/esp-ieee802154.git", rev = "bc4d6cf299397307ad6e4d0294037c9dd43d5ad5", features = ["esp32c6"] }
+esp-ieee802154 = { git = "https://github.com/esp-rs/esp-ieee802154.git", rev = "2148862bd968abacc9a8d7d66f85257a31a77084", features = ["esp32c6"] }
 esp-openthread = { path = "../esp-openthread", features = ["esp32c6"] }

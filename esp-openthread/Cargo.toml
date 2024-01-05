@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-esp-ieee802154 = { git = "https://github.com/esp-rs/esp-ieee802154.git", rev = "bc4d6cf299397307ad6e4d0294037c9dd43d5ad5" }
+esp-ieee802154 = { git = "https://github.com/esp-rs/esp-ieee802154.git", rev = "2148862bd968abacc9a8d7d66f85257a31a77084" }
 esp-openthread-sys = { path = "../esp-openthread-sys" }
 log = "0.4.17"
 critical-section = "1.1.1"

@@ -295,7 +295,7 @@ dependencies = [
 [[package]]
 name = "esp-ieee802154"
 version = "0.1.0"
-source = "git+https://github.com/esp-rs/esp-ieee802154.git?rev=bc4d6cf299397307ad6e4d0294037c9dd43d5ad5#bc4d6cf299397307ad6e4d0294037c9dd43d5ad5"
+source = "git+https://github.com/esp-rs/esp-ieee802154.git?rev=2148862bd968abacc9a8d7d66f85257a31a77084#2148862bd968abacc9a8d7d66f85257a31a77084"
 dependencies = [
  "byte",
  "critical-section",
