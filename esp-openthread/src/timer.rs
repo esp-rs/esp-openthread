@@ -1,10 +1,10 @@
-use crate::esp_hal::macros::interrupt;
-use crate::esp_hal::peripherals::Interrupt;
-use crate::esp_hal::systimer::Alarm;
-use crate::esp_hal::systimer::Target;
 use crate::platform::CURRENT_INSTANCE;
 use core::cell::RefCell;
 use critical_section::Mutex;
+use esp_hal::macros::interrupt;
+use esp_hal::peripherals::Interrupt;
+use esp_hal::systimer::Alarm;
+use esp_hal::systimer::Target;
 use esp_openthread_sys::bindings::otError;
 use esp_openthread_sys::bindings::otError_OT_ERROR_NONE;
 use esp_openthread_sys::bindings::otInstance;
@@ -20,9 +20,9 @@ pub fn install_isr(timer: Alarm<Target, 0>) {
     timer.clear_interrupt();
     critical_section::with(|cs| TIMER.borrow_ref_mut(cs).replace(timer));
 
-    esp32c6_hal::interrupt::enable(
+    esp_hal::interrupt::enable(
         Interrupt::SYSTIMER_TARGET0,
-        crate::esp_hal::interrupt::Priority::Priority1,
+        esp_hal::interrupt::Priority::Priority1,
     )
     .unwrap();
 }
@@ -59,7 +59,7 @@ fn SYSTIMER_TARGET0() {
 }
 
 pub fn current_millis() -> u64 {
-    crate::esp_hal::systimer::SystemTimer::now() / (TICKS_PER_SECOND / 1000)
+    esp_hal::systimer::SystemTimer::now() / (TICKS_PER_SECOND / 1000)
 }
 
 #[no_mangle]

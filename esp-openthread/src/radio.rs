@@ -1,3 +1,5 @@
+use core::ptr::addr_of_mut;
+
 use esp_ieee802154::Config;
 use esp_openthread_sys::bindings::{
     __BindgenBitfieldUnit, otError, otError_OT_ERROR_NONE, otInstance, otPlatRadioTxDone,
@@ -9,7 +11,7 @@ use crate::{get_settings, platform::CURRENT_INSTANCE, set_settings, with_radio, 
 
 pub static mut PSDU: [u8; 127] = [0u8; 127];
 pub static mut TRANSMIT_BUFFER: otRadioFrame = otRadioFrame {
-    mPsdu: unsafe { &mut PSDU as *mut u8 },
+    mPsdu: unsafe { addr_of_mut!(PSDU) as *mut u8 },
     mLength: 0,
     mChannel: 0,
     mRadioType: 0,
@@ -30,7 +32,7 @@ pub static mut TRANSMIT_BUFFER: otRadioFrame = otRadioFrame {
 
 pub static mut SENT_FRAME_PSDU: [u8; 127] = [0u8; 127];
 static mut SENT_FRAME: otRadioFrame = otRadioFrame {
-    mPsdu: unsafe { &mut SENT_FRAME_PSDU as *mut u8 },
+    mPsdu: unsafe { addr_of_mut!(SENT_FRAME_PSDU) as *mut u8 },
     mLength: 0,
     mChannel: 0,
     mRadioType: 0,
@@ -63,7 +65,7 @@ pub extern "C" fn otPlatRadioGetCaps(instance: *const otInstance) -> u8 {
 #[no_mangle]
 pub extern "C" fn otPlatRadioGetTransmitBuffer(instance: *const otInstance) -> *mut otRadioFrame {
     log::info!("otPlatRadioGetTransmitBuffer {:p}", instance);
-    unsafe { &mut TRANSMIT_BUFFER as *mut _ as *mut otRadioFrame }
+    unsafe { addr_of_mut!(TRANSMIT_BUFFER) }
 }
 
 #[no_mangle]
@@ -248,7 +250,7 @@ pub extern "C" fn otPlatRadioTransmit(
             frame.mLength as usize,
         ));
         SENT_FRAME = *frame;
-        SENT_FRAME.mPsdu = &mut SENT_FRAME_PSDU as *mut u8;
+        SENT_FRAME.mPsdu = addr_of_mut!(SENT_FRAME_PSDU) as *mut u8;
 
         otPlatRadioTxStarted(instance as *mut otInstance, core::mem::transmute(frame));
     }
@@ -293,7 +295,7 @@ pub(crate) fn trigger_tx_done() {
     unsafe {
         otPlatRadioTxDone(
             CURRENT_INSTANCE as *mut otInstance,
-            &mut SENT_FRAME as *mut otRadioFrame,
+            addr_of_mut!(SENT_FRAME),
             core::ptr::null_mut(), // where to get this from?
             otError_OT_ERROR_NONE,
         );
