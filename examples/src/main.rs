@@ -8,12 +8,12 @@ use core::pin::pin;
 
 use critical_section::Mutex;
 use esp_backtrace as _;
+use esp_hal::{clock::ClockControl, peripherals::Peripherals, prelude::*, systimer, Rng};
 use esp_ieee802154::Ieee802154;
 use esp_openthread::NetworkInterfaceUnicastAddress;
 use esp_openthread::OperationalDataset;
 use esp_openthread::ThreadTimestamp;
 use esp_println::println;
-use hal::{clock::ClockControl, peripherals::Peripherals, prelude::*, systimer, Rng};
 
 #[entry]
 fn main() -> ! {

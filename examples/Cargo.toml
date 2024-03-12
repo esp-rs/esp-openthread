@@ -1,0 +1,24 @@
+[package]
+name = "esp-openthread-examples"
+version = "0.1.0"
+authors = ["bjoernQ <bjoern.quentin@mobile-j.de>"]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[profile.release]
+debug = true
+
+[dependencies]
+esp-hal = { version = "0.16.1" }
+esp-backtrace = { version = "0.11.1", features = ["panic-handler", "exception-handler", "println"] }
+esp-println       = { version = "0.9.1", features = ["log"] }
+heapless = "0.8.0"
+no-std-net = "0.6.0"
+critical-section = "1.1.0"
+
+esp-ieee802154 = { git = "https://github.com/esp-rs/esp-ieee802154.git", rev = "84fb4c6cb0deedcf330f181d88cbbe0e7383599e" }
+esp-openthread = { path = "../esp-openthread" }
+
+[features]
+esp32c6 = [ "esp-hal/esp32c6", "esp-ieee802154/esp32c6", "esp-openthread/esp32c6", "esp-backtrace/esp32c6", "esp-println/esp32c6" ]
+esp32h2 = [ "esp-hal/esp32h2", "esp-ieee802154/esp32h2", "esp-openthread/esp32h2", "esp-backtrace/esp32c6", "esp-println/esp32c6" ]
