@@ -19,7 +19,7 @@ The OpenThread libraries are pre-compiled for convenience. Find the build script
 
 ## Status
 
-This is only tested on ESP32-C6. Only very basic functionality is tested.
+Currently only basic functionality is tested.
 
 There are only few Rust-wrapper. Until everything is wrapped you need to use the raw bindings for more advanced functionality.
 
@@ -49,7 +49,9 @@ Done
 
 ```
 
-Flash the example to an ESP32-C6. It should output something like
+Flash the example to an ESP32-C6 or ESP32-H2 - use a feature for choosing the build-target.
+
+It should output something like
 ```
 Initializing
 Currently assigned addresses
@@ -79,7 +81,7 @@ Back in the OT-CLI ping the device (using the address from above)
 Done
 ```
 
-Now send and receive a UDP message
+Now send and receive a UDP message (using the address from above)
 ```
 > udp open
 

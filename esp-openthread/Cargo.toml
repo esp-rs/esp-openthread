@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-esp-ieee802154 = { git = "https://github.com/esp-rs/esp-ieee802154.git", rev = "bfe32f6d2e2251050011a4134ba82d6316cbfa95" }
+esp-ieee802154 = { git = "https://github.com/esp-rs/esp-ieee802154.git", rev = "84fb4c6cb0deedcf330f181d88cbbe0e7383599e" }
 esp-openthread-sys = { path = "../esp-openthread-sys" }
 log = "0.4.17"
 critical-section = "1.1.1"
@@ -13,9 +13,8 @@ bitflags = "2.4.0"
 heapless = "0.8.0"
 no-std-net = "0.6.0"
 
-esp32c6-hal = { version = "0.8.0", optional = true }
-esp32h2-hal = { version = "0.6.0", optional = true }
+esp-hal = "0.16.1"
 
 [features]
-esp32c6 = [ "esp-ieee802154/esp32c6", "esp32c6-hal"]
-esp32h2 = [ "esp-ieee802154/esp32h2", "esp32h2-hal"]
+esp32c6 = [ "esp-ieee802154/esp32c6", "esp-hal/esp32c6"]
+esp32h2 = [ "esp-ieee802154/esp32h2", "esp-hal/esp32h2"]
