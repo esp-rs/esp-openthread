@@ -8,26 +8,30 @@ use core::pin::pin;
 
 use critical_section::Mutex;
 use esp_backtrace as _;
-use esp_hal::{clock::ClockControl, peripherals::Peripherals, prelude::*, systimer, Rng};
+use esp_hal::{
+    clock::ClockControl, peripherals::Peripherals, prelude::*, rng::Rng, system::SystemControl,
+    timer::systimer,
+};
 use esp_ieee802154::Ieee802154;
-use esp_openthread::NetworkInterfaceUnicastAddress;
-use esp_openthread::OperationalDataset;
-use esp_openthread::ThreadTimestamp;
+use esp_openthread::{NetworkInterfaceUnicastAddress, OperationalDataset, ThreadTimestamp};
 use esp_println::println;
+
+const BOUND_PORT: u16 = 1212;
 
 #[entry]
 fn main() -> ! {
     esp_println::logger::init_logger_from_env();
 
-    let peripherals = Peripherals::take();
-    let mut system = peripherals.SYSTEM.split();
+    let mut peripherals = Peripherals::take();
+    let system = SystemControl::new(peripherals.SYSTEM);
     let _clocks = ClockControl::boot_defaults(system.clock_control).freeze();
 
     println!("Initializing");
 
     let systimer = systimer::SystemTimer::new(peripherals.SYSTIMER);
     let radio = peripherals.IEEE802154;
-    let mut ieee802154 = Ieee802154::new(radio, &mut system.radio_clock_control);
+    let mut ieee802154 = Ieee802154::new(radio, &mut peripherals.RADIO_CLK);
+
     let mut openthread = esp_openthread::OpenThread::new(
         &mut ieee802154,
         systimer.alarm0,
@@ -39,6 +43,7 @@ fn main() -> ! {
         println!("{:?}", flags);
         critical_section::with(|cs| *changed.borrow_ref_mut(cs) = true);
     };
+
     openthread.set_change_callback(Some(&mut callback));
 
     let dataset = OperationalDataset {
@@ -54,9 +59,12 @@ fn main() -> ! {
         network_name: Some("OpenThread-58d1".try_into().unwrap()),
         extended_pan_id: Some([0x3a, 0x90, 0xe3, 0xa3, 0x19, 0xa9, 0x04, 0x94]),
         pan_id: Some(0x58d1),
-
+        channel: Some(11),
+        channel_mask: Some(0x07fff800),
         ..OperationalDataset::default()
     };
+    println!("dataset : {:?}", dataset);
+
     openthread.set_active_dataset(dataset).unwrap();
 
     openthread.ipv6_set_enabled(true).unwrap();
@@ -70,13 +78,13 @@ fn main() -> ! {
 
     let mut socket = openthread.get_udp_socket::<512>().unwrap();
     let mut socket = pin!(socket);
-    socket.bind(1212).unwrap();
+    socket.bind(BOUND_PORT).unwrap();
 
     let mut buffer = [0u8; 512];
+
     loop {
         openthread.process();
         openthread.run_tasklets();
-
         let (len, from, port) = socket.receive(&mut buffer).unwrap();
         if len > 0 {
             println!(
@@ -86,7 +94,7 @@ fn main() -> ! {
                 port
             );
 
-            socket.send(from, 1212, b"Hello").unwrap();
+            socket.send(from, BOUND_PORT, b"Hello").unwrap();
             println!("Sent message");
         }
 

@@ -16,12 +16,11 @@ use core::{
 
 use bitflags::bitflags;
 use critical_section::Mutex;
-use esp_hal::systimer::{Alarm, Target};
+use esp_hal::timer::systimer::{Alarm, Target};
 use esp_ieee802154::{rssi_to_lqi, Ieee802154};
 
 // for now just re-export all
 pub use esp_openthread_sys as sys;
-use esp_openthread_sys::bindings::otPlatRadioReceiveDone;
 use no_std_net::Ipv6Addr;
 use sys::{
     bindings::{
@@ -30,11 +29,11 @@ use sys::{
         otIp6Address__bindgen_ty_1, otIp6GetUnicastAddresses, otIp6SetEnabled, otMeshLocalPrefix,
         otMessage, otMessageAppend, otMessageFree, otMessageGetLength, otMessageInfo,
         otMessageRead, otNetifIdentifier_OT_NETIF_THREAD, otNetworkKey, otNetworkName,
-        otOperationalDataset, otOperationalDatasetComponents, otPskc, otRadioFrame,
-        otRadioFrame__bindgen_ty_1, otRadioFrame__bindgen_ty_1__bindgen_ty_2, otSecurityPolicy,
-        otSetStateChangedCallback, otSockAddr, otTaskletsArePending, otTaskletsProcess,
-        otThreadSetEnabled, otTimestamp, otUdpBind, otUdpClose, otUdpNewMessage, otUdpOpen,
-        otUdpSend, otUdpSocket,
+        otOperationalDataset, otOperationalDatasetComponents, otPlatRadioReceiveDone, otPskc,
+        otRadioFrame, otRadioFrame__bindgen_ty_1, otRadioFrame__bindgen_ty_1__bindgen_ty_2,
+        otSecurityPolicy, otSetStateChangedCallback, otSockAddr, otTaskletsArePending,
+        otTaskletsProcess, otThreadSetEnabled, otTimestamp, otUdpBind, otUdpClose, otUdpNewMessage,
+        otUdpOpen, otUdpSend, otUdpSocket, OT_NETWORK_NAME_MAX_SIZE, OT_RADIO_FRAME_MAX_SIZE,
     },
     c_types::c_void,
 };
@@ -48,7 +47,8 @@ static NETWORK_SETTINGS: Mutex<RefCell<Option<NetworkSettings>>> = Mutex::new(Re
 static CHANGE_CALLBACK: Mutex<RefCell<Option<&'static mut (dyn FnMut(ChangedFlags) + Send)>>> =
     Mutex::new(RefCell::new(None));
 
-static mut RCV_FRAME_PSDU: [u8; 127] = [0u8; 127];
+static mut RCV_FRAME_PSDU: [u8; OT_RADIO_FRAME_MAX_SIZE as usize] =
+    [0u8; OT_RADIO_FRAME_MAX_SIZE as usize];
 static mut RCV_FRAME: otRadioFrame = otRadioFrame {
     mPsdu: unsafe { addr_of_mut!(RCV_FRAME_PSDU) as *mut u8 },
     mLength: 0,
@@ -209,7 +209,7 @@ pub struct OperationalDataset {
     /// Network Key
     pub network_key: Option<[u8; 16]>,
     /// Network name
-    pub network_name: Option<heapless::String<16>>,
+    pub network_name: Option<heapless::String<{ OT_NETWORK_NAME_MAX_SIZE as usize }>>,
     /// Extended PAN ID
     pub extended_pan_id: Option<[u8; 8]>,
     /// Mesh Local Prefix
@@ -231,6 +231,7 @@ pub struct OperationalDataset {
 #[derive(Debug, Clone, Copy, Default)]
 struct NetworkSettings {
     promiscuous: bool,
+    rx_when_idle: bool,
     ext_address: u64,
     short_address: u16,
     pan_id: u16,
@@ -246,7 +247,11 @@ pub struct OpenThread<'a> {
 }
 
 impl<'a> OpenThread<'a> {
-    pub fn new(radio: &'a mut Ieee802154, timer: Alarm<Target, 0>, rng: esp_hal::Rng) -> Self {
+    pub fn new(
+        radio: &'a mut Ieee802154,
+        timer: Alarm<Target, esp_hal::Blocking, 0>,
+        rng: esp_hal::rng::Rng,
+    ) -> Self {
         timer::install_isr(timer);
         entropy::init_rng(rng);
 
@@ -375,11 +380,18 @@ impl<'a> OpenThread<'a> {
         if let Some(pan_id) = dataset.pan_id {
             raw_dataset.mPanId = pan_id;
             pan_id_present = true;
+            let settings: NetworkSettings = get_settings();
+            set_settings(NetworkSettings { pan_id, ..settings });
         }
 
         if let Some(channel) = dataset.channel {
             raw_dataset.mChannel = channel;
             channel_present = true;
+            let settings: NetworkSettings = get_settings();
+            set_settings(NetworkSettings {
+                channel: channel as u8,
+                ..settings
+            });
         }
 
         if let Some(pskc) = dataset.pskc {
@@ -597,7 +609,14 @@ unsafe extern "C" fn change_callback(
         let callback = change_callback.as_mut();
 
         if let Some(callback) = callback {
-            callback(ChangedFlags::from_bits(flags).unwrap());
+            if ChangedFlags::from_bits(flags).is_none() {
+                log::warn!(
+                    "change_callback otChangedFlags= {:?} would be None as flags",
+                    flags
+                );
+            } else {
+                callback(ChangedFlags::from_bits(flags).unwrap());
+            }
         }
     });
 }
@@ -626,6 +645,7 @@ fn get_settings() -> NetworkSettings {
         if let Some(settings) = settings.as_mut() {
             settings.clone()
         } else {
+            log::error!("Generating default settings");
             NetworkSettings::default()
         }
     })
@@ -633,6 +653,11 @@ fn get_settings() -> NetworkSettings {
 
 fn set_settings(settings: NetworkSettings) {
     critical_section::with(|cs| {
+        log::info!(
+            "Setting settings to {:?}\nwere {:?}",
+            settings,
+            NETWORK_SETTINGS.borrow_ref(cs)
+        );
         NETWORK_SETTINGS
             .borrow_ref_mut(cs)
             .borrow_mut()
