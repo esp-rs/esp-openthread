@@ -35,6 +35,7 @@ build()
         -DOT_PLATFORM=external \
         -DOT_SLAAC=ON \
         -DOT_SETTINGS_RAM=ON \
+        -DCMAKE_BUILD_TYPE=MinSizeRel \
         -DOT_COMPILE_WARNING_AS_ERROR=ON "$@" "${OT_SRCDIR}"
 
     if [[ -n ${OT_CMAKE_NINJA_TARGET[*]} ]]; then

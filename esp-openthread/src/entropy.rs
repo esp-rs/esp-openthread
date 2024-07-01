@@ -1,6 +1,6 @@
 use esp_openthread_sys::bindings::{otError, otError_OT_ERROR_NONE};
 
-use esp_hal::Rng;
+use esp_hal::rng::Rng;
 
 pub(crate) static mut RANDOM_GENERATOR: Option<Rng> = None;
 
