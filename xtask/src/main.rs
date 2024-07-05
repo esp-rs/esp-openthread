@@ -23,9 +23,9 @@ fn main() -> Result<()> {
     generate_bindings(
         &workspace,
         tools.join(
-            "riscv32-esp-elf/esp-2021r2-patch5-8_4_0/riscv32-esp-elf/riscv32-esp-elf/include/",
+            "riscv32-esp-elf/esp-13.2.0_20230928/riscv32-esp-elf/riscv32-esp-elf/include/",
         ),
-        tools.join("riscv32-esp-elf/esp-2021r2-patch5-8_4_0/riscv32-esp-elf/"),
+        tools.join("riscv32-esp-elf/esp-13.2.0_20230928/riscv32-esp-elf/riscv32-esp-elf/"),
     )?;
 
     Ok(())
@@ -90,7 +90,7 @@ fn generate_bindings(
             ),
         ])
         .ctypes_prefix("crate::c_types")
-        .derive_debug(false)
+        .derive_debug(true)
         .header(sys_path.join("include/include.h").to_string_lossy())
         .layout_tests(false)
         .raw_line("#![allow(non_camel_case_types,non_snake_case,non_upper_case_globals,dead_code)]")
