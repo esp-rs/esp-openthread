@@ -307,10 +307,18 @@ impl<'a> OpenThread<'a> {
             },
             mChannelMask: 0,
             mComponents: otOperationalDatasetComponents {
-                _bitfield_align_1: [0u8; 0],
-                _bitfield_1: otOperationalDatasetComponents::new_bitfield_1(
-                    true, false, true, true, true, false, false, true, true, false, false, false,
-                ),
+                mIsActiveTimestampPresent: true,
+                mIsPendingTimestampPresent: false,
+                mIsNetworkKeyPresent: true,
+                mIsNetworkNamePresent: true,
+                mIsExtendedPanIdPresent: true,
+                mIsMeshLocalPrefixPresent: false,
+                mIsDelayPresent: false,
+                mIsPanIdPresent: true,
+                mIsChannelPresent: true,
+                mIsPskcPresent: false,
+                mIsSecurityPolicyPresent: false,
+                mIsChannelMaskPresent: false,
             },
         };
 
@@ -424,22 +432,19 @@ impl<'a> OpenThread<'a> {
             channel_mask_present = true;
         }
 
-        raw_dataset.mComponents = otOperationalDatasetComponents {
-            _bitfield_align_1: [0u8; 0],
-            _bitfield_1: otOperationalDatasetComponents::new_bitfield_1(
-                active_timestamp_present,
-                pending_timestamp_present,
-                network_key_present,
-                network_name_present,
-                extended_pan_present,
-                mesh_local_prefix_present,
-                delay_present,
-                pan_id_present,
-                channel_present,
-                pskc_present,
-                security_policy_present,
-                channel_mask_present,
-            ),
+        raw_dataset.mComponents = otOperationalDatasetComponents {    
+            mIsActiveTimestampPresent: active_timestamp_present,
+            mIsPendingTimestampPresent: pending_timestamp_present,
+            mIsNetworkKeyPresent: network_key_present,
+            mIsNetworkNamePresent: network_name_present,
+            mIsExtendedPanIdPresent: extended_pan_present,
+            mIsMeshLocalPrefixPresent: mesh_local_prefix_present,
+            mIsDelayPresent: delay_present,
+            mIsPanIdPresent:  pan_id_present,
+            mIsChannelPresent: channel_present,
+            mIsPskcPresent: pskc_present,
+            mIsSecurityPolicyPresent: security_policy_present,
+            mIsChannelMaskPresent: channel_mask_present,
         };
 
         checked!(unsafe { otDatasetSetActive(self.instance, &raw_dataset) })
@@ -772,11 +777,9 @@ impl<'s, 'n: 's, const BUFFER_SIZE: usize> UdpSocket<'s, 'n, BUFFER_SIZE> {
             },
             mSockPort: 0,
             mPeerPort: 0,
-            mLinkInfo: core::ptr::null(),
             mHopLimit: 0,
             _bitfield_align_1: [0u8; 0],
             _bitfield_1: __BindgenBitfieldUnit::new([0u8; 1]),
-            __bindgen_padding_0: 0,
         };
         message_info.mPeerAddr.mFields.m8 = dst.octets();
         message_info.mPeerPort = port;
