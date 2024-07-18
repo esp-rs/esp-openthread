@@ -17,7 +17,7 @@ static TIMER: Mutex<RefCell<Option<Alarm<Target, esp_hal::Blocking, 0>>>> =
 
 static TIMER_CALLBACK_SHOULD_RUN: Mutex<RefCell<bool>> = Mutex::new(RefCell::new(false));
 
-pub fn install_isr(mut timer: Alarm<Target, esp_hal::Blocking, 0>) {
+pub fn install_isr(timer: Alarm<Target, esp_hal::Blocking, 0>) {
     timer.clear_interrupt();
 
     critical_section::with(|cs| {
