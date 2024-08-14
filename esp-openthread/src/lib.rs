@@ -432,7 +432,7 @@ impl<'a> OpenThread<'a> {
             channel_mask_present = true;
         }
 
-        raw_dataset.mComponents = otOperationalDatasetComponents {    
+        raw_dataset.mComponents = otOperationalDatasetComponents {
             mIsActiveTimestampPresent: active_timestamp_present,
             mIsPendingTimestampPresent: pending_timestamp_present,
             mIsNetworkKeyPresent: network_key_present,
@@ -440,7 +440,7 @@ impl<'a> OpenThread<'a> {
             mIsExtendedPanIdPresent: extended_pan_present,
             mIsMeshLocalPrefixPresent: mesh_local_prefix_present,
             mIsDelayPresent: delay_present,
-            mIsPanIdPresent:  pan_id_present,
+            mIsPanIdPresent: pan_id_present,
             mIsChannelPresent: channel_present,
             mIsPskcPresent: pskc_present,
             mIsSecurityPolicyPresent: security_policy_present,
@@ -571,10 +571,49 @@ impl<'a> OpenThread<'a> {
         crate::timer::run_if_due();
 
         while let Some(raw) = with_radio(|radio| radio.get_raw_received()).unwrap() {
-            let rssi = raw.data[raw.data[0] as usize - 1] as i8;
+            let rssi: i8 = {
+                let idx = match (raw.data[0] as usize).cmp(&raw.data.len()) {
+                    core::cmp::Ordering::Less => {
+                        // guard against attempting to access the (0 - 1)th index
+                        if raw.data[0] == 0 {
+                            log::warn!("raw.data[0] is 0, RSSI may be invalid",);
+                            0
+                        } else {
+                            raw.data[0] as usize - 1
+                        }
+                    }
+                    core::cmp::Ordering::Greater | core::cmp::Ordering::Equal => raw.data.len() - 1,
+                };
+                raw.data[idx] as i8
+            };
 
             unsafe {
-                let len = raw.data[0];
+                // len indexes into both the RCV_FRAME_PSDU and raw.data array
+                // so must be sized appropriately
+                let len = if raw.data[0] as usize > RCV_FRAME_PSDU.len()
+                    && raw.data[1..].len() >= RCV_FRAME_PSDU.len()
+                {
+                    log::warn!(
+                        "raw.data[0] {:?} larger than rcv frame \
+                        psdu len and raw.data.len()! RCV {:02x?}",
+                        raw.data[0],
+                        &raw.data[1..][..RCV_FRAME_PSDU.len()]
+                    );
+                    RCV_FRAME_PSDU.len()
+                } else if raw.data[0] as usize > RCV_FRAME_PSDU.len()
+                    && raw.data[1..].len() < RCV_FRAME_PSDU.len()
+                {
+                    log::warn!(
+                        "raw.data[0] {:?} larger than raw.data.len()! \
+                        RCV {:02x?}",
+                        raw.data[0],
+                        &raw.data[1..][..raw.data.len() - 1]
+                    );
+                    raw.data[1..].len()
+                } else {
+                    raw.data[0] as usize
+                };
+
                 log::debug!("RCV {:02x?}", &raw.data[1..][..len as usize]);
 
                 RCV_FRAME_PSDU[..len as usize].copy_from_slice(&raw.data[1..][..len as usize]);
