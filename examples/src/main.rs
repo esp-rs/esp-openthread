@@ -10,11 +10,12 @@ use critical_section::Mutex;
 use esp_backtrace as _;
 use esp_hal::{
     clock::ClockControl, peripherals::Peripherals, prelude::*, rng::Rng, system::SystemControl,
-    timer::systimer,
+    timer::systimer::{Alarm, SystemTimer, SpecificUnit, FrozenUnit}, 
 };
 use esp_ieee802154::Ieee802154;
 use esp_openthread::{NetworkInterfaceUnicastAddress, OperationalDataset, ThreadTimestamp};
 use esp_println::println;
+use static_cell::StaticCell;
 
 const BOUND_PORT: u16 = 1212;
 
@@ -28,13 +29,19 @@ fn main() -> ! {
 
     println!("Initializing");
 
-    let systimer = systimer::SystemTimer::new(peripherals.SYSTIMER);
     let radio = peripherals.IEEE802154;
     let mut ieee802154 = Ieee802154::new(radio, &mut peripherals.RADIO_CLK);
 
+    // init timer for otPlatAlarm
+    let systimer = SystemTimer::new(peripherals.SYSTIMER);
+    static UNIT0: StaticCell<SpecificUnit<'static, 0>> = StaticCell::new();
+    let unit0 = UNIT0.init(systimer.unit0);
+    let frozen_unit = FrozenUnit::new(unit0);
+    let alarm = Alarm::new(systimer.comparator0, &frozen_unit);
+
     let mut openthread = esp_openthread::OpenThread::new(
         &mut ieee802154,
-        systimer.alarm0,
+        alarm,
         Rng::new(peripherals.RNG),
     );
 

@@ -16,7 +16,10 @@ use core::{
 
 use bitflags::bitflags;
 use critical_section::Mutex;
-use esp_hal::timer::systimer::{Alarm, Target};
+use esp_hal::{
+    timer::systimer::{Alarm, SpecificComparator, SpecificUnit, Target},
+    Blocking,
+};
 use esp_ieee802154::{rssi_to_lqi, Ieee802154};
 
 // for now just re-export all
@@ -249,7 +252,13 @@ pub struct OpenThread<'a> {
 impl<'a> OpenThread<'a> {
     pub fn new(
         radio: &'a mut Ieee802154,
-        timer: Alarm<Target, esp_hal::Blocking, 0>,
+        timer: Alarm<
+            'static,
+            Target,
+            Blocking,
+            SpecificComparator<'static, 0>,
+            SpecificUnit<'static, 0>,
+        >,
         rng: esp_hal::rng::Rng,
     ) -> Self {
         timer::install_isr(timer);
