@@ -32,26 +32,40 @@ use sys::{
         otIp6Address__bindgen_ty_1, otIp6GetUnicastAddresses, otIp6SetEnabled, otMeshLocalPrefix,
         otMessage, otMessageAppend, otMessageFree, otMessageGetLength, otMessageInfo,
         otMessageRead, otNetifIdentifier_OT_NETIF_THREAD, otNetworkKey, otNetworkName,
-        otOperationalDataset, otOperationalDatasetComponents, otPlatRadioReceiveDone, otPskc,
-        otRadioFrame, otRadioFrame__bindgen_ty_1, otRadioFrame__bindgen_ty_1__bindgen_ty_2,
-        otSecurityPolicy, otSetStateChangedCallback, otSockAddr, otTaskletsArePending,
-        otTaskletsProcess, otThreadSetEnabled, otTimestamp, otUdpBind, otUdpClose, otUdpNewMessage,
-        otUdpOpen, otUdpSend, otUdpSocket, OT_NETWORK_NAME_MAX_SIZE, OT_RADIO_FRAME_MAX_SIZE,
+        otOperationalDataset, otOperationalDatasetComponents, otPlatRadioEnergyScanDone,
+        otPlatRadioReceiveDone, otPskc, otRadioFrame, otRadioFrame__bindgen_ty_1,
+        otRadioFrame__bindgen_ty_1__bindgen_ty_2, otSecurityPolicy, otSetStateChangedCallback,
+        otSockAddr, otTaskletsArePending, otTaskletsProcess, otThreadSetEnabled, otTimestamp,
+        otUdpBind, otUdpClose, otUdpNewMessage, otUdpOpen, otUdpSend, otUdpSocket,
         OT_CHANGED_ACTIVE_DATASET, OT_CHANGED_CHANNEL_MANAGER_NEW_CHANNEL,
-        OT_CHANGED_COMMISSIONER_STATE, OT_CHANGED_IP6_ADDRESS_ADDED, OT_CHANGED_IP6_ADDRESS_REMOVED,
-        OT_CHANGED_IP6_MULTICAST_SUBSCRIBED, OT_CHANGED_IP6_MULTICAST_UNSUBSCRIBED,
-        OT_CHANGED_JOINER_STATE, OT_CHANGED_NAT64_TRANSLATOR_STATE, OT_CHANGED_NETWORK_KEY,
-        OT_CHANGED_PARENT_LINK_QUALITY, OT_CHANGED_PENDING_DATASET, OT_CHANGED_PSKC,
-        OT_CHANGED_SECURITY_POLICY, OT_CHANGED_SUPPORTED_CHANNEL_MASK,
-        OT_CHANGED_THREAD_BACKBONE_ROUTER_LOCAL, OT_CHANGED_THREAD_BACKBONE_ROUTER_STATE,
-        OT_CHANGED_THREAD_CHANNEL, OT_CHANGED_THREAD_CHILD_ADDED, OT_CHANGED_THREAD_CHILD_REMOVED,
-        OT_CHANGED_THREAD_EXT_PANID, OT_CHANGED_THREAD_KEY_SEQUENCE_COUNTER, OT_CHANGED_THREAD_LL_ADDR,
-        OT_CHANGED_THREAD_ML_ADDR, OT_CHANGED_THREAD_NETDATA, OT_CHANGED_THREAD_NETIF_STATE,
-        OT_CHANGED_THREAD_NETWORK_NAME, OT_CHANGED_THREAD_PANID, OT_CHANGED_THREAD_PARTITION_ID,
-        OT_CHANGED_THREAD_RLOC_ADDED, OT_CHANGED_THREAD_RLOC_REMOVED, OT_CHANGED_THREAD_ROLE,
+        OT_CHANGED_COMMISSIONER_STATE, OT_CHANGED_IP6_ADDRESS_ADDED,
+        OT_CHANGED_IP6_ADDRESS_REMOVED, OT_CHANGED_IP6_MULTICAST_SUBSCRIBED,
+        OT_CHANGED_IP6_MULTICAST_UNSUBSCRIBED, OT_CHANGED_JOINER_STATE,
+        OT_CHANGED_NAT64_TRANSLATOR_STATE, OT_CHANGED_NETWORK_KEY, OT_CHANGED_PARENT_LINK_QUALITY,
+        OT_CHANGED_PENDING_DATASET, OT_CHANGED_PSKC, OT_CHANGED_SECURITY_POLICY,
+        OT_CHANGED_SUPPORTED_CHANNEL_MASK, OT_CHANGED_THREAD_BACKBONE_ROUTER_LOCAL,
+        OT_CHANGED_THREAD_BACKBONE_ROUTER_STATE, OT_CHANGED_THREAD_CHANNEL,
+        OT_CHANGED_THREAD_CHILD_ADDED, OT_CHANGED_THREAD_CHILD_REMOVED,
+        OT_CHANGED_THREAD_EXT_PANID, OT_CHANGED_THREAD_KEY_SEQUENCE_COUNTER,
+        OT_CHANGED_THREAD_LL_ADDR, OT_CHANGED_THREAD_ML_ADDR, OT_CHANGED_THREAD_NETDATA,
+        OT_CHANGED_THREAD_NETIF_STATE, OT_CHANGED_THREAD_NETWORK_NAME, OT_CHANGED_THREAD_PANID,
+        OT_CHANGED_THREAD_PARTITION_ID, OT_CHANGED_THREAD_RLOC_ADDED,
+        OT_CHANGED_THREAD_RLOC_REMOVED, OT_CHANGED_THREAD_ROLE, OT_NETWORK_NAME_MAX_SIZE,
+        OT_RADIO_FRAME_MAX_SIZE,
     },
     c_types::c_void,
 };
+
+/// https://github.com/espressif/esp-idf/blob/release/v5.3/components/ieee802154/private_include/esp_ieee802154_frame.h#L20
+const IEEE802154_FRAME_TYPE_OFFSET: usize = 1;
+const IEEE802154_FRAME_TYPE_MASK: u8 = 0x07;
+const IEEE802154_FRAME_TYPE_BEACON: u8 = 0x00;
+const IEEE802154_FRAME_TYPE_DATA: u8 = 0x01;
+const IEEE802154_FRAME_TYPE_ACK: u8 = 0x02;
+const IEEE802154_FRAME_TYPE_COMMAND: u8 = 0x03;
+
+// ed_rss for H2 and C6 is the same
+const ENERGY_DETECT_RSS: i8 = 16;
 
 use crate::timer::current_millis;
 
@@ -169,7 +183,6 @@ bitflags! {
         const ParentLinkQualityChanged = OT_CHANGED_PARENT_LINK_QUALITY;
     }
 }
-
 
 /// IPv6 network interface unicast address
 #[derive(Debug, Clone, Copy)]
@@ -595,64 +608,84 @@ impl<'a> OpenThread<'a> {
         crate::timer::run_if_due();
 
         while let Some(raw) = with_radio(|radio| radio.get_raw_received()).unwrap() {
-            let rssi: i8 = {
-                let idx = match (raw.data[0] as usize).cmp(&raw.data.len()) {
-                    core::cmp::Ordering::Less => {
-                        // guard against attempting to access the (0 - 1)th index
-                        if raw.data[0] == 0 {
-                            log::warn!("raw.data[0] is 0, RSSI may be invalid",);
-                            0
+            match frame_get_type(&raw.data) {
+                IEEE802154_FRAME_TYPE_DATA => {
+                    let rssi: i8 = {
+                        let idx = match (raw.data[0] as usize).cmp(&raw.data.len()) {
+                            core::cmp::Ordering::Less => {
+                                // guard against attempting to access the (0 - 1)th index
+                                if raw.data[0] == 0 {
+                                    log::warn!("raw.data[0] is 0, RSSI may be invalid",);
+                                    0
+                                } else {
+                                    raw.data[0] as usize - 1
+                                }
+                            }
+                            core::cmp::Ordering::Greater | core::cmp::Ordering::Equal => {
+                                raw.data.len() - 1
+                            }
+                        };
+                        raw.data[idx] as i8
+                    };
+
+                    unsafe {
+                        // len indexes into both the RCV_FRAME_PSDU and raw.data array
+                        // so must be sized appropriately
+                        let len = if raw.data[0] as usize > RCV_FRAME_PSDU.len()
+                            && raw.data[1..].len() >= RCV_FRAME_PSDU.len()
+                        {
+                            log::warn!(
+                                "raw.data[0] {:?} larger than rcv frame \
+                                psdu len and raw.data.len()! RCV {:02x?}",
+                                raw.data[0],
+                                &raw.data[1..][..RCV_FRAME_PSDU.len()]
+                            );
+                            RCV_FRAME_PSDU.len()
+                        } else if raw.data[0] as usize > RCV_FRAME_PSDU.len()
+                            && raw.data[1..].len() < RCV_FRAME_PSDU.len()
+                        {
+                            log::warn!(
+                                "raw.data[0] {:?} larger than raw.data.len()! \
+                                RCV {:02x?}",
+                                raw.data[0],
+                                &raw.data[1..][..raw.data.len() - 1]
+                            );
+                            raw.data[1..].len()
                         } else {
-                            raw.data[0] as usize - 1
-                        }
+                            raw.data[0] as usize
+                        };
+
+                        log::debug!("RCV {:02x?}", &raw.data[1..][..len as usize]);
+
+                        RCV_FRAME_PSDU[..len as usize]
+                            .copy_from_slice(&raw.data[1..][..len as usize]);
+                        RCV_FRAME.mLength = len as u16;
+                        RCV_FRAME.mRadioType = 1; // ????
+                        RCV_FRAME.mChannel = raw.channel;
+                        RCV_FRAME.mInfo.mRxInfo.mRssi = rssi;
+                        RCV_FRAME.mInfo.mRxInfo.mLqi = rssi_to_lqi(rssi);
+                        RCV_FRAME.mInfo.mRxInfo.mTimestamp = current_millis() * 1000;
+                        otPlatRadioReceiveDone(
+                            self.instance,
+                            addr_of_mut!(RCV_FRAME),
+                            otError_OT_ERROR_NONE,
+                        );
                     }
-                    core::cmp::Ordering::Greater | core::cmp::Ordering::Equal => raw.data.len() - 1,
-                };
-                raw.data[idx] as i8
+                }
+                IEEE802154_FRAME_TYPE_BEACON | IEEE802154_FRAME_TYPE_COMMAND => {
+                    log::warn!("Received beacon or mac command frame, triggering scan done");
+                    unsafe {
+                        otPlatRadioEnergyScanDone(self.instance, ENERGY_DETECT_RSS);
+                    }
+                }
+                IEEE802154_FRAME_TYPE_ACK => {
+                    log::debug!("Received ack frame");
+                }
+                _ => {
+                    // Drop unsupported frames
+                    log::warn!("Unsupported frame type received");
+                }
             };
-
-            unsafe {
-                // len indexes into both the RCV_FRAME_PSDU and raw.data array
-                // so must be sized appropriately
-                let len = if raw.data[0] as usize > RCV_FRAME_PSDU.len()
-                    && raw.data[1..].len() >= RCV_FRAME_PSDU.len()
-                {
-                    log::warn!(
-                        "raw.data[0] {:?} larger than rcv frame \
-                        psdu len and raw.data.len()! RCV {:02x?}",
-                        raw.data[0],
-                        &raw.data[1..][..RCV_FRAME_PSDU.len()]
-                    );
-                    RCV_FRAME_PSDU.len()
-                } else if raw.data[0] as usize > RCV_FRAME_PSDU.len()
-                    && raw.data[1..].len() < RCV_FRAME_PSDU.len()
-                {
-                    log::warn!(
-                        "raw.data[0] {:?} larger than raw.data.len()! \
-                        RCV {:02x?}",
-                        raw.data[0],
-                        &raw.data[1..][..raw.data.len() - 1]
-                    );
-                    raw.data[1..].len()
-                } else {
-                    raw.data[0] as usize
-                };
-
-                log::debug!("RCV {:02x?}", &raw.data[1..][..len as usize]);
-
-                RCV_FRAME_PSDU[..len as usize].copy_from_slice(&raw.data[1..][..len as usize]);
-                RCV_FRAME.mLength = len as u16;
-                RCV_FRAME.mRadioType = 1; // ????
-                RCV_FRAME.mChannel = raw.channel;
-                RCV_FRAME.mInfo.mRxInfo.mRssi = rssi;
-                RCV_FRAME.mInfo.mRxInfo.mLqi = rssi_to_lqi(rssi);
-                RCV_FRAME.mInfo.mRxInfo.mTimestamp = current_millis() * 1000;
-                otPlatRadioReceiveDone(
-                    self.instance,
-                    addr_of_mut!(RCV_FRAME),
-                    otError_OT_ERROR_NONE,
-                );
-            }
         }
     }
 }
@@ -665,6 +698,22 @@ impl<'a> Drop for OpenThread<'a> {
             CHANGE_CALLBACK.borrow_ref_mut(cs).take();
         });
     }
+}
+
+#[allow(unused)]
+/// From https://github.com/espressif/esp-idf/blob/release/v5.3/components/ieee802154/driver/esp_ieee802154_frame.c#L45
+fn is_supported_frame_type_raw(frame_type: u8) -> bool {
+    frame_type == IEEE802154_FRAME_TYPE_BEACON
+        || frame_type == IEEE802154_FRAME_TYPE_DATA
+        || frame_type == IEEE802154_FRAME_TYPE_ACK
+        || frame_type == IEEE802154_FRAME_TYPE_COMMAND // Are child nodes expected to respond to MacCommand frames?
+}
+
+fn frame_get_type(frame: &[u8]) -> u8 {
+    if frame.len() <= IEEE802154_FRAME_TYPE_OFFSET {
+        return 0;
+    }
+    frame[IEEE802154_FRAME_TYPE_OFFSET] & IEEE802154_FRAME_TYPE_MASK
 }
 
 unsafe extern "C" fn change_callback(
