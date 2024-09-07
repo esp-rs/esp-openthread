@@ -37,6 +37,18 @@ use sys::{
         otSecurityPolicy, otSetStateChangedCallback, otSockAddr, otTaskletsArePending,
         otTaskletsProcess, otThreadSetEnabled, otTimestamp, otUdpBind, otUdpClose, otUdpNewMessage,
         otUdpOpen, otUdpSend, otUdpSocket, OT_NETWORK_NAME_MAX_SIZE, OT_RADIO_FRAME_MAX_SIZE,
+        OT_CHANGED_ACTIVE_DATASET, OT_CHANGED_CHANNEL_MANAGER_NEW_CHANNEL,
+        OT_CHANGED_COMMISSIONER_STATE, OT_CHANGED_IP6_ADDRESS_ADDED, OT_CHANGED_IP6_ADDRESS_REMOVED,
+        OT_CHANGED_IP6_MULTICAST_SUBSCRIBED, OT_CHANGED_IP6_MULTICAST_UNSUBSCRIBED,
+        OT_CHANGED_JOINER_STATE, OT_CHANGED_NAT64_TRANSLATOR_STATE, OT_CHANGED_NETWORK_KEY,
+        OT_CHANGED_PARENT_LINK_QUALITY, OT_CHANGED_PENDING_DATASET, OT_CHANGED_PSKC,
+        OT_CHANGED_SECURITY_POLICY, OT_CHANGED_SUPPORTED_CHANNEL_MASK,
+        OT_CHANGED_THREAD_BACKBONE_ROUTER_LOCAL, OT_CHANGED_THREAD_BACKBONE_ROUTER_STATE,
+        OT_CHANGED_THREAD_CHANNEL, OT_CHANGED_THREAD_CHILD_ADDED, OT_CHANGED_THREAD_CHILD_REMOVED,
+        OT_CHANGED_THREAD_EXT_PANID, OT_CHANGED_THREAD_KEY_SEQUENCE_COUNTER, OT_CHANGED_THREAD_LL_ADDR,
+        OT_CHANGED_THREAD_ML_ADDR, OT_CHANGED_THREAD_NETDATA, OT_CHANGED_THREAD_NETIF_STATE,
+        OT_CHANGED_THREAD_NETWORK_NAME, OT_CHANGED_THREAD_PANID, OT_CHANGED_THREAD_PARTITION_ID,
+        OT_CHANGED_THREAD_RLOC_ADDED, OT_CHANGED_THREAD_RLOC_REMOVED, OT_CHANGED_THREAD_ROLE,
     },
     c_types::c_void,
 };
@@ -92,69 +104,72 @@ bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     pub struct ChangedFlags: u32 {
         /// IPv6 address was added
-        const Ipv6AddressAdded = 1;
+        const Ipv6AddressAdded = OT_CHANGED_IP6_ADDRESS_ADDED;
         /// IPv6 address was removed
-        const Ipv6AddressRemoved = 2;
+        const Ipv6AddressRemoved = OT_CHANGED_IP6_ADDRESS_REMOVED;
         /// Role (disabled, detached, child, router, leader) changed
-        const ThreadRoleChanged = 4;
+        const ThreadRoleChanged = OT_CHANGED_THREAD_ROLE;
         /// The link-local address changed
-        const ThreadLlAddressChanged = 8;
+        const ThreadLlAddressChanged = OT_CHANGED_THREAD_LL_ADDR;
         /// The mesh-local address changed
-        const ThreadMeshLocalAddressChanged = 16;
+        const ThreadMeshLocalAddressChanged = OT_CHANGED_THREAD_ML_ADDR;
         ///  RLOC was added
-        const ThreadRlocAdded = 32;
+        const ThreadRlocAdded = OT_CHANGED_THREAD_RLOC_ADDED;
         /// RLOC was removed
-        const ThreadRlocRemoved = 64;
+        const ThreadRlocRemoved = OT_CHANGED_THREAD_RLOC_REMOVED;
         /// Partition ID changed
-        const ThreadPartitionIdChanged = 128;
+        const ThreadPartitionIdChanged = OT_CHANGED_THREAD_PARTITION_ID;
         /// Thread Key Sequence changed
-        const ThreadKeySequenceChanged = 256;
+        const ThreadKeySequenceChanged = OT_CHANGED_THREAD_KEY_SEQUENCE_COUNTER;
         /// Thread Network Data changed
-        const ThreadNetworkDataChanged = 512;
+        const ThreadNetworkDataChanged = OT_CHANGED_THREAD_NETDATA;
         /// Child was added
-        const ThreadChildAdded = 1024;
+        const ThreadChildAdded = OT_CHANGED_THREAD_CHILD_ADDED;
         /// Child was removed
-        const ThreadChildRemoved = 2048;
+        const ThreadChildRemoved = OT_CHANGED_THREAD_CHILD_REMOVED;
         /// Subscribed to a IPv6 multicast address
-        const Ipv6MulticastSubscribed = 4096;
+        const Ipv6MulticastSubscribed = OT_CHANGED_IP6_MULTICAST_SUBSCRIBED;
         /// Unsubscribed from a IPv6 multicast address
-        const Ipv6MulticastUnsubscribed = 8192;
+        const Ipv6MulticastUnsubscribed = OT_CHANGED_IP6_MULTICAST_UNSUBSCRIBED;
         /// Thread network channel changed
-        const ThreadNetworkChannelChanged = 16384;
+        const ThreadNetworkChannelChanged = OT_CHANGED_THREAD_CHANNEL;
         /// Thread network PAN Id changed
-        const ThreadPanIdChanged = 32768;
+        const ThreadPanIdChanged = OT_CHANGED_THREAD_PANID;
         /// Thread network name changed
-        const ThreadNetworkNameChanged = 65536;
+        const ThreadNetworkNameChanged = OT_CHANGED_THREAD_NETWORK_NAME;
         /// Thread network extended PAN ID changed
-        const ThreadExtendedPanIdChanged = 131072;
+        const ThreadExtendedPanIdChanged = OT_CHANGED_THREAD_EXT_PANID;
         /// Network key changed
-        const ThreadNetworkKeyChanged = 262144;
+        const ThreadNetworkKeyChanged = OT_CHANGED_NETWORK_KEY;
         /// PSKc changed
-        const ThreadPskcChanged = 524288;
+        const ThreadPskcChanged = OT_CHANGED_PSKC;
         /// Security Policy changed
-        const ThreadSecurityPolicyChanged = 1048576;
+        const ThreadSecurityPolicyChanged = OT_CHANGED_SECURITY_POLICY;
         /// Channel Manager new pending Thread channel changed
-        const ChannelManagerNewChannelChanged = 2097152;
+        const ChannelManagerNewChannelChanged = OT_CHANGED_CHANNEL_MANAGER_NEW_CHANNEL;
         /// Supported channel mask changed
-        const SupportedChannelMaskChanged = 4194304;
+        const SupportedChannelMaskChanged = OT_CHANGED_SUPPORTED_CHANNEL_MASK;
         /// Commissioner state changed
-        const CommissionerStateChanged = 8388608;
+        const CommissionerStateChanged = OT_CHANGED_COMMISSIONER_STATE;
         /// Thread network interface state changed
-        const ThreadNetworkInterfaceStateChanged = 16777216;
+        const ThreadNetworkInterfaceStateChanged = OT_CHANGED_THREAD_NETIF_STATE;
         /// Backbone Router state changed
-        const ThreadBackboneRouterStateChanged = 33554432;
+        const ThreadBackboneRouterStateChanged = OT_CHANGED_THREAD_BACKBONE_ROUTER_STATE;
         /// Local Backbone Router configuration changed
-        const ThreadBackboneRouterLocalChanged = 67108864;
+        const ThreadBackboneRouterLocalChanged = OT_CHANGED_THREAD_BACKBONE_ROUTER_LOCAL;
         /// Joiner state changed
-        const JoinerStateChanged = 134217728;
+        const JoinerStateChanged = OT_CHANGED_JOINER_STATE;
         /// Active Operational Dataset changed
-        const ActiveDatasetChanged = 268435456;
+        const ActiveDatasetChanged = OT_CHANGED_ACTIVE_DATASET;
         /// Pending Operational Dataset changed
-        const PendingDatasetChanged = 536870912;
-
-
+        const PendingDatasetChanged = OT_CHANGED_PENDING_DATASET;
+        /// State of the Nat64 Translator changed
+        const Nat64TranslatorStateChanged= OT_CHANGED_NAT64_TRANSLATOR_STATE;
+        /// Parent link quality changed
+        const ParentLinkQualityChanged = OT_CHANGED_PARENT_LINK_QUALITY;
     }
 }
+
 
 /// IPv6 network interface unicast address
 #[derive(Debug, Clone, Copy)]
