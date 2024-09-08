@@ -319,6 +319,12 @@ pub const OT_NETWORK_MAX_ROUTER_ID: u32 = 62;
 pub const OT_NEIGHBOR_INFO_ITERATOR_INIT: u32 = 0;
 pub const OT_JOINER_ADVDATA_MAX_LENGTH: u32 = 64;
 pub const OT_DURATION_STRING_SIZE: u32 = 21;
+pub const OT_DNS_MAX_NAME_SIZE: u32 = 255;
+pub const OT_DNS_MAX_LABEL_SIZE: u32 = 64;
+pub const OT_DNS_TXT_KEY_MIN_LENGTH: u32 = 1;
+pub const OT_DNS_TXT_KEY_MAX_LENGTH: u32 = 9;
+pub const OT_DNS_TXT_KEY_ITER_MAX_LENGTH: u32 = 64;
+pub const OPENTHREAD_CONFIG_SRP_CLIENT_AUTO_START_API_ENABLE: u32 = 1;
 pub type wchar_t = crate::c_types::c_int;
 #[repr(C)]
 #[repr(align(16))]
@@ -6159,5 +6165,354 @@ extern "C" {
 extern "C" {
     #[doc = " Removes all settings from the setting store.\n\n Deletes all settings from the settings\n store, resetting it to its initial factory state.\n\n @param[in] aInstance  The OpenThread instance structure."]
     pub fn otPlatSettingsWipe(aInstance: *mut otInstance);
+}
+#[doc = " Represents a TXT record entry representing a key/value pair (RFC 6763 - section 6.3).\n\n The string buffers pointed to by `mKey` and `mValue` MUST persist and remain unchanged after an instance of such\n structure is passed to OpenThread (as part of `otSrpClientService` instance).\n\n An array of `otDnsTxtEntry` entries are used in `otSrpClientService` to specify the full TXT record (a list of\n entries).\n"]
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct otDnsTxtEntry {
+    #[doc = " The TXT record key string.\n\n If `mKey` is not NULL, then it MUST be a null-terminated C string. The entry is treated as key/value pair with\n `mValue` buffer providing the value.\n   - The entry is encoded as follows:\n        - A single string length byte followed by \"key=value\" format (without the quotation marks).\n- In this case, the overall encoded length must be 255 bytes or less.\n   - If `mValue` is NULL, then key is treated as a boolean attribute and encoded as \"key\" (with no `=`).\n   - If `mValue` is not NULL but `mValueLength` is zero, then it is treated as empty value and encoded as \"key=\".\n\n If `mKey` is NULL, then `mValue` buffer is treated as an already encoded TXT-DATA and is appended as is in the\n DNS message.\n"]
+    pub mKey: *const crate::c_types::c_char,
+    #[doc = "< The TXT record value or already encoded TXT-DATA (depending on `mKey`)."]
+    pub mValue: *const u8,
+    #[doc = "< Number of bytes in `mValue` buffer."]
+    pub mValueLength: u16,
+}
+#[doc = " Represents an iterator for TXT record entries (key/value pairs).\n\n The data fields in this structure are intended for use by OpenThread core and caller should not read or change them.\n"]
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct otDnsTxtEntryIterator {
+    pub mPtr: *const crate::c_types::c_void,
+    pub mData: [u16; 2usize],
+    pub mChar: [crate::c_types::c_char; 65usize],
+}
+extern "C" {
+    #[doc = " Initializes a TXT record iterator.\n\n The buffer pointer @p aTxtData and its content MUST persist and remain unchanged while @p aIterator object\n is being used.\n\n @param[in] aIterator       A pointer to the iterator to initialize (MUST NOT be NULL).\n @param[in] aTxtData        A pointer to buffer containing the encoded TXT data.\n @param[in] aTxtDataLength  The length (number of bytes) of @p aTxtData.\n"]
+    pub fn otDnsInitTxtEntryIterator(
+        aIterator: *mut otDnsTxtEntryIterator,
+        aTxtData: *const u8,
+        aTxtDataLength: u16,
+    );
+}
+extern "C" {
+    #[doc = " Parses the TXT data from an iterator and gets the next TXT record entry (key/value pair).\n\n The @p aIterator MUST be initialized using `otDnsInitTxtEntryIterator()` before calling this function and the TXT\n data buffer used to initialize the iterator MUST persist and remain unchanged. Otherwise the behavior of this\n function is undefined.\n\n If the parsed key string length is smaller than or equal to `OT_DNS_TXT_KEY_ITER_MAX_LENGTH` the key string is\n returned in `mKey` in @p aEntry. But if the key is longer, then `mKey` is set to NULL and the entire encoded TXT\n entry string is returned in `mValue` and `mValueLength`.\n\n @param[in]  aIterator   A pointer to the iterator (MUST NOT be NULL).\n @param[out] aEntry      A pointer to a `otDnsTxtEntry` structure to output the parsed/read entry (MUST NOT be NULL).\n\n @retval OT_ERROR_NONE       The next entry was parsed successfully. @p aEntry is updated.\n @retval OT_ERROR_NOT_FOUND  No more entries in the TXT data.\n @retval OT_ERROR_PARSE      The TXT data from @p aIterator is not well-formed.\n"]
+    pub fn otDnsGetNextTxtEntry(
+        aIterator: *mut otDnsTxtEntryIterator,
+        aEntry: *mut otDnsTxtEntry,
+    ) -> otError;
+}
+extern "C" {
+    #[doc = " Encodes a given list of TXT record entries (key/value pairs) into TXT data (following format specified by RFC 6763).\n\n @param[in]      aTxtEntries      Pointer to an array of `otDnsTxtEntry`.\n @param[in]      aNumTxtEntries   Number of entries in @p aTxtEntries array.\n @param[out]     aTxtData         A pointer to a buffer to output the encoded TXT data.\n @param[in,out]  aTxtDataLength   On input, size of buffer @p aTxtData. On output, length of the encoded TXT data.\n\n @retval OT_ERROR_NONE          Encoded TXT data successfully, @p aTxtData and @p aTxtDataLength are updated.\n @retval OT_ERROR_INVALID_ARGS  The @p aTxtEntries is not valid.\n @retval OT_ERROR_NO_BUS        Could not fit the encoded data in @p aTxtData buffer with its @p aTxtDataLength.\n"]
+    pub fn otDnsEncodeTxtData(
+        aTxtEntries: *const otDnsTxtEntry,
+        aNumTxtEntries: u16,
+        aTxtData: *mut u8,
+        aTxtDataLength: *mut u16,
+    ) -> otError;
+}
+extern "C" {
+    #[doc = " Enables/disables the \"DNS name compression\" mode.\n\n By default DNS name compression is enabled. When disabled, DNS names are appended as full and never compressed. This\n is applicable to OpenThread's DNS and SRP client/server modules.\n\n This is intended for testing only and available when `OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE` config is enabled.\n\n Note that in the case `OPENTHREAD_CONFIG_MULTIPLE_INSTANCE_ENABLE` is used, this mode applies to all OpenThread\n instances (i.e., calling this function enables/disables the compression mode on all OpenThread instances).\n\n @param[in] aEnabled   TRUE to enable the \"DNS name compression\" mode, FALSE to disable.\n"]
+    pub fn otDnsSetNameCompressionEnabled(aEnabled: bool);
+}
+extern "C" {
+    #[doc = " Indicates whether the \"DNS name compression\" mode is enabled or not.\n\n This is intended for testing only and available when `OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE` config is enabled.\n\n @returns TRUE if the \"DNS name compression\" mode is enabled, FALSE otherwise.\n"]
+    pub fn otDnsIsNameCompressionEnabled() -> bool;
+}
+#[doc = "< Item to be added/registered."]
+pub const otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_TO_ADD: otSrpClientItemState = 0;
+#[doc = "< Item is being added/registered."]
+pub const otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_ADDING: otSrpClientItemState = 1;
+#[doc = "< Item to be refreshed (re-register to renew lease)."]
+pub const otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_TO_REFRESH: otSrpClientItemState = 2;
+#[doc = "< Item is being refreshed."]
+pub const otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_REFRESHING: otSrpClientItemState = 3;
+#[doc = "< Item to be removed."]
+pub const otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_TO_REMOVE: otSrpClientItemState = 4;
+#[doc = "< Item is being removed."]
+pub const otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_REMOVING: otSrpClientItemState = 5;
+#[doc = "< Item is registered with server."]
+pub const otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_REGISTERED: otSrpClientItemState = 6;
+#[doc = "< Item is removed."]
+pub const otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_REMOVED: otSrpClientItemState = 7;
+#[doc = " Specifies an SRP client item (service or host info) state.\n"]
+pub type otSrpClientItemState = crate::c_types::c_uint;
+#[doc = " Represents an SRP client host info.\n"]
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct otSrpClientHostInfo {
+    #[doc = "< Host name (label) string (NULL if not yet set)."]
+    pub mName: *const crate::c_types::c_char,
+    #[doc = "< Array of host IPv6 addresses (NULL if not set or auto address is enabled)."]
+    pub mAddresses: *const otIp6Address,
+    #[doc = "< Number of IPv6 addresses in `mAddresses` array."]
+    pub mNumAddresses: u8,
+    #[doc = "< Indicates whether auto address mode is enabled or not."]
+    pub mAutoAddress: bool,
+    #[doc = "< Host info state."]
+    pub mState: otSrpClientItemState,
+}
+#[doc = " Represents an SRP client service.\n\n The values in this structure, including the string buffers for the names and the TXT record entries, MUST persist\n and stay constant after an instance of this structure is passed to OpenThread from `otSrpClientAddService()` or\n `otSrpClientRemoveService()`.\n\n The `mState`, `mData`, `mNext` fields are used/managed by OT core only. Their value is ignored when an instance of\n `otSrpClientService` is passed in `otSrpClientAddService()` or `otSrpClientRemoveService()` or other functions. The\n caller does not need to set these fields.\n\n The `mLease` and `mKeyLease` fields specify the desired lease and key lease intervals for this service. Zero value\n indicates that the interval is unspecified and then the default lease or key lease intervals from\n `otSrpClientGetLeaseInterval()` and `otSrpClientGetKeyLeaseInterval()` are used for this service. If the key lease\n interval (whether set explicitly or determined from the default) is shorter than the lease interval for a service,\n SRP client will re-use the lease interval value for key lease interval as well. For example, if in service `mLease`\n is explicitly set to 2 days and `mKeyLease` is set to zero and default key lease is set to 1 day, then when\n registering this service, the requested key lease for this service is also set to 2 days.\n"]
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct otSrpClientService {
+    #[doc = "< The service labels (e.g., \"_mt._udp\", not the full domain name)."]
+    pub mName: *const crate::c_types::c_char,
+    #[doc = "< The service instance name label (not the full name)."]
+    pub mInstanceName: *const crate::c_types::c_char,
+    #[doc = "< Array of sub-type labels (must end with `NULL` or can be `NULL`)."]
+    pub mSubTypeLabels: *const *const crate::c_types::c_char,
+    #[doc = "< Array of TXT entries (`mNumTxtEntries` gives num of entries)."]
+    pub mTxtEntries: *const otDnsTxtEntry,
+    #[doc = "< The service port number."]
+    pub mPort: u16,
+    #[doc = "< The service priority."]
+    pub mPriority: u16,
+    #[doc = "< The service weight."]
+    pub mWeight: u16,
+    #[doc = "< Number of entries in the `mTxtEntries` array."]
+    pub mNumTxtEntries: u8,
+    #[doc = "< Service state (managed by OT core)."]
+    pub mState: otSrpClientItemState,
+    #[doc = "< Internal data (used by OT core)."]
+    pub mData: u32,
+    #[doc = "< Pointer to next entry in a linked-list (managed by OT core)."]
+    pub mNext: *mut otSrpClientService,
+    #[doc = "< Desired lease interval in sec - zero to use default."]
+    pub mLease: u32,
+    #[doc = "< Desired key lease interval in sec - zero to use default."]
+    pub mKeyLease: u32,
+}
+#[doc = " Pointer type defines the callback used by SRP client to notify user of changes/events/errors.\n\n This callback is invoked on a successful registration of an update (i.e., add/remove of host-info and/or some\n service(s)) with the SRP server, or if there is a failure or error (e.g., server rejects a update request or client\n times out waiting for response, etc).\n\n In case of a successful reregistration of an update, `aError` parameter would be `OT_ERROR_NONE` and the host info\n and the full list of services is provided as input parameters to the callback. Note that host info and services each\n track its own state in the corresponding `mState` member variable of the related data structure (the state\n indicating whether the host-info/service is registered or removed or still being added/removed, etc).\n\n The list of removed services is passed as its own linked-list `aRemovedServices` in the callback. Note that when the\n callback is invoked, the SRP client (OpenThread implementation) is done with the removed service instances listed in\n `aRemovedServices` and no longer tracks/stores them (i.e., if from the callback we call `otSrpClientGetServices()`\n the removed services will not be present in the returned list). Providing a separate list of removed services in\n the callback helps indicate to user which items are now removed and allow user to re-claim/reuse the instances.\n\n If the server rejects an SRP update request, the DNS response code (RFC 2136) is mapped to the following errors:\n\n  - (0)  NOERROR   Success (no error condition)                    -> OT_ERROR_NONE\n  - (1)  FORMERR   Server unable to interpret due to format error  -> OT_ERROR_PARSE\n  - (2)  SERVFAIL  Server encountered an internal failure          -> OT_ERROR_FAILED\n  - (3)  NXDOMAIN  Name that ought to exist, does not exist        -> OT_ERROR_NOT_FOUND\n  - (4)  NOTIMP    Server does not support the query type (OpCode) -> OT_ERROR_NOT_IMPLEMENTED\n  - (5)  REFUSED   Server refused for policy/security reasons      -> OT_ERROR_SECURITY\n  - (6)  YXDOMAIN  Some name that ought not to exist, does exist   -> OT_ERROR_DUPLICATED\n  - (7)  YXRRSET   Some RRset that ought not to exist, does exist  -> OT_ERROR_DUPLICATED\n  - (8)  NXRRSET   Some RRset that ought to exist, does not exist  -> OT_ERROR_NOT_FOUND\n  - (9)  NOTAUTH   Service is not authoritative for zone           -> OT_ERROR_SECURITY\n  - (10) NOTZONE   A name is not in the zone                       -> OT_ERROR_PARSE\n  - (20) BADNAME   Bad name                                        -> OT_ERROR_PARSE\n  - (21) BADALG    Bad algorithm                                   -> OT_ERROR_SECURITY\n  - (22) BADTRUN   Bad truncation                                  -> OT_ERROR_PARSE\n  - Other response codes                                           -> OT_ERROR_FAILED\n\n The following errors are also possible:\n\n  - OT_ERROR_RESPONSE_TIMEOUT : Timed out waiting for response from server (client would continue to retry).\n  - OT_ERROR_INVALID_ARGS     : The provided service structure is invalid (e.g., bad service name or `otDnsTxtEntry`).\n  - OT_ERROR_NO_BUFS          : Insufficient buffer to prepare or send the update message.\n\n Note that in case of any failure, the client continues the operation, i.e. it prepares and (re)transmits the SRP\n update message to the server, after some wait interval. The retry wait interval starts from the minimum value and\n is increased by the growth factor every failure up to the max value (please see configuration parameter\n `OPENTHREAD_CONFIG_SRP_CLIENT_MIN_RETRY_WAIT_INTERVAL` and the related ones for more details).\n\n @param[in] aError            The error (see above).\n @param[in] aHostInfo         A pointer to host info.\n @param[in] aServices         The head of linked-list containing all services (excluding the ones removed). NULL if\n                              the list is empty.\n @param[in] aRemovedServices  The head of linked-list containing all removed services. NULL if the list is empty.\n @param[in] aContext          A pointer to an arbitrary context (provided when callback was registered).\n"]
+pub type otSrpClientCallback = ::core::option::Option<
+    unsafe extern "C" fn(
+        aError: otError,
+        aHostInfo: *const otSrpClientHostInfo,
+        aServices: *const otSrpClientService,
+        aRemovedServices: *const otSrpClientService,
+        aContext: *mut crate::c_types::c_void,
+    ),
+>;
+#[doc = " Pointer type defines the callback used by SRP client to notify user when it is auto-started or stopped.\n\n This is only used when auto-start feature `OPENTHREAD_CONFIG_SRP_CLIENT_AUTO_START_API_ENABLE` is enabled.\n\n This callback is invoked when auto-start mode is enabled and the SRP client is either automatically started or\n stopped.\n\n @param[in] aServerSockAddr   A non-NULL pointer indicates SRP server was started and pointer will give the\n                              selected server socket address. A NULL pointer indicates SRP server was stopped.\n @param[in] aContext          A pointer to an arbitrary context (provided when callback was registered).\n"]
+pub type otSrpClientAutoStartCallback = ::core::option::Option<
+    unsafe extern "C" fn(aServerSockAddr: *const otSockAddr, aContext: *mut crate::c_types::c_void),
+>;
+extern "C" {
+    #[doc = " Starts the SRP client operation.\n\n SRP client will prepare and send \"SRP Update\" message to the SRP server once all the following conditions are met:\n\n  - The SRP client is started - `otSrpClientStart()` is called.\n  - Host name is set - `otSrpClientSetHostName()` is called.\n  - At least one host IPv6 address is set - `otSrpClientSetHostAddresses()` is called.\n  - At least one service is added - `otSrpClientAddService()` is called.\n\n It does not matter in which order these functions are called. When all conditions are met, the SRP client will\n wait for a short delay before preparing an \"SRP Update\" message and sending it to server. This delay allows for user\n to add multiple services and/or IPv6 addresses before the first SRP Update message is sent (ensuring a single SRP\n Update is sent containing all the info). The config `OPENTHREAD_CONFIG_SRP_CLIENT_UPDATE_TX_DELAY` specifies the\n delay interval.\n\n @param[in] aInstance        A pointer to the OpenThread instance.\n @param[in] aServerSockAddr  The socket address (IPv6 address and port number) of the SRP server.\n\n @retval OT_ERROR_NONE       SRP client operation started successfully or it is already running with same server\n                             socket address and callback.\n @retval OT_ERROR_BUSY       SRP client is busy running with a different socket address.\n @retval OT_ERROR_FAILED     Failed to open/connect the client's UDP socket.\n"]
+    pub fn otSrpClientStart(
+        aInstance: *mut otInstance,
+        aServerSockAddr: *const otSockAddr,
+    ) -> otError;
+}
+extern "C" {
+    #[doc = " Stops the SRP client operation.\n\n Stops any further interactions with the SRP server. Note that it does not remove or clear host info\n and/or list of services. It marks all services to be added/removed again once the client is (re)started.\n\n @param[in] aInstance       A pointer to the OpenThread instance.\n"]
+    pub fn otSrpClientStop(aInstance: *mut otInstance);
+}
+extern "C" {
+    #[doc = " Indicates whether the SRP client is running or not.\n\n @param[in] aInstance       A pointer to the OpenThread instance.\n\n @returns TRUE if the SRP client is running, FALSE otherwise.\n"]
+    pub fn otSrpClientIsRunning(aInstance: *mut otInstance) -> bool;
+}
+extern "C" {
+    #[doc = " Gets the socket address (IPv6 address and port number) of the SRP server which is being used by SRP\n client.\n\n If the client is not running, the address is unspecified (all zero) with zero port number.\n\n @param[in] aInstance       A pointer to the OpenThread instance.\n\n @returns A pointer to the SRP server's socket address (is always non-NULL).\n"]
+    pub fn otSrpClientGetServerAddress(aInstance: *mut otInstance) -> *const otSockAddr;
+}
+extern "C" {
+    #[doc = " Sets the callback to notify caller of events/changes from SRP client.\n\n The SRP client allows a single callback to be registered. So consecutive calls to this function will overwrite any\n previously set callback functions.\n\n @param[in] aInstance   A pointer to the OpenThread instance.\n @param[in] aCallback   The callback to notify of events and changes. Can be NULL if not needed.\n @param[in] aContext    An arbitrary context used with @p aCallback.\n"]
+    pub fn otSrpClientSetCallback(
+        aInstance: *mut otInstance,
+        aCallback: otSrpClientCallback,
+        aContext: *mut crate::c_types::c_void,
+    );
+}
+extern "C" {
+    #[doc = " Enables the auto-start mode.\n\n This is only available when auto-start feature `OPENTHREAD_CONFIG_SRP_CLIENT_AUTO_START_API_ENABLE` is enabled.\n\n Config option `OPENTHREAD_CONFIG_SRP_CLIENT_AUTO_START_DEFAULT_MODE` specifies the default auto-start mode (whether\n it is enabled or disabled at the start of OT stack).\n\n When auto-start is enabled, the SRP client will monitor the Thread Network Data to discover SRP servers and select\n the preferred server and automatically start and stop the client when an SRP server is detected.\n\n There are three categories of Network Data entries indicating presence of SRP sever. They are preferred in the\n following order:\n\n   1) Preferred unicast entries where server address is included in the service data. If there are multiple options,\n      the one with numerically lowest IPv6 address is preferred.\n\n   2) Anycast entries each having a seq number. A larger sequence number in the sense specified by Serial Number\n      Arithmetic logic in RFC-1982 is considered more recent and therefore preferred. The largest seq number using\n      serial number arithmetic is preferred if it is well-defined (i.e., the seq number is larger than all other\n      seq numbers). If it is not well-defined, then the numerically largest seq number is preferred.\n\n   3) Unicast entries where the server address info is included in server data. If there are multiple options, the\n      one with numerically lowest IPv6 address is preferred.\n\n When there is a change in the Network Data entries, client will check that the currently selected server is still\n present in the Network Data and is still the preferred one. Otherwise the client will switch to the new preferred\n server or stop if there is none.\n\n When the SRP client is explicitly started through a successful call to `otSrpClientStart()`, the given SRP server\n address in `otSrpClientStart()` will continue to be used regardless of the state of auto-start mode and whether the\n same SRP server address is discovered or not in the Thread Network Data. In this case, only an explicit\n `otSrpClientStop()` call will stop the client.\n\n @param[in] aInstance   A pointer to the OpenThread instance.\n @param[in] aCallback   A callback to notify when client is auto-started/stopped. Can be NULL if not needed.\n @param[in] aContext    A context to be passed when invoking @p aCallback.\n"]
+    pub fn otSrpClientEnableAutoStartMode(
+        aInstance: *mut otInstance,
+        aCallback: otSrpClientAutoStartCallback,
+        aContext: *mut crate::c_types::c_void,
+    );
+}
+extern "C" {
+    #[doc = " Disables the auto-start mode.\n\n This is only available when auto-start feature `OPENTHREAD_CONFIG_SRP_CLIENT_AUTO_START_API_ENABLE` is enabled.\n\n Disabling the auto-start mode will not stop the client if it is already running but the client stops monitoring\n the Thread Network Data to verify that the selected SRP server is still present in it.\n\n Note that a call to `otSrpClientStop()` will also disable the auto-start mode.\n\n @param[in] aInstance   A pointer to the OpenThread instance.\n"]
+    pub fn otSrpClientDisableAutoStartMode(aInstance: *mut otInstance);
+}
+extern "C" {
+    #[doc = " Indicates the current state of auto-start mode (enabled or disabled).\n\n This is only available when auto-start feature `OPENTHREAD_CONFIG_SRP_CLIENT_AUTO_START_API_ENABLE` is enabled.\n\n @param[in] aInstance   A pointer to the OpenThread instance.\n\n @returns TRUE if the auto-start mode is enabled, FALSE otherwise.\n"]
+    pub fn otSrpClientIsAutoStartModeEnabled(aInstance: *mut otInstance) -> bool;
+}
+extern "C" {
+    #[doc = " Gets the TTL value in every record included in SRP update requests.\n\n Note that this is the TTL requested by the SRP client. The server may choose to accept a different TTL.\n\n By default, the TTL will equal the lease interval. Passing 0 or a value larger than the lease interval via\n `otSrpClientSetTtl()` will also cause the TTL to equal the lease interval.\n\n @param[in] aInstance  A pointer to the OpenThread instance.\n\n @returns The TTL (in seconds).\n"]
+    pub fn otSrpClientGetTtl(aInstance: *mut otInstance) -> u32;
+}
+extern "C" {
+    #[doc = " Sets the TTL value in every record included in SRP update requests.\n\n Changing the TTL does not impact the TTL of already registered services/host-info.\n It only affects future SRP update messages (i.e., adding new services and/or refreshes of the existing services).\n\n @param[in] aInstance   A pointer to the OpenThread instance.\n @param[in] aTtl        The TTL (in seconds). If value is zero or greater than lease interval, the TTL is set to the\n                        lease interval.\n"]
+    pub fn otSrpClientSetTtl(aInstance: *mut otInstance, aTtl: u32);
+}
+extern "C" {
+    #[doc = " Gets the default lease interval used in SRP update requests.\n\n The default interval is used only for `otSrpClientService` instances with `mLease` set to zero.\n\n Note that this is the lease duration requested by the SRP client. The server may choose to accept a different lease\n interval.\n\n @param[in] aInstance        A pointer to the OpenThread instance.\n\n @returns The lease interval (in seconds).\n"]
+    pub fn otSrpClientGetLeaseInterval(aInstance: *mut otInstance) -> u32;
+}
+extern "C" {
+    #[doc = " Sets the default lease interval used in SRP update requests.\n\n The default interval is used only for `otSrpClientService` instances with `mLease` set to zero.\n\n Changing the lease interval does not impact the accepted lease interval of already registered services/host-info.\n It only affects any future SRP update messages (i.e., adding new services and/or refreshes of the existing services).\n\n @param[in] aInstance   A pointer to the OpenThread instance.\n @param[in] aInterval   The lease interval (in seconds). If zero, the default value specified by\n                        `OPENTHREAD_CONFIG_SRP_CLIENT_DEFAULT_LEASE` would be used.\n"]
+    pub fn otSrpClientSetLeaseInterval(aInstance: *mut otInstance, aInterval: u32);
+}
+extern "C" {
+    #[doc = " Gets the default key lease interval used in SRP update requests.\n\n The default interval is used only for `otSrpClientService` instances with `mKeyLease` set to zero.\n\n Note that this is the lease duration requested by the SRP client. The server may choose to accept a different lease\n interval.\n\n @param[in] aInstance        A pointer to the OpenThread instance.\n\n @returns The key lease interval (in seconds).\n"]
+    pub fn otSrpClientGetKeyLeaseInterval(aInstance: *mut otInstance) -> u32;
+}
+extern "C" {
+    #[doc = " Sets the default key lease interval used in SRP update requests.\n\n The default interval is used only for `otSrpClientService` instances with `mKeyLease` set to zero.\n\n Changing the lease interval does not impact the accepted lease interval of already registered services/host-info.\n It only affects any future SRP update messages (i.e., adding new services and/or refreshes of existing services).\n\n @param[in] aInstance    A pointer to the OpenThread instance.\n @param[in] aInterval    The key lease interval (in seconds). If zero, the default value specified by\n                         `OPENTHREAD_CONFIG_SRP_CLIENT_DEFAULT_KEY_LEASE` would be used.\n"]
+    pub fn otSrpClientSetKeyLeaseInterval(aInstance: *mut otInstance, aInterval: u32);
+}
+extern "C" {
+    #[doc = " Gets the host info.\n\n @param[in] aInstance        A pointer to the OpenThread instance.\n\n @returns A pointer to host info structure.\n"]
+    pub fn otSrpClientGetHostInfo(aInstance: *mut otInstance) -> *const otSrpClientHostInfo;
+}
+extern "C" {
+    #[doc = " Sets the host name label.\n\n After a successful call to this function, `otSrpClientCallback` will be called to report the status of host info\n registration with SRP server.\n\n The name string buffer pointed to by @p aName MUST persist and stay unchanged after returning from this function.\n OpenThread will keep the pointer to the string.\n\n The host name can be set before client is started or after start but before host info is registered with server\n (host info should be in either `STATE_TO_ADD` or `STATE_REMOVED`).\n\n @param[in] aInstance   A pointer to the OpenThread instance.\n @param[in] aName       A pointer to host name label string (MUST NOT be NULL). Pointer to the string buffer MUST\n                        persist and remain valid and constant after return from this function.\n\n @retval OT_ERROR_NONE            The host name label was set successfully.\n @retval OT_ERROR_INVALID_ARGS    The @p aName is NULL.\n @retval OT_ERROR_INVALID_STATE   The host name is already set and registered with the server.\n"]
+    pub fn otSrpClientSetHostName(
+        aInstance: *mut otInstance,
+        aName: *const crate::c_types::c_char,
+    ) -> otError;
+}
+extern "C" {
+    #[doc = " Enables auto host address mode.\n\n When enabled host IPv6 addresses are automatically set by SRP client using all the preferred unicast addresses on\n Thread netif excluding all link-local and mesh-local addresses. If there is no preferred address, then Mesh Local\n EID address is added. The SRP client will automatically re-register when/if addresses on Thread netif are updated\n (new addresses are added or existing addresses are removed or marked as non-preferred).\n\n The auto host address mode can be enabled before start or during operation of SRP client except when the host info\n is being removed (client is busy handling a remove request from an call to `otSrpClientRemoveHostAndServices()` and\n host info still being in  either `STATE_TO_REMOVE` or `STATE_REMOVING` states).\n\n After auto host address mode is enabled, it can be disabled by a call to `otSrpClientSetHostAddresses()` which\n then explicitly sets the host addresses.\n\n @retval OT_ERROR_NONE            Successfully enabled auto host address mode.\n @retval OT_ERROR_INVALID_STATE   Host is being removed and therefore cannot enable auto host address mode.\n"]
+    pub fn otSrpClientEnableAutoHostAddress(aInstance: *mut otInstance) -> otError;
+}
+extern "C" {
+    #[doc = " Sets/updates the list of host IPv6 address.\n\n Host IPv6 addresses can be set/changed before start or during operation of SRP client (e.g. to add/remove or change\n a previously registered host address), except when the host info is being removed (client is busy handling a remove\n request from an earlier call to `otSrpClientRemoveHostAndServices()` and host info still being in  either\n `STATE_TO_REMOVE` or `STATE_REMOVING` states).\n\n The host IPv6 address array pointed to by @p aIp6Addresses MUST persist and remain unchanged after returning from\n this function (with `OT_ERROR_NONE`). OpenThread will save the pointer to the array.\n\n After a successful call to this function, `otSrpClientCallback` will be called to report the status of the address\n registration with SRP server.\n\n Calling this function disables auto host address mode if it was previously enabled from a successful call to\n `otSrpClientEnableAutoHostAddress()`.\n\n @param[in] aInstance           A pointer to the OpenThread instance.\n @param[in] aIp6Addresses       A pointer to the an array containing the host IPv6 addresses.\n @param[in] aNumAddresses       The number of addresses in the @p aIp6Addresses array.\n\n @retval OT_ERROR_NONE            The host IPv6 address list change started successfully. The `otSrpClientCallback`\n                                  will be called to report the status of registering addresses with server.\n @retval OT_ERROR_INVALID_ARGS    The address list is invalid (e.g., must contain at least one address).\n @retval OT_ERROR_INVALID_STATE   Host is being removed and therefore cannot change host address.\n"]
+    pub fn otSrpClientSetHostAddresses(
+        aInstance: *mut otInstance,
+        aIp6Addresses: *const otIp6Address,
+        aNumAddresses: u8,
+    ) -> otError;
+}
+extern "C" {
+    #[doc = " Adds a service to be registered with server.\n\n After a successful call to this function, `otSrpClientCallback` will be called to report the status of the service\n addition/registration with SRP server.\n\n The `otSrpClientService` instance being pointed to by @p aService MUST persist and remain unchanged after returning\n from this function (with `OT_ERROR_NONE`). OpenThread will save the pointer to the service instance.\n\n The `otSrpClientService` instance is not longer tracked by OpenThread and can be reclaimed only when\n\n  -  It is removed explicitly by a call to `otSrpClientRemoveService()` or removed along with other services by a\n     call to `otSrpClientRemoveHostAndServices() and only after the `otSrpClientCallback` is called indicating the\n     service was removed. Or,\n  -  A call to `otSrpClientClearHostAndServices()` which removes the host and all related services immediately.\n\n @param[in] aInstance        A pointer to the OpenThread instance.\n @param[in] aService         A pointer to a `otSrpClientService` instance to add.\n\n @retval OT_ERROR_NONE          The addition of service started successfully. The `otSrpClientCallback` will be\n                                called to report the status.\n @retval OT_ERROR_ALREADY       A service with the same service and instance names is already in the list.\n @retval OT_ERROR_INVALID_ARGS  The service structure is invalid (e.g., bad service name or `otDnsTxtEntry`).\n"]
+    pub fn otSrpClientAddService(
+        aInstance: *mut otInstance,
+        aService: *mut otSrpClientService,
+    ) -> otError;
+}
+extern "C" {
+    #[doc = " Requests a service to be unregistered with server.\n\n After a successful call to this function, `otSrpClientCallback` will be called to report the status of remove\n request with SRP server.\n\n The `otSrpClientService` instance being pointed to by @p aService MUST persist and remain unchanged after returning\n from this function (with `OT_ERROR_NONE`). OpenThread will keep the service instance during the remove process.\n Only after the `otSrpClientCallback` is called indicating the service instance is removed from SRP client\n service list and can be be freed/reused.\n\n @param[in] aInstance        A pointer to the OpenThread instance.\n @param[in] aService         A pointer to a `otSrpClientService` instance to remove.\n\n @retval OT_ERROR_NONE       The removal of service started successfully. The `otSrpClientCallback` will be called to\n                             report the status.\n @retval OT_ERROR_NOT_FOUND  The service could not be found in the list.\n"]
+    pub fn otSrpClientRemoveService(
+        aInstance: *mut otInstance,
+        aService: *mut otSrpClientService,
+    ) -> otError;
+}
+extern "C" {
+    #[doc = " Clears a service, immediately removing it from the client service list.\n\n Unlike `otSrpClientRemoveService()` which sends an update message to the server to remove the service, this function\n clears the service from the client's service list without any interaction with the server. On a successful call to\n this function, the `otSrpClientCallback` will NOT be called and the @p aService entry can be reclaimed and re-used\n by the caller immediately.\n\n Can be used along with a subsequent call to `otSrpClientAddService()` (potentially reusing the same @p\n aService entry with the same service and instance names) to update some of the parameters in an existing service.\n\n @param[in] aInstance        A pointer to the OpenThread instance.\n @param[in] aService         A pointer to a `otSrpClientService` instance to delete.\n\n @retval OT_ERROR_NONE       The @p aService is deleted successfully. It can be reclaimed and re-used immediately.\n @retval OT_ERROR_NOT_FOUND  The service could not be found in the list.\n"]
+    pub fn otSrpClientClearService(
+        aInstance: *mut otInstance,
+        aService: *mut otSrpClientService,
+    ) -> otError;
+}
+extern "C" {
+    #[doc = " Gets the list of services being managed by client.\n\n @param[in] aInstance        A pointer to the OpenThread instance.\n\n @returns A pointer to the head of linked-list of all services or NULL if the list is empty.\n"]
+    pub fn otSrpClientGetServices(aInstance: *mut otInstance) -> *const otSrpClientService;
+}
+extern "C" {
+    #[doc = " Starts the remove process of the host info and all services.\n\n After returning from this function, `otSrpClientCallback` will be called to report the status of remove request with\n SRP server.\n\n If the host info is to be permanently removed from server, @p aRemoveKeyLease should be set to `true` which removes\n the key lease associated with host on server. Otherwise, the key lease record is kept as before, which ensures\n that the server holds the host name in reserve for when the client is once again able to provide and register its\n service(s).\n\n The @p aSendUnregToServer determines the behavior when the host info is not yet registered with the server. If\n @p aSendUnregToServer is set to `false` (which is the default/expected value) then the SRP client will immediately\n remove the host info and services without sending an update message to server (no need to update the server if\n nothing is yet registered with it). If @p aSendUnregToServer is set to `true` then the SRP client will send an\n update message to the server. Note that if the host info is registered then the value of @p aSendUnregToServer does\n not matter and the SRP client will always send an update message to server requesting removal of all info.\n\n One situation where @p aSendUnregToServer can be useful is on a device reset/reboot, caller may want to remove any\n previously registered services with the server. In this case, caller can `otSrpClientSetHostName()` and then request\n `otSrpClientRemoveHostAndServices()` with `aSendUnregToServer` as `true`.\n\n @param[in] aInstance          A pointer to the OpenThread instance.\n @param[in] aRemoveKeyLease    A boolean indicating whether or not the host key lease should also be removed.\n @param[in] aSendUnregToServer A boolean indicating whether to send update to server when host info is not registered.\n\n @retval OT_ERROR_NONE       The removal of host info and services started successfully. The `otSrpClientCallback`\n                             will be called to report the status.\n @retval OT_ERROR_ALREADY    The host info is already removed.\n"]
+    pub fn otSrpClientRemoveHostAndServices(
+        aInstance: *mut otInstance,
+        aRemoveKeyLease: bool,
+        aSendUnregToServer: bool,
+    ) -> otError;
+}
+extern "C" {
+    #[doc = " Clears all host info and all the services.\n\n Unlike `otSrpClientRemoveHostAndServices()` which sends an update message to the server to remove all the info, this\n function clears all the info immediately without any interaction with the server.\n\n @param[in] aInstance        A pointer to the OpenThread instance.\n"]
+    pub fn otSrpClientClearHostAndServices(aInstance: *mut otInstance);
+}
+extern "C" {
+    #[doc = " Gets the domain name being used by SRP client.\n\n Requires `OPENTHREAD_CONFIG_SRP_CLIENT_DOMAIN_NAME_API_ENABLE` to be enabled.\n\n If domain name is not set, \"default.service.arpa\" will be used.\n\n @param[in] aInstance        A pointer to the OpenThread instance.\n\n @returns The domain name string.\n"]
+    pub fn otSrpClientGetDomainName(aInstance: *mut otInstance) -> *const crate::c_types::c_char;
+}
+extern "C" {
+    #[doc = " Sets the domain name to be used by SRP client.\n\n Requires `OPENTHREAD_CONFIG_SRP_CLIENT_DOMAIN_NAME_API_ENABLE` to be enabled.\n\n If not set \"default.service.arpa\" will be used.\n\n The name string buffer pointed to by @p aName MUST persist and stay unchanged after returning from this function.\n OpenThread will keep the pointer to the string.\n\n The domain name can be set before client is started or after start but before host info is registered with server\n (host info should be in either `STATE_TO_ADD` or `STATE_TO_REMOVE`).\n\n @param[in] aInstance     A pointer to the OpenThread instance.\n @param[in] aName         A pointer to the domain name string. If NULL sets it to default \"default.service.arpa\".\n\n @retval OT_ERROR_NONE            The domain name label was set successfully.\n @retval OT_ERROR_INVALID_STATE   The host info is already registered with server.\n"]
+    pub fn otSrpClientSetDomainName(
+        aInstance: *mut otInstance,
+        aName: *const crate::c_types::c_char,
+    ) -> otError;
+}
+extern "C" {
+    #[doc = " Converts a `otSrpClientItemState` to a string.\n\n @param[in] aItemState  An item state.\n\n @returns A string representation of @p aItemState.\n"]
+    pub fn otSrpClientItemStateToString(
+        aItemState: otSrpClientItemState,
+    ) -> *const crate::c_types::c_char;
+}
+extern "C" {
+    #[doc = " Enables/disables \"service key record inclusion\" mode.\n\n When enabled, SRP client will include KEY record in Service Description Instructions in the SRP update messages\n that it sends.\n\n Is available when `OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE` configuration is enabled.\n\n @note KEY record is optional in Service Description Instruction (it is required and always included in the Host\n Description Instruction). The default behavior of SRP client is to not include it. This function is intended to\n override the default behavior for testing only.\n\n @param[in] aInstance  A pointer to the OpenThread instance.\n @param[in] aEnabled   TRUE to enable, FALSE to disable the \"service key record inclusion\" mode.\n"]
+    pub fn otSrpClientSetServiceKeyRecordEnabled(aInstance: *mut otInstance, aEnabled: bool);
+}
+extern "C" {
+    #[doc = " Indicates whether the \"service key record inclusion\" mode is enabled or disabled.\n\n Is available when `OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE` configuration is enabled.\n\n @param[in] aInstance     A pointer to the OpenThread instance.\n\n @returns TRUE if \"service key record inclusion\" mode is enabled, FALSE otherwise.\n"]
+    pub fn otSrpClientIsServiceKeyRecordEnabled(aInstance: *mut otInstance) -> bool;
+}
+#[doc = " Represents a SRP client service pool entry.\n"]
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct otSrpClientBuffersServiceEntry {
+    #[doc = "< The SRP client service structure."]
+    pub mService: otSrpClientService,
+    #[doc = "< The SRP client TXT entry."]
+    pub mTxtEntry: otDnsTxtEntry,
+}
+extern "C" {
+    #[doc = " Gets the string buffer to use for SRP client host name.\n\n @param[in]  aInstance  A pointer to the OpenThread instance.\n @param[out] aSize      Pointer to a variable to return the size (number of bytes) of the string buffer (MUST NOT be\n                        NULL).\n\n @returns A pointer to char buffer to use for SRP client host name.\n"]
+    pub fn otSrpClientBuffersGetHostNameString(
+        aInstance: *mut otInstance,
+        aSize: *mut u16,
+    ) -> *mut crate::c_types::c_char;
+}
+extern "C" {
+    #[doc = " Gets the array of IPv6 address entries to use as SRP client host address list.\n\n @param[in]  aInstance     A pointer to the OpenThread instance.\n @param[out] aArrayLength  Pointer to a variable to return the array length i.e., number of IPv6 address entries in\n                           the array (MUST NOT be NULL).\n\n @returns A pointer to an array of `otIp6Address` entries (number of entries is returned in @p aArrayLength).\n"]
+    pub fn otSrpClientBuffersGetHostAddressesArray(
+        aInstance: *mut otInstance,
+        aArrayLength: *mut u8,
+    ) -> *mut otIp6Address;
+}
+extern "C" {
+    #[doc = " Allocates a new service entry from the pool.\n\n The returned service entry instance will be initialized as follows:\n\n  - `mService.mName` will point to an allocated string buffer which can be retrieved using the function\n    `otSrpClientBuffersGetServiceEntryServiceNameString()`.\n  - `mService.mInstanceName` will point to an allocated string buffer which can be retrieved using the function\n    `otSrpClientBuffersGetServiceEntryInstanceNameString()`.\n  - `mService.mSubTypeLabels` points to an array that is returned from `otSrpClientBuffersGetSubTypeLabelsArray()`.\n  - `mService.mTxtEntries` will point to `mTxtEntry`.\n  - `mService.mNumTxtEntries` will be set to one.\n  - Other `mService` fields (port, priority, weight) are set to zero.\n  - `mTxtEntry.mKey` is set to NULL (value is treated as already encoded).\n  - `mTxtEntry.mValue` will point to an allocated buffer which can be retrieved using the function\n    `otSrpClientBuffersGetServiceEntryTxtBuffer()`.\n  - `mTxtEntry.mValueLength` is set to zero.\n  - All related data/string buffers and arrays are cleared to all zero.\n\n @param[in] aInstance   A pointer to the OpenThread instance.\n\n @returns A pointer to the newly allocated service entry or NULL if not more entry available in the pool.\n"]
+    pub fn otSrpClientBuffersAllocateService(
+        aInstance: *mut otInstance,
+    ) -> *mut otSrpClientBuffersServiceEntry;
+}
+extern "C" {
+    #[doc = " Frees a previously allocated service entry.\n\n The @p aService MUST be previously allocated using `otSrpClientBuffersAllocateService()` and not yet freed. Otherwise\n the behavior of this function is undefined.\n\n @param[in] aInstance   A pointer to the OpenThread instance.\n @param[in] aService    A pointer to the service entry to free (MUST NOT be NULL).\n"]
+    pub fn otSrpClientBuffersFreeService(
+        aInstance: *mut otInstance,
+        aService: *mut otSrpClientBuffersServiceEntry,
+    );
+}
+extern "C" {
+    #[doc = " Frees all previously allocated service entries.\n\n @param[in] aInstance   A pointer to the OpenThread instance.\n"]
+    pub fn otSrpClientBuffersFreeAllServices(aInstance: *mut otInstance);
+}
+extern "C" {
+    #[doc = " Gets the string buffer for service name from a service entry.\n\n @param[in]  aEntry   A pointer to a previously allocated service entry (MUST NOT be NULL).\n @param[out] aSize    A pointer to a variable to return the size (number of bytes) of the string buffer (MUST NOT be\n                      NULL).\n\n @returns A pointer to the string buffer.\n"]
+    pub fn otSrpClientBuffersGetServiceEntryServiceNameString(
+        aEntry: *mut otSrpClientBuffersServiceEntry,
+        aSize: *mut u16,
+    ) -> *mut crate::c_types::c_char;
+}
+extern "C" {
+    #[doc = " Gets the string buffer for service instance name from a service entry.\n\n @param[in]  aEntry   A pointer to a previously allocated service entry (MUST NOT be NULL).\n @param[out] aSize    A pointer to a variable to return the size (number of bytes) of the string buffer (MUST NOT be\n                      NULL).\n\n @returns A pointer to the string buffer.\n"]
+    pub fn otSrpClientBuffersGetServiceEntryInstanceNameString(
+        aEntry: *mut otSrpClientBuffersServiceEntry,
+        aSize: *mut u16,
+    ) -> *mut crate::c_types::c_char;
+}
+extern "C" {
+    #[doc = " Gets the buffer for TXT record from a service entry.\n\n @param[in]  aEntry   A pointer to a previously allocated service entry (MUST NOT be NULL).\n @param[out] aSize    A pointer to a variable to return the size (number of bytes) of the buffer (MUST NOT be NULL).\n\n @returns A pointer to the buffer.\n"]
+    pub fn otSrpClientBuffersGetServiceEntryTxtBuffer(
+        aEntry: *mut otSrpClientBuffersServiceEntry,
+        aSize: *mut u16,
+    ) -> *mut u8;
+}
+extern "C" {
+    #[doc = " Gets the array for service subtype labels from the service entry.\n\n @param[in]  aEntry          A pointer to a previously allocated service entry (MUST NOT be NULL).\n @param[out] aArrayLength    A pointer to a variable to return the array length (MUST NOT be NULL).\n\n @returns A pointer to the array.\n"]
+    pub fn otSrpClientBuffersGetSubTypeLabelsArray(
+        aEntry: *mut otSrpClientBuffersServiceEntry,
+        aArrayLength: *mut u16,
+    ) -> *mut *const crate::c_types::c_char;
 }
 pub type __builtin_va_list = *mut crate::c_types::c_void;

@@ -44,3 +44,17 @@ pub extern "C" fn isupper() {
 pub extern "C" fn strcmp() {
     todo!()
 }
+
+// copy pasta from https://github.com/esp-rs/esp-hal/blob/main/esp-wifi/src/compat/misc.rs#L101
+#[no_mangle]
+unsafe extern "C" fn strstr(str1: *const i8, str2: *const i8) -> *const i8 {
+    let s1 = core::ffi::CStr::from_ptr(str1).to_str().unwrap();
+    let s2 = core::ffi::CStr::from_ptr(str2).to_str().unwrap();
+
+    let idx = s1.find(s2);
+
+    match idx {
+        Some(offset) => str1.add(offset),
+        None => core::ptr::null(),
+    }
+}

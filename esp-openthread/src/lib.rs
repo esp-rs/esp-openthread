@@ -4,6 +4,7 @@
 mod entropy;
 mod platform;
 mod radio;
+mod srp_client;
 mod timer;
 
 use core::{
@@ -687,6 +688,70 @@ impl<'a> OpenThread<'a> {
                 }
             };
         }
+    }
+
+    pub fn setup_srp_client_auto(&mut self, host_name: &str) -> Result<(), Error> {
+        srp_client::set_srp_client_host_name(self.instance, host_name.as_ptr() as _)?;
+        srp_client::set_srp_client_host_addresses_auto_config(self.instance)?;
+        srp_client::enable_srp_autostart(self.instance);
+        Ok(())
+    }
+
+    pub fn setup_srp_client_with_addr(
+        &mut self,
+        host_name: &str,
+        addr: otSockAddr,
+    ) -> Result<(), Error> {
+        srp_client::set_srp_client_host_name(self.instance, host_name.as_ptr() as _)?;
+        srp_client::srp_client_start(self.instance, addr)?;
+        Ok(())
+    }
+
+    // For now, txt entries are expected to be provided as hex strings to avoid having to pull in the hex crate
+    // for example a key entry of 'abc' should be provided as '03616263'
+    pub fn register_service_with_srp_client(
+        &mut self,
+        instance_name: &str,
+        service_name: &str,
+        port: u16,
+        priority: Option<u16>,
+        weight: Option<u16>,
+        _txt_entries: &[&str],
+        lease: Option<u32>,
+        key_lease: Option<u32>,
+    ) -> Result<(), Error> {
+        if !srp_client::is_srp_client_running(self.instance) {
+            self.setup_srp_client_auto("ot-esp32")?;
+        }
+
+        srp_client::add_srp_client_service(
+            self.instance,
+            instance_name.as_ptr() as _,
+            instance_name.len() as _,
+            service_name.as_ptr() as _,
+            service_name.len() as _,
+            port,
+            core::ptr::null(),
+            priority,
+            weight,
+            lease,
+            key_lease,
+        )?;
+
+        Ok(())
+    }
+
+    pub fn set_srp_client_ttl(&mut self, ttl: u32) {
+        srp_client::set_srp_client_ttl(self.instance, ttl);
+    }
+
+    pub fn get_srp_client_ttl(&mut self) -> u32 {
+        srp_client::get_srp_client_ttl(self.instance)
+    }
+
+    pub fn stop_srp_client(&mut self) -> Result<(), Error> {
+        srp_client::srp_client_stop(self.instance);
+        Ok(())
     }
 }
 

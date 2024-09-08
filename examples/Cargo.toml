@@ -24,3 +24,11 @@ esp-openthread = { path = "../esp-openthread" }
 [features]
 esp32c6 = [ "esp-hal/esp32c6", "esp-ieee802154/esp32c6", "esp-openthread/esp32c6", "esp-backtrace/esp32c6", "esp-println/esp32c6" ]
 esp32h2 = [ "esp-hal/esp32h2", "esp-ieee802154/esp32h2", "esp-openthread/esp32h2", "esp-backtrace/esp32h2", "esp-println/esp32h2" ]
+
+[[bin]]
+path = "./src/main.rs"
+name = "esp-openthread-examples"
+
+[[bin]]
+path = "./src/bin/srp_client.rs"
+name = "srp-client"
