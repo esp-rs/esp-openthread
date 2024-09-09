@@ -23,9 +23,9 @@ fn main() -> Result<()> {
     generate_bindings(
         &workspace,
         tools.join(
-            "riscv32-esp-elf/esp-13.2.0_20230928/riscv32-esp-elf/riscv32-esp-elf/include/",
+            "riscv32-esp-elf/esp-13.2.0_20240530/riscv32-esp-elf/riscv32-esp-elf/include/",
         ),
-        tools.join("riscv32-esp-elf/esp-13.2.0_20230928/riscv32-esp-elf/riscv32-esp-elf/"),
+        tools.join("riscv32-esp-elf/esp-13.2.0_20240530/riscv32-esp-elf/riscv32-esp-elf/"),
     )?;
 
     Ok(())

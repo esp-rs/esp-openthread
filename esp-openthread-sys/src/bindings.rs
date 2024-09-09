@@ -212,7 +212,7 @@ pub const OT_LOG_LEVEL_WARN: u32 = 2;
 pub const OT_LOG_LEVEL_NOTE: u32 = 3;
 pub const OT_LOG_LEVEL_INFO: u32 = 4;
 pub const OT_LOG_LEVEL_DEBG: u32 = 5;
-pub const OPENTHREAD_API_VERSION: u32 = 415;
+pub const OPENTHREAD_API_VERSION: u32 = 439;
 pub const OT_UPTIME_STRING_SIZE: u32 = 24;
 pub const OT_CHANGED_IP6_ADDRESS_ADDED: u32 = 1;
 pub const OT_CHANGED_IP6_ADDRESS_REMOVED: u32 = 2;
@@ -308,6 +308,12 @@ pub const OT_JOINER_MAX_PSKD_LENGTH: u32 = 32;
 pub const OT_MAC_FILTER_FIXED_RSS_DISABLED: u32 = 127;
 pub const OT_MAC_FILTER_ITERATOR_INIT: u32 = 0;
 pub const OT_LINK_CSL_PERIOD_TEN_SYMBOLS_UNIT_IN_USEC: u32 = 160;
+pub const OT_THREAD_VERSION_INVALID: u32 = 0;
+pub const OT_THREAD_VERSION_1_1: u32 = 2;
+pub const OT_THREAD_VERSION_1_2: u32 = 3;
+pub const OT_THREAD_VERSION_1_3: u32 = 4;
+pub const OT_THREAD_VERSION_1_3_1: u32 = 5;
+pub const OT_THREAD_VERSION_1_4: u32 = 5;
 pub const OT_NETWORK_BASE_TLV_MAX_LENGTH: u32 = 254;
 pub const OT_NETWORK_MAX_ROUTER_ID: u32 = 62;
 pub const OT_NEIGHBOR_INFO_ITERATOR_INIT: u32 = 0;
@@ -2205,6 +2211,8 @@ pub const OT_RADIO_CAPS_TRANSMIT_TIMING: _bindgen_ty_5 = 64;
 pub const OT_RADIO_CAPS_RECEIVE_TIMING: _bindgen_ty_5 = 128;
 #[doc = "< Radio supports RxOnWhenIdle handling."]
 pub const OT_RADIO_CAPS_RX_ON_WHEN_IDLE: _bindgen_ty_5 = 256;
+#[doc = "< Radio supports setting per-frame transmit power."]
+pub const OT_RADIO_CAPS_TRANSMIT_FRAME_POWER: _bindgen_ty_5 = 512;
 #[doc = " Defines constants that are used to indicate different radio capabilities. See `otRadioCaps`.\n"]
 pub type _bindgen_ty_5 = crate::c_types::c_uint;
 #[doc = " Represents the IEEE 802.15.4 PAN ID.\n"]
@@ -2307,8 +2315,11 @@ pub struct otRadioFrame__bindgen_ty_1__bindgen_ty_1 {
     pub mMaxFrameRetries: u8,
     #[doc = " The RX channel after frame TX is done (after all frame retries - ack received, or timeout, or abort).\n\n Radio platforms can choose to fully ignore this. OT stack will make sure to call `otPlatRadioReceive()`\n with the desired RX channel after a frame TX is done and signaled in `otPlatRadioTxDone()` callback.\n Radio platforms that don't provide `OT_RADIO_CAPS_TRANSMIT_RETRIES` must always ignore this.\n\n This is intended for situations where there may be delay in interactions between OT stack and radio, as\n an example this is used in RCP/host architecture to make sure RCP switches to PAN channel more quickly.\n In particular, this can help with CSL tx to a sleepy child, where the child may use a different channel\n for CSL than the PAN channel. After frame tx, we want the radio/RCP to go back to the PAN channel\n quickly to ensure that parent does not miss tx from child afterwards, e.g., child responding to the\n earlier CSL transmitted frame from parent using PAN channel while radio still staying on CSL channel.\n\n The switch to the RX channel MUST happen after the frame TX is fully done, i.e., after all retries and\n when ack is received (when \"Ack Request\" flag is set on the TX frame) or ack timeout. Note that ack is\n expected on the same channel that frame is sent on.\n"]
     pub mRxChannelAfterTxDone: u8,
+    #[doc = " The transmit power in dBm.\n\n If the platform layer does not provide `OT_RADIO_CAPS_TRANSMIT_FRAME_POWER` capability, it can ignore\n this value.\n\n If the value is OT_RADIO_POWER_INVALID, then the platform should ignore this value and transmit the frame\n with its default transmit power.\n\n Otherwise, the platform should transmit this frame with the maximum power no larger than minimal of the\n following values:\n     1. mTxPower,\n     2. The power limit set by otPlatRadioSetChannelTargetPower(),\n     3. The power limit set by otPlatRadioSetChannelMaxTransmitPower(),\n     4. The power limit set by otPlatRadioSetRegion().\n"]
+    pub mTxPower: i8,
     pub _bitfield_align_1: [u8; 0],
     pub _bitfield_1: __BindgenBitfieldUnit<[u8; 1usize]>,
+    pub __bindgen_padding_0: [u8; 3usize],
 }
 impl otRadioFrame__bindgen_ty_1__bindgen_ty_1 {
     #[inline]
@@ -2672,7 +2683,7 @@ extern "C" {
     pub fn otPlatRadioSetPromiscuous(aInstance: *mut otInstance, aEnable: bool);
 }
 extern "C" {
-    #[doc = " Sets the rx-on-when-idle state to the radio platform.\n\n There are a few situations that the radio can enter sleep state if the device is in rx-off-when-idle state but\n it's hard and costly for the SubMac to identify these situations and instruct the radio to enter sleep:\n\n - Finalization of a regular frame reception task, provided that:\n   - The frame is received without errors and passes the filtering and it's not an spurious ACK.\n   - ACK is not requested or transmission of ACK is not possible due to internal conditions.\n - Finalization of a frame transmission or transmission of an ACK frame, when ACK is not requested in the transmitted\n   frame.\n - Finalization of the reception operation of a requested ACK due to:\n   - ACK timeout expiration.\n   - Reception of an invalid ACK or not an ACK frame.\n   - Reception of the proper ACK, unless the transmitted frame was a Data Request Command and the frame pending bit\n     on the received ACK is set to true. In this case the radio platform implementation SHOULD keep the receiver on\n     until a determined timeout which triggers an idle period start.`OPENTHREAD_CONFIG_MAC_DATA_POLL_TIMEOUT` can be\n     taken as a reference for this.\n - Finalization of a stand alone CCA task.\n - Finalization of a CCA operation with busy result during CSMA/CA procedure.\n - Finalization of an Energy Detection task.\n - Finalization of a radio reception window scheduled with `otPlatRadioReceiveAt`.\n\n If a platform supports `OT_RADIO_CAPS_RX_ON_WHEN_IDLE` it must also support `OT_RADIO_CAPS_CSMA_BACKOFF` and handle\n idle periods after CCA as described above.\n\n @param[in]  aInstance    The OpenThread instance structure.\n @param[in]  aEnable      TRUE to keep radio in Receive state, FALSE to put to Sleep state during idle periods.\n"]
+    #[doc = " Sets the rx-on-when-idle state to the radio platform.\n\n There are a few situations that the radio can enter sleep state if the device is in rx-off-when-idle state but\n it's hard and costly for the SubMac to identify these situations and instruct the radio to enter sleep:\n\n - Finalization of a regular frame reception task, provided that:\n   - The frame is received without errors and passes the filtering and it's not an spurious ACK.\n   - ACK is not requested or transmission of ACK is not possible due to internal conditions.\n - Finalization of a frame transmission or transmission of an ACK frame, when ACK is not requested in the transmitted\n   frame.\n - Finalization of the reception operation of a requested ACK due to:\n   - ACK timeout expiration.\n   - Reception of an invalid ACK or not an ACK frame.\n   - Reception of the proper ACK, unless the transmitted frame was a Data Request Command and the frame pending bit\n     on the received ACK is set to true. In this case the radio platform implementation SHOULD keep the receiver on\n     until a determined timeout which triggers an idle period start.`OPENTHREAD_CONFIG_MAC_DATA_POLL_TIMEOUT` can be\n     taken as a reference for this.\n - Finalization of a stand alone CCA task.\n - Finalization of a CCA operation with busy result during CSMA/CA procedure.\n - Finalization of an Energy Detection task.\n - Finalization of a radio reception window scheduled with `otPlatRadioReceiveAt`.\n\n If a platform supports `OT_RADIO_CAPS_RX_ON_WHEN_IDLE` it must also support `OT_RADIO_CAPS_CSMA_BACKOFF` and handle\n idle periods after CCA as described above.\n\n Upon the transition of the \"RxOnWhenIdle\" flag from TRUE to FALSE, the radio platform should enter sleep mode.\n If the radio is currently in receive mode, it should enter sleep mode immediately. Otherwise, it should enter sleep\n mode after the current operation is completed.\n\n @param[in]  aInstance    The OpenThread instance structure.\n @param[in]  aEnable      TRUE to keep radio in Receive state, FALSE to put to Sleep state during idle periods.\n"]
     pub fn otPlatRadioSetRxOnWhenIdle(aInstance: *mut otInstance, aEnable: bool);
 }
 extern "C" {
@@ -2702,6 +2713,10 @@ extern "C" {
 extern "C" {
     #[doc = " Get the bus speed in bits/second between the host and the radio chip.\n\n @param[in]   aInstance    A pointer to an OpenThread instance.\n\n @returns The bus speed in bits/second between the host and the radio chip.\n          Return 0 when the MAC and above layer and Radio layer resides on the same chip.\n"]
     pub fn otPlatRadioGetBusSpeed(aInstance: *mut otInstance) -> u32;
+}
+extern "C" {
+    #[doc = " Get the bus latency in microseconds between the host and the radio chip.\n\n @param[in]   aInstance    A pointer to an OpenThread instance.\n\n @returns The bus latency in microseconds between the host and the radio chip.\n          Return 0 when the MAC and above layer and Radio layer resides on the same chip.\n"]
+    pub fn otPlatRadioGetBusLatency(aInstance: *mut otInstance) -> u32;
 }
 extern "C" {
     #[doc = " Get current state of the radio.\n\n Is not required by OpenThread. It may be used for debugging and/or application-specific purposes.\n\n @note This function may be not implemented. It does not affect OpenThread.\n\n @param[in] aInstance  The OpenThread instance structure.\n\n @return  Current state of the radio.\n"]
@@ -2796,6 +2811,10 @@ extern "C" {
 extern "C" {
     #[doc = " The radio driver calls this method to notify OpenThread that the energy scan is complete.\n\n Is used when radio provides OT_RADIO_CAPS_ENERGY_SCAN capability.\n\n @param[in]  aInstance           The OpenThread instance structure.\n @param[in]  aEnergyScanMaxRssi  The maximum RSSI encountered on the scanned channel.\n"]
     pub fn otPlatRadioEnergyScanDone(aInstance: *mut otInstance, aEnergyScanMaxRssi: i8);
+}
+extern "C" {
+    #[doc = " The radio driver calls this method to notify OpenThread that the spinel bus latency has been changed.\n\n @param[in]  aInstance  The OpenThread instance structure.\n"]
+    pub fn otPlatRadioBusLatencyChanged(aInstance: *mut otInstance);
 }
 extern "C" {
     #[doc = " Enable/Disable source address match feature.\n\n The source address match feature controls how the radio layer decides the \"frame pending\" bit for acks sent in\n response to data request commands from children.\n\n If disabled, the radio layer must set the \"frame pending\" on all acks to data request commands.\n\n If enabled, the radio layer uses the source address match table to determine whether to set or clear the \"frame\n pending\" bit in an ack to a data request command.\n\n The source address match table provides the list of children for which there is a pending frame. Either a short\n address or an extended/long address can be added to the source address match table.\n\n @param[in]  aInstance   The OpenThread instance structure.\n @param[in]  aEnable     Enable/disable source address match feature.\n"]
@@ -2925,7 +2944,7 @@ extern "C" {
     pub fn otPlatRadioClearCalibratedPowers(aInstance: *mut otInstance) -> otError;
 }
 extern "C" {
-    #[doc = " Set the target power for the given channel.\n\n @note This API is an optional radio platform API. It's up to the platform layer to implement it.\n       If this API is implemented, the function `otPlatRadioSetTransmitPower()` should be disabled.\n\n The radio driver should set the actual output power to be less than or equal to the target power and as close\n as possible to the target power.\n\n @param[in]  aInstance     The OpenThread instance structure.\n @param[in]  aChannel      The radio channel.\n @param[in]  aTargetPower  The target power in 0.01dBm. Passing `INT16_MAX` will disable this channel to use the\n                           target power.\n\n @retval  OT_ERROR_NONE             Successfully set the target power.\n @retval  OT_ERROR_INVALID_ARGS     The @p aChannel or @p aTargetPower is invalid.\n @retval  OT_ERROR_NOT_IMPLEMENTED  The feature is not implemented.\n"]
+    #[doc = " Set the target power for the given channel.\n\n @note This API is an optional radio platform API. It's up to the platform layer to implement it.\n       If this API is implemented, the function `otPlatRadioSetTransmitPower()` should be disabled.\n\n The radio driver should set the actual output power to be less than or equal to the @p aTargetPower and as close\n as possible to the @p aTargetPower. If the @p aTargetPower is lower than the minimum output power supported\n by the platform, the output power should be set to the minimum output power supported by the platform.  If the\n @p aTargetPower is higher than the maximum output power supported by the platform, the output power should be\n set to the maximum output power supported by the platform. If the @p aTargetPower is set to `INT16_MAX`, the\n corresponding channel is disabled.\n\n @param[in]  aInstance     The OpenThread instance structure.\n @param[in]  aChannel      The radio channel.\n @param[in]  aTargetPower  The target power in 0.01dBm.\n\n @retval  OT_ERROR_NONE             Successfully set the target power.\n @retval  OT_ERROR_INVALID_ARGS     The @p aChannel is invalid.\n @retval  OT_ERROR_NOT_IMPLEMENTED  The feature is not implemented.\n"]
     pub fn otPlatRadioSetChannelTargetPower(
         aInstance: *mut otInstance,
         aChannel: u8,
@@ -3335,14 +3354,6 @@ extern "C" {
     #[doc = " Gets the list of IPv6 multicast addresses subscribed to the Thread interface.\n\n @param[in]  aInstance A pointer to an OpenThread instance.\n\n @returns A pointer to the first Network Interface Multicast Address.\n"]
     pub fn otIp6GetMulticastAddresses(aInstance: *mut otInstance)
         -> *const otNetifMulticastAddress;
-}
-extern "C" {
-    #[doc = " Checks if multicast promiscuous mode is enabled on the Thread interface.\n\n @param[in]  aInstance A pointer to an OpenThread instance.\n\n @sa otIp6SetMulticastPromiscuousEnabled\n"]
-    pub fn otIp6IsMulticastPromiscuousEnabled(aInstance: *mut otInstance) -> bool;
-}
-extern "C" {
-    #[doc = " Enables or disables multicast promiscuous mode on the Thread interface.\n\n @param[in]  aInstance  A pointer to an OpenThread instance.\n @param[in]  aEnabled   TRUE to enable Multicast Promiscuous mode, FALSE otherwise.\n\n @sa otIp6IsMulticastPromiscuousEnabled\n"]
-    pub fn otIp6SetMulticastPromiscuousEnabled(aInstance: *mut otInstance, aEnabled: bool);
 }
 extern "C" {
     #[doc = " Allocate a new message buffer for sending an IPv6 message.\n\n @note If @p aSettings is 'NULL', the link layer security is enabled and the message priority is set to\n OT_MESSAGE_PRIORITY_NORMAL by default.\n\n @param[in]  aInstance  A pointer to an OpenThread instance.\n @param[in]  aSettings  A pointer to the message settings or NULL to set default settings.\n\n @returns A pointer to the message buffer or NULL if no message buffers are available or parameters are invalid.\n\n @sa otMessageFree\n"]
@@ -5030,6 +5041,10 @@ extern "C" {
     );
 }
 extern "C" {
+    #[doc = " Gets the current MAC frame counter value.\n\n @param[in] aInstance    A pointer to the OpenThread instance.\n\n @returns The current MAC frame counter value.\n"]
+    pub fn otLinkGetFrameCounter(aInstance: *mut otInstance) -> u32;
+}
+extern "C" {
     #[doc = " Gets the address mode of MAC filter.\n\n Is available when `OPENTHREAD_CONFIG_MAC_FILTER_ENABLE` configuration is enabled.\n\n @param[in]  aInstance  A pointer to an OpenThread instance.\n\n @returns  the address mode.\n"]
     pub fn otLinkFilterGetAddressMode(aInstance: *mut otInstance) -> otMacFilterAddressMode;
 }
@@ -5557,7 +5572,7 @@ extern "C" {
     pub fn otThreadSetEnabled(aInstance: *mut otInstance, aEnabled: bool) -> otError;
 }
 extern "C" {
-    #[doc = " Gets the Thread protocol version.\n\n @returns the Thread protocol version.\n"]
+    #[doc = " Gets the Thread protocol version.\n\n The constants `OT_THREAD_VERSION_*` define the numerical version values.\n\n @returns the Thread protocol version.\n"]
     pub fn otThreadGetVersion() -> u16;
 }
 extern "C" {

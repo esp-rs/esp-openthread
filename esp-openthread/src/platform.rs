@@ -25,11 +25,6 @@ pub unsafe extern "C" fn otPlatLog(
 // other C functions
 
 #[no_mangle]
-pub extern "C" fn vsnprintf() {
-    todo!()
-}
-
-#[no_mangle]
 pub extern "C" fn iscntrl(v: u32) -> i32 {
     log::info!("iscntrl {}", v as u8 as char);
     0
@@ -38,11 +33,6 @@ pub extern "C" fn iscntrl(v: u32) -> i32 {
 #[no_mangle]
 pub extern "C" fn isprint() {
     log::error!("isprint not implemented");
-}
-
-#[no_mangle]
-pub extern "C" fn snprintf() {
-    todo!()
 }
 
 #[no_mangle]

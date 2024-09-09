@@ -27,6 +27,8 @@ pub static mut TRANSMIT_BUFFER: otRadioFrame = otRadioFrame {
             _bitfield_align_1: [0u8; 0],
             _bitfield_1: __BindgenBitfieldUnit::new([0u8; 1]),
             mRxChannelAfterTxDone: 0,
+            mTxPower: 0,
+            __bindgen_padding_0: [0u8; 3],
         },
     },
 };
@@ -49,6 +51,8 @@ static mut SENT_FRAME: otRadioFrame = otRadioFrame {
             _bitfield_align_1: [0u8; 0],
             _bitfield_1: __BindgenBitfieldUnit::new([0u8; 1]),
             mRxChannelAfterTxDone: 0,
+            mTxPower: 0,
+            __bindgen_padding_0: [0u8; 3],
         },
     },
 };
@@ -70,6 +74,8 @@ static mut ACK_FRAME: otRadioFrame = otRadioFrame {
             _bitfield_align_1: [0u8; 0],
             _bitfield_1: __BindgenBitfieldUnit::new([0u8; 1]),
             mRxChannelAfterTxDone: 0,
+            mTxPower: 0,
+            __bindgen_padding_0: [0u8; 3],
         },
     },
 };

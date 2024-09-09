@@ -10,7 +10,7 @@ debug = true
 
 [dependencies]
 esp-hal = {version= "0.20.1", git = "https://github.com/esp-rs/esp-hal.git"}
-esp-backtrace = { version="0.14.0", git = "https://github.com/esp-rs/esp-hal.git", features = ["panic-handler", "exception-handler", "println"] }
+esp-backtrace = { version="0.14.1", git = "https://github.com/esp-rs/esp-hal.git", features = ["panic-handler", "exception-handler", "println"] }
 esp-println       = { version= "0.11.0", git = "https://github.com/esp-rs/esp-hal.git", features = ["log"] }
 esp-ieee802154 = {version= "0.2.0", git = "https://github.com/esp-rs/esp-hal.git"}
 log = "0.4.21"
