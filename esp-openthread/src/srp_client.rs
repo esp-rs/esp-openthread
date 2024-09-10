@@ -33,6 +33,111 @@ use sys::{
 
 use crate::{checked, Error};
 
+pub const MAX_SRP_ADDRS: usize = 6;
+// This matches the default config value
+pub const MAX_SERVICES: usize = 5;
+pub const MAX_DNS_TXT_ENTRIES: usize = 10;
+
+#[derive(Debug, Clone, Copy)]
+pub enum SrpClientState {
+    ToAdd,
+    Adding,
+    ToRefresh,
+    Refreshing,
+    ToRemove,
+    Removing,
+    Removed,
+    Registered,
+}
+
+#[allow(non_upper_case_globals)]
+impl TryFrom<otSrpClientItemState> for SrpClientState {
+    type Error = ();
+    fn try_from(value: otSrpClientItemState) -> Result<SrpClientState, Self::Error> {
+        match value {
+            otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_TO_ADD => Ok(SrpClientState::ToAdd),
+            otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_ADDING => Ok(SrpClientState::Adding),
+            otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_TO_REFRESH => {
+                Ok(SrpClientState::ToRefresh)
+            }
+            otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_REFRESHING => {
+                Ok(SrpClientState::Refreshing)
+            }
+            otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_TO_REMOVE => Ok(SrpClientState::ToRemove),
+            otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_REMOVING => Ok(SrpClientState::Removing),
+            otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_REMOVED => Ok(SrpClientState::Removed),
+            otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_REGISTERED => {
+                Ok(SrpClientState::Registered)
+            }
+            _ => Err(()),
+        }
+    }
+}
+
+pub struct DnsTxtEntry {
+    pub key: *const c_types::c_char,
+    pub value: *const u8,
+    pub value_length: u16,
+}
+
+impl From<otDnsTxtEntry> for DnsTxtEntry {
+    fn from(value: otDnsTxtEntry) -> Self {
+        Self {
+            key: value.mKey,
+            value: value.mValue,
+            value_length: value.mValueLength,
+        }
+    }
+}
+
+impl From<DnsTxtEntry> for otDnsTxtEntry {
+    fn from(value: DnsTxtEntry) -> Self {
+        Self {
+            mKey: value.key,
+            mValue: value.value,
+            mValueLength: value.value_length,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct SrpClientService {
+    pub name: *const c_types::c_char,
+    pub instance_name: *const c_types::c_char,
+    pub sub_type_labels: *const *const c_types::c_char,
+    pub txt_entries: *const otDnsTxtEntry,
+    pub port: u16,
+    pub priority: u16,
+    pub weight: u16,
+    pub num_txt_entries: u8,
+    pub state: SrpClientState,
+    pub data: u32,
+    pub lease: u32,
+    pub key_lease: u32,
+}
+
+impl From<otSrpClientService> for SrpClientService {
+    fn from(value: otSrpClientService) -> Self {
+        Self {
+            name: value.mName,
+            instance_name: value.mInstanceName,
+            sub_type_labels: value.mSubTypeLabels,
+            txt_entries: value.mTxtEntries,
+            port: value.mPort,
+            priority: value.mPriority,
+            weight: value.mWeight,
+            num_txt_entries: value.mNumTxtEntries,
+            state: value
+                .mState
+                .try_into()
+                .unwrap_or(SrpClientState::Registered),
+            data: value.mData,
+            lease: value.mLease,
+            key_lease: value.mKeyLease,
+        }
+    }
+}
+
 pub(crate) fn check_srp_autostart_enabled(instance: *mut otInstance) -> bool {
     unsafe { otSrpClientIsAutoStartModeEnabled(instance) }
 }
@@ -69,42 +174,6 @@ pub(crate) fn get_srp_client_host_name(
     size: &mut u16,
 ) -> *mut c_types::c_char {
     unsafe { otSrpClientBuffersGetHostNameString(instance, size) }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum SrpClientState {
-    ToAdd,
-    Adding,
-    ToRefresh,
-    Refreshing,
-    ToRemove,
-    Removing,
-    Removed,
-    Registered,
-}
-
-#[allow(non_upper_case_globals)]
-impl TryFrom<otSrpClientItemState> for SrpClientState {
-    type Error = ();
-    fn try_from(value: otSrpClientItemState) -> Result<SrpClientState, Self::Error> {
-        match value {
-            otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_TO_ADD => Ok(SrpClientState::ToAdd),
-            otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_ADDING => Ok(SrpClientState::Adding),
-            otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_TO_REFRESH => {
-                Ok(SrpClientState::ToRefresh)
-            }
-            otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_REFRESHING => {
-                Ok(SrpClientState::Refreshing)
-            }
-            otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_TO_REMOVE => Ok(SrpClientState::ToRemove),
-            otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_REMOVING => Ok(SrpClientState::Removing),
-            otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_REMOVED => Ok(SrpClientState::Removed),
-            otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_REGISTERED => {
-                Ok(SrpClientState::Registered)
-            }
-            _ => Err(()),
-        }
-    }
 }
 
 pub(crate) fn get_srp_client_host_state(instance: *mut otInstance) -> Option<SrpClientState> {
@@ -158,7 +227,6 @@ pub(crate) fn get_srp_client_host_addresses(
     }
 }
 
-pub const MAX_SRP_ADDRS: usize = 6;
 // may need to set OPENTHREAD_CONFIG_SRP_CLIENT_BUFFERS_MAX_HOST_ADDRESSES
 pub(crate) fn set_srp_client_host_addresses(
     instance: *mut otInstance,
@@ -210,9 +278,8 @@ pub(crate) fn set_srp_client_key_lease_interval(instance: *mut otInstance, inter
     unsafe { otSrpClientSetKeyLeaseInterval(instance, interval) }
 }
 
-// TODO return an option, if client isnt running this
-// will return the unspecified addr (0.0.0.0.0.0.0.0) in which case
-// we can return None?
+// OT documentation notes that if client isnt running this
+// will return the unspecified addr (0.0.0.0.0.0.0.0)
 pub(crate) fn get_srp_client_server_addr(instance: *mut otInstance) -> no_std_net::SocketAddrV6 {
     let addr: *const otSockAddr = unsafe { otSrpClientGetServerAddress(instance) };
 
@@ -234,67 +301,6 @@ pub(crate) fn get_srp_client_server_addr(instance: *mut otInstance) -> no_std_ne
         )
     }
 }
-
-pub struct DnsTxtEntry {
-    pub key: *const c_types::c_char,
-    pub value: *const u8,
-    pub value_length: u16,
-}
-
-impl From<otDnsTxtEntry> for DnsTxtEntry {
-    fn from(value: otDnsTxtEntry) -> Self {
-        Self {
-            key: value.mKey,
-            value: value.mValue,
-            value_length: value.mValueLength,
-        }
-    }
-}
-
-// Whats a reasonable number of max entries?
-pub const MAX_DNS_TXT_ENTRIES: usize = 10;
-
-#[derive(Debug, Clone, Copy)]
-pub struct SrpClientService {
-    pub name: *const c_types::c_char,          //,String
-    pub instance_name: *const c_types::c_char, //,String
-    pub sub_type_labels: *const *const c_types::c_char,
-    pub txt_entries: *const otDnsTxtEntry, //heapless::Vec<DnsTxtEntry, MAX_DNS_TXT_ENTRIES>,
-    pub port: u16,
-    pub priority: u16,
-    pub weight: u16,
-    pub num_txt_entries: u8,
-    pub state: SrpClientState,
-    pub data: u32,
-    //pub Next: *mut otSrpClientService,
-    pub lease: u32,
-    pub key_lease: u32,
-}
-
-impl From<otSrpClientService> for SrpClientService {
-    fn from(value: otSrpClientService) -> Self {
-        Self {
-            name: value.mName,
-            instance_name: value.mInstanceName,
-            sub_type_labels: value.mSubTypeLabels,
-            txt_entries: value.mTxtEntries,
-            port: value.mPort,
-            priority: value.mPriority,
-            weight: value.mWeight,
-            num_txt_entries: value.mNumTxtEntries,
-            state: value
-                .mState
-                .try_into()
-                .unwrap_or(SrpClientState::Registered), // TODO whats a reasonable default?
-            data: value.mData,
-            lease: value.mLease,
-            key_lease: value.mKeyLease,
-        }
-    }
-}
-
-// Probably only need 1 for now but lets give us some future room
-pub const MAX_SERVICES: usize = 5;
 
 pub(crate) fn get_srp_client_services(
     instance: *mut otInstance,
@@ -319,17 +325,16 @@ pub(crate) fn get_srp_client_services(
     result
 }
 
-/// TXT entries are expected to be provided as a hex string to encode
-/// the key:value pair that represents a DNS TXT entry.
-/// exampe: 'xyz=XYZ' -> '0778797a3d58595a'
 pub(crate) fn add_srp_client_service(
     instance: *mut otInstance,
     instance_name: *const c_types::c_char,
     mut iname_bytes: u16,
     service_name: *const c_types::c_char,
     mut sname_bytes: u16,
-    port: u16,
+    sub_types: &[&str], // must be array of strs with comma
     txt_entry: *const c_types::c_char,
+    mut txt_entry_size: u16,
+    port: u16,
     priority: Option<u16>,
     weight: Option<u16>,
     lease: Option<u32>,
@@ -337,10 +342,10 @@ pub(crate) fn add_srp_client_service(
 ) -> Result<(), Error> {
     let entry: *mut otSrpClientBuffersServiceEntry =
         unsafe { otSrpClientBuffersAllocateService(instance) };
-
     if entry.is_null() {
         return Err(Error::InternalError(otError_OT_ERROR_NO_BUFS));
     }
+
     let mut size: u16 = 0;
 
     let instance_name_buf: *mut c_types::c_char =
@@ -357,12 +362,43 @@ pub(crate) fn add_srp_client_service(
     }
     unsafe { core::ptr::copy(service_name, service_name_buf, sname_bytes as usize) };
 
-    let mut array_size = 0;
-    let sub_types: *const *const c_types::c_char =
-        unsafe { otSrpClientBuffersGetSubTypeLabelsArray(entry, &mut array_size) };
-    // TODO subtypes!!! let sub_types_buf: *const *const c_types::c_char = unsafe { otSrpClientBuffersGetSubTypeLabelsArray(entry, &array_size)};
-    // core::ptr::copy(sub_types, sub_types_buf, subtype_size as usize);
-    // leave empty for now
+    if !sub_types.is_empty() {
+        // Note to caller: subtype labels should be static due to how they are referenced
+        // in OT stack
+        let sub_types_buf: *mut *const c_types::c_char =
+            unsafe { otSrpClientBuffersGetSubTypeLabelsArray(entry, &mut size) };
+        let mut end_index = 0;
+
+        sub_types.iter().for_each(|ptr| {
+            if ptr.chars().next() == Some(',') {
+                unsafe {
+                    let mut addr_idx = sub_types_buf.add(end_index);
+                    addr_idx = ptr.as_ptr() as _;
+                };
+                end_index += 1;
+            }
+        });
+
+        if end_index + 1 > size as usize {
+            return Err(Error::InternalError(otError_OT_ERROR_NO_BUFS));
+        }
+    }
+
+    if txt_entry.is_null() {
+        unsafe {
+            (*entry).mService.mNumTxtEntries = 0;
+        }
+    } else {
+        let txt_buf: *mut i8 =
+            unsafe { otSrpClientBuffersGetServiceEntryTxtBuffer(entry, &mut size) } as *mut i8;
+        if txt_entry_size > size {
+            txt_entry_size = size;
+        }
+        unsafe {
+            (*entry).mTxtEntry.mValueLength = txt_entry_size;
+            core::ptr::copy(txt_entry, txt_buf, txt_entry_size as usize);
+        }
+    }
 
     unsafe {
         (*entry).mService.mPort = port;
@@ -380,19 +416,6 @@ pub(crate) fn add_srp_client_service(
         }
     }
 
-    if txt_entry.is_null() {
-        unsafe {
-            (*entry).mService.mNumTxtEntries = 0;
-        }
-    } else {
-        let txt_buf: *mut i8 =
-            unsafe { otSrpClientBuffersGetServiceEntryTxtBuffer(entry, &mut size) } as *mut i8;
-        unsafe {
-            (*entry).mTxtEntry.mValueLength = size;
-            core::ptr::copy(txt_entry, txt_buf, size as usize);
-        }
-    }
-
     if let Some(lease) = lease {
         unsafe {
             (*entry).mService.mLease = lease;
@@ -404,6 +427,7 @@ pub(crate) fn add_srp_client_service(
             (*entry).mService.mKeyLease = key_lease;
         }
     }
+
     if let Err(e) = checked!(unsafe { otSrpClientAddService(instance, &mut (*entry).mService) }) {
         log::error!("Error adding service: {e:?}");
         unsafe { otSrpClientBuffersFreeService(instance, entry) };
