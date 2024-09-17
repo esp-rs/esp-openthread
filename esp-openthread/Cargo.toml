@@ -19,3 +19,4 @@ no-std-net = "0.6.0"
 [features]
 esp32c6 = [ "esp-ieee802154/esp32c6", "esp-hal/esp32c6"]
 esp32h2 = [ "esp-ieee802154/esp32h2", "esp-hal/esp32h2"]
+srp-client = []

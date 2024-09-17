@@ -4,6 +4,8 @@
 mod entropy;
 mod platform;
 mod radio;
+#[cfg(feature = "srp-client")]
+mod srp_client;
 mod timer;
 
 use core::{
@@ -687,6 +689,103 @@ impl<'a> OpenThread<'a> {
                 }
             };
         }
+    }
+
+    #[cfg(feature = "srp-client")]
+    pub fn setup_srp_client_autostart(
+        &mut self,
+        callback: Option<
+            unsafe extern "C" fn(aServerSockAddr: *const otSockAddr, aContext: *mut c_void),
+        >,
+    ) -> Result<(), Error> {
+        if !callback.is_some() {
+            srp_client::enable_srp_autostart(self.instance);
+            return Ok(());
+        }
+        srp_client::enable_srp_autostart_with_callback_and_context(
+            self.instance,
+            callback,
+            core::ptr::null_mut(),
+        );
+
+        Ok(())
+    }
+
+    #[cfg(feature = "srp-client")]
+    pub fn setup_srp_client_host_addr_autoconfig(&mut self) -> Result<(), Error> {
+        srp_client::set_srp_client_host_addresses_auto_config(self.instance)?;
+        Ok(())
+    }
+
+    #[cfg(feature = "srp-client")]
+    pub fn setup_srp_client_set_hostname(&mut self, host_name: &str) -> Result<(), Error> {
+        srp_client::set_srp_client_host_name(self.instance, host_name.as_ptr() as _)?;
+        Ok(())
+    }
+
+    #[cfg(feature = "srp-client")]
+    pub fn setup_srp_client_with_addr(
+        &mut self,
+        host_name: &str,
+        addr: otSockAddr,
+    ) -> Result<(), Error> {
+        srp_client::set_srp_client_host_name(self.instance, host_name.as_ptr() as _)?;
+        srp_client::srp_client_start(self.instance, addr)?;
+        Ok(())
+    }
+
+    // For now, txt entries are expected to be provided as hex strings to avoid having to pull in the hex crate
+    // for example a key entry of 'abc' should be provided as '03616263'
+    #[cfg(feature = "srp-client")]
+    pub fn register_service_with_srp_client(
+        &mut self,
+        instance_name: &str,
+        service_name: &str,
+        service_labels: &[&str],
+        txt_entry: &str,
+        port: u16,
+        priority: Option<u16>,
+        weight: Option<u16>,
+        lease: Option<u32>,
+        key_lease: Option<u32>,
+    ) -> Result<(), Error> {
+        if !srp_client::is_srp_client_running(self.instance) {
+            self.setup_srp_client_autostart(None)?;
+        }
+
+        srp_client::add_srp_client_service(
+            self.instance,
+            instance_name.as_ptr() as _,
+            instance_name.len() as _,
+            service_name.as_ptr() as _,
+            service_name.len() as _,
+            service_labels,
+            txt_entry.as_ptr() as _,
+            txt_entry.len() as _,
+            port,
+            priority,
+            weight,
+            lease,
+            key_lease,
+        )?;
+
+        Ok(())
+    }
+
+    #[cfg(feature = "srp-client")]
+    pub fn set_srp_client_ttl(&mut self, ttl: u32) {
+        srp_client::set_srp_client_ttl(self.instance, ttl);
+    }
+
+    #[cfg(feature = "srp-client")]
+    pub fn get_srp_client_ttl(&mut self) -> u32 {
+        srp_client::get_srp_client_ttl(self.instance)
+    }
+
+    #[cfg(feature = "srp-client")]
+    pub fn stop_srp_client(&mut self) -> Result<(), Error> {
+        srp_client::srp_client_stop(self.instance);
+        Ok(())
     }
 }
 
