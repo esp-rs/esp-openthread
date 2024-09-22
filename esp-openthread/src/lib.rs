@@ -24,6 +24,9 @@ use esp_hal::{
 };
 use esp_ieee802154::{rssi_to_lqi, Config, Ieee802154};
 
+#[cfg(feature = "srp-client")]
+pub use srp_client::{SrpClientItemState, SrpClientService};
+
 // for now just re-export all
 pub use esp_openthread_sys as sys;
 use no_std_net::Ipv6Addr;
@@ -35,11 +38,11 @@ use sys::{
         otMessage, otMessageAppend, otMessageFree, otMessageGetLength, otMessageInfo,
         otMessageRead, otNetifIdentifier_OT_NETIF_THREAD, otNetworkKey, otNetworkName,
         otOperationalDataset, otOperationalDatasetComponents, otPlatRadioEnergyScanDone,
-        otPlatRadioReceiveDone, otPskc, otRadioFrame, otRadioFrame__bindgen_ty_1,
-        otRadioFrame__bindgen_ty_1__bindgen_ty_2, otSecurityPolicy, otSetStateChangedCallback,
-        otSockAddr, otTaskletsArePending, otTaskletsProcess, otThreadSetEnabled, otTimestamp,
-        otUdpBind, otUdpClose, otUdpNewMessage, otUdpOpen, otUdpSend, otUdpSocket, otPlatRadioGetIeeeEui64,
-        OT_CHANGED_ACTIVE_DATASET, OT_CHANGED_CHANNEL_MANAGER_NEW_CHANNEL,
+        otPlatRadioGetIeeeEui64, otPlatRadioReceiveDone, otPskc, otRadioFrame,
+        otRadioFrame__bindgen_ty_1, otRadioFrame__bindgen_ty_1__bindgen_ty_2, otSecurityPolicy,
+        otSetStateChangedCallback, otSockAddr, otTaskletsArePending, otTaskletsProcess,
+        otThreadSetEnabled, otTimestamp, otUdpBind, otUdpClose, otUdpNewMessage, otUdpOpen,
+        otUdpSend, otUdpSocket, OT_CHANGED_ACTIVE_DATASET, OT_CHANGED_CHANNEL_MANAGER_NEW_CHANNEL,
         OT_CHANGED_COMMISSIONER_STATE, OT_CHANGED_IP6_ADDRESS_ADDED,
         OT_CHANGED_IP6_ADDRESS_REMOVED, OT_CHANGED_IP6_MULTICAST_SUBSCRIBED,
         OT_CHANGED_IP6_MULTICAST_UNSUBSCRIBED, OT_CHANGED_JOINER_STATE,
@@ -803,6 +806,45 @@ impl<'a> OpenThread<'a> {
         srp_client::srp_client_stop(self.instance);
         Ok(())
     }
+
+    #[cfg(feature = "srp-client")]
+    pub fn get_srp_client_state(&mut self) -> Result<Option<SrpClientItemState>, Error> {
+        Ok(srp_client::get_srp_client_host_state(self.instance))
+    }
+    #[cfg(feature = "srp-client")]
+    pub fn clear_srp_client_host_buffers(&mut self) {
+        srp_client::srp_clear_all_client_services(self.instance)
+    }
+    /// If there are any services already registered, unregister them
+    #[cfg(feature = "srp-client")]
+    pub fn srp_unregister_all_services(
+        &mut self,
+        remove_keylease: bool,
+        send_update: bool,
+    ) -> Result<(), Error> {
+        srp_client::srp_unregister_and_remove_all_client_services(
+            self.instance,
+            remove_keylease,
+            send_update,
+        )?;
+        Ok(())
+    }
+    #[cfg(feature = "srp-client")]
+    pub fn srp_clear_service(&mut self, service: SrpClientService) -> Result<(), Error> {
+        srp_client::srp_clear_service(self.instance, service)?;
+        Ok(())
+    }
+    #[cfg(feature = "srp-client")]
+    pub fn srp_unregister_service(&mut self, service: SrpClientService) -> Result<(), Error> {
+        srp_client::srp_unregister_service(self.instance, service)?;
+        Ok(())
+    }
+    #[cfg(feature = "srp-client")]
+    pub fn srp_get_services(
+        &mut self,
+    ) -> heapless::Vec<SrpClientService, { srp_client::MAX_SERVICES }> {
+        srp_client::get_srp_client_services(self.instance)
+    }
 }
 
 impl<'a> Drop for OpenThread<'a> {
@@ -895,6 +937,17 @@ fn set_settings(settings: NetworkSettings) {
             .borrow_mut()
             .replace(settings);
     });
+}
+
+/// Allow callers to generate a random u32
+pub fn get_random_u32() -> u32 {
+    unsafe {
+        if let Some(mut rng) = crate::entropy::RANDOM_GENERATOR {
+            rng.random()
+        } else {
+            0
+        }
+    }
 }
 
 /// A UdpSocket

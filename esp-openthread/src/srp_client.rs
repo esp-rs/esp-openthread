@@ -11,7 +11,7 @@ use sys::{
         otSrpClientBuffersGetServiceEntryInstanceNameString,
         otSrpClientBuffersGetServiceEntryServiceNameString,
         otSrpClientBuffersGetServiceEntryTxtBuffer, otSrpClientBuffersGetSubTypeLabelsArray,
-        otSrpClientBuffersServiceEntry, otSrpClientClearHostAndServices,
+        otSrpClientBuffersServiceEntry, otSrpClientClearHostAndServices, otSrpClientClearService,
         otSrpClientEnableAutoHostAddress, otSrpClientEnableAutoStartMode, otSrpClientGetHostInfo,
         otSrpClientGetKeyLeaseInterval, otSrpClientGetLeaseInterval, otSrpClientGetServerAddress,
         otSrpClientGetServices, otSrpClientGetTtl, otSrpClientHostInfo,
@@ -24,9 +24,9 @@ use sys::{
         otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_TO_ADD,
         otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_TO_REFRESH,
         otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_TO_REMOVE, otSrpClientRemoveHostAndServices,
-        otSrpClientService, otSrpClientSetHostAddresses, otSrpClientSetHostName,
-        otSrpClientSetKeyLeaseInterval, otSrpClientSetLeaseInterval, otSrpClientSetTtl,
-        otSrpClientStart, otSrpClientStop,
+        otSrpClientRemoveService, otSrpClientService, otSrpClientSetHostAddresses,
+        otSrpClientSetHostName, otSrpClientSetKeyLeaseInterval, otSrpClientSetLeaseInterval,
+        otSrpClientSetTtl, otSrpClientStart, otSrpClientStop,
     },
     c_types,
 };
@@ -39,7 +39,7 @@ pub const MAX_SERVICES: usize = 5;
 pub const MAX_DNS_TXT_ENTRIES: usize = 10;
 
 #[derive(Debug, Clone, Copy)]
-pub enum SrpClientState {
+pub enum SrpClientItemState {
     ToAdd,
     Adding,
     ToRefresh,
@@ -51,25 +51,53 @@ pub enum SrpClientState {
 }
 
 #[allow(non_upper_case_globals)]
-impl TryFrom<otSrpClientItemState> for SrpClientState {
+impl TryFrom<otSrpClientItemState> for SrpClientItemState {
     type Error = ();
-    fn try_from(value: otSrpClientItemState) -> Result<SrpClientState, Self::Error> {
+    fn try_from(value: otSrpClientItemState) -> Result<SrpClientItemState, Self::Error> {
         match value {
-            otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_TO_ADD => Ok(SrpClientState::ToAdd),
-            otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_ADDING => Ok(SrpClientState::Adding),
+            otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_TO_ADD => Ok(SrpClientItemState::ToAdd),
+            otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_ADDING => Ok(SrpClientItemState::Adding),
             otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_TO_REFRESH => {
-                Ok(SrpClientState::ToRefresh)
+                Ok(SrpClientItemState::ToRefresh)
             }
             otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_REFRESHING => {
-                Ok(SrpClientState::Refreshing)
+                Ok(SrpClientItemState::Refreshing)
             }
-            otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_TO_REMOVE => Ok(SrpClientState::ToRemove),
-            otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_REMOVING => Ok(SrpClientState::Removing),
-            otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_REMOVED => Ok(SrpClientState::Removed),
+            otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_TO_REMOVE => {
+                Ok(SrpClientItemState::ToRemove)
+            }
+            otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_REMOVING => {
+                Ok(SrpClientItemState::Removing)
+            }
+            otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_REMOVED => {
+                Ok(SrpClientItemState::Removed)
+            }
             otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_REGISTERED => {
-                Ok(SrpClientState::Registered)
+                Ok(SrpClientItemState::Registered)
             }
             _ => Err(()),
+        }
+    }
+}
+
+#[allow(non_upper_case_globals)]
+impl From<SrpClientItemState> for otSrpClientItemState {
+    fn from(value: SrpClientItemState) -> otSrpClientItemState {
+        match value {
+            SrpClientItemState::ToAdd => otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_TO_ADD,
+            SrpClientItemState::Adding => otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_ADDING,
+            SrpClientItemState::ToRefresh => {
+                otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_TO_REFRESH
+            }
+            SrpClientItemState::Refreshing => {
+                otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_REFRESHING
+            }
+            SrpClientItemState::ToRemove => otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_TO_REMOVE,
+            SrpClientItemState::Removing => otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_REMOVING,
+            SrpClientItemState::Removed => otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_REMOVED,
+            SrpClientItemState::Registered => {
+                otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_REGISTERED
+            }
         }
     }
 }
@@ -110,10 +138,11 @@ pub struct SrpClientService {
     pub priority: u16,
     pub weight: u16,
     pub num_txt_entries: u8,
-    pub state: SrpClientState,
+    pub state: SrpClientItemState,
     pub data: u32,
     pub lease: u32,
     pub key_lease: u32,
+    pub srp_buff_ptr: *mut otSrpClientService,
 }
 
 impl From<otSrpClientService> for SrpClientService {
@@ -130,10 +159,31 @@ impl From<otSrpClientService> for SrpClientService {
             state: value
                 .mState
                 .try_into()
-                .unwrap_or(SrpClientState::Registered),
+                .unwrap_or(SrpClientItemState::Registered),
             data: value.mData,
             lease: value.mLease,
             key_lease: value.mKeyLease,
+            srp_buff_ptr: core::ptr::null_mut(),
+        }
+    }
+}
+
+impl From<SrpClientService> for otSrpClientService {
+    fn from(value: SrpClientService) -> Self {
+        Self {
+            mName: value.name,
+            mInstanceName: value.instance_name,
+            mSubTypeLabels: value.sub_type_labels,
+            mTxtEntries: value.txt_entries,
+            mPort: value.port,
+            mPriority: value.priority,
+            mWeight: value.weight,
+            mNumTxtEntries: value.num_txt_entries,
+            mState: otSrpClientItemState::from(value.state),
+            mData: value.data,
+            mNext: core::ptr::null_mut(),
+            mLease: value.lease,
+            mKeyLease: value.key_lease,
         }
     }
 }
@@ -176,7 +226,7 @@ pub(crate) fn get_srp_client_host_name(
     unsafe { otSrpClientBuffersGetHostNameString(instance, size) }
 }
 
-pub(crate) fn get_srp_client_host_state(instance: *mut otInstance) -> Option<SrpClientState> {
+pub(crate) fn get_srp_client_host_state(instance: *mut otInstance) -> Option<SrpClientItemState> {
     let host_info = get_srp_client_host_info(instance);
     let state = unsafe { (*host_info).mState };
     if let Ok(state) = state.try_into() {
@@ -245,7 +295,7 @@ pub(crate) fn set_srp_client_host_addresses_auto_config(
     checked!(unsafe { otSrpClientEnableAutoHostAddress(instance) })
 }
 
-pub(crate) fn srp_client_host_remove(
+pub(crate) fn srp_unregister_and_remove_all_client_services(
     instance: *mut otInstance,
     remove_key_lease: bool,
     send_unreg_to_server: bool,
@@ -255,7 +305,7 @@ pub(crate) fn srp_client_host_remove(
     })
 }
 
-pub(crate) fn srp_client_host_clear(instance: *mut otInstance) {
+pub(crate) fn srp_clear_all_client_services(instance: *mut otInstance) {
     unsafe {
         otSrpClientClearHostAndServices(instance);
         otSrpClientBuffersFreeAllServices(instance);
@@ -311,8 +361,11 @@ pub(crate) fn get_srp_client_services(
 
     loop {
         let s = unsafe { &*services };
-
-        if result.push(SrpClientService::from(*s)).is_err() {
+        let mut wrapper = SrpClientService::from(*s);
+        // store a pointer to this object, it is "allocated" by OT stack in SRP client buffers
+        // in order to later clear or unregister this specific service using the same ptr
+        wrapper.srp_buff_ptr = services as *mut otSrpClientService;
+        if result.push(wrapper).is_err() {
             break;
         }
 
@@ -435,6 +488,20 @@ pub(crate) fn add_srp_client_service(
     } else {
         Ok(())
     }
+}
+
+pub(crate) fn srp_unregister_service(
+    instance: *mut otInstance,
+    service: SrpClientService,
+) -> Result<(), Error> {
+    checked!(unsafe { otSrpClientRemoveService(instance, service.srp_buff_ptr) })
+}
+
+pub(crate) fn srp_clear_service(
+    instance: *mut otInstance,
+    service: SrpClientService,
+) -> Result<(), Error> {
+    checked!(unsafe { otSrpClientClearService(instance, service.srp_buff_ptr) })
 }
 
 pub(crate) fn srp_client_start(instance: *mut otInstance, addr: otSockAddr) -> Result<(), Error> {

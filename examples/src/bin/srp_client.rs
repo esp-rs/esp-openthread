@@ -20,9 +20,10 @@ use esp_openthread::{
 use esp_println::println;
 use static_cell::StaticCell;
 
-// Must be null terminated string
-const HOSTNAME: &str = "ot-esp32\0";
-
+// Hostname must be null terminated string
+const HOSTNAME: &str = "ot-esp32-1\0";
+const SERVICENAME: &str = "ot-service1";
+const INSTANCENAME: &str = "_otpps._tcp";
 const BOUND_PORT: u16 = 1212;
 
 #[entry]
@@ -67,7 +68,7 @@ fn main() -> ! {
         network_name: Some("OpenThread-58d1".try_into().unwrap()),
         extended_pan_id: Some([0x3a, 0x90, 0xe3, 0xa3, 0x19, 0xa9, 0x04, 0x94]),
         pan_id: Some(0x58d1),
-        channel: Some(11),
+        channel: Some(25),
         channel_mask: Some(0x07fff800),
         ..OperationalDataset::default()
     };
@@ -114,8 +115,8 @@ fn main() -> ! {
             }
 
             if let Err(e) = openthread.register_service_with_srp_client(
-                "ot-service",
-                "_ipps._tcp",
+                SERVICENAME,
+                INSTANCENAME,
                 &[],
                 "",
                 12345,
@@ -126,6 +127,8 @@ fn main() -> ! {
             ) {
                 log::error!("Error registering service {e:?}");
             }
+
+            println!("Registered SRP service; hostname {HOSTNAME:}, {SERVICENAME:}, {INSTANCENAME:}");
             break;
         }
     }
