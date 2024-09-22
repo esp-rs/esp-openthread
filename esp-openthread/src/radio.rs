@@ -12,7 +12,7 @@ use crate::{get_settings, platform::CURRENT_INSTANCE, set_settings, with_radio, 
 pub static mut PSDU: [u8; OT_RADIO_FRAME_MAX_SIZE as usize] =
     [0u8; OT_RADIO_FRAME_MAX_SIZE as usize];
 pub static mut TRANSMIT_BUFFER: otRadioFrame = otRadioFrame {
-    mPsdu: unsafe { addr_of_mut!(PSDU) as *mut u8 },
+    mPsdu: addr_of_mut!(PSDU) as *mut u8,
     mLength: 0,
     mChannel: 0,
     mRadioType: 0,
@@ -36,7 +36,7 @@ pub static mut TRANSMIT_BUFFER: otRadioFrame = otRadioFrame {
 pub static mut SENT_FRAME_PSDU: [u8; OT_RADIO_FRAME_MAX_SIZE as usize] =
     [0u8; OT_RADIO_FRAME_MAX_SIZE as usize];
 static mut SENT_FRAME: otRadioFrame = otRadioFrame {
-    mPsdu: unsafe { addr_of_mut!(SENT_FRAME_PSDU) as *mut u8 },
+    mPsdu: addr_of_mut!(SENT_FRAME_PSDU) as *mut u8,
     mLength: 0,
     mChannel: 0,
     mRadioType: 0,
@@ -59,7 +59,7 @@ static mut SENT_FRAME: otRadioFrame = otRadioFrame {
 
 pub static mut ACK_FRAME_PSDU: [u8; OT_RADIO_FRAME_MIN_SIZE as usize] = [0x2, 0x0, 0x0];
 static mut ACK_FRAME: otRadioFrame = otRadioFrame {
-    mPsdu: unsafe { addr_of_mut!(ACK_FRAME_PSDU) as *mut u8 },
+    mPsdu: addr_of_mut!(ACK_FRAME_PSDU) as *mut u8,
     mLength: OT_RADIO_FRAME_MIN_SIZE as _,
     mChannel: 0,
     mRadioType: 0,
@@ -80,9 +80,12 @@ static mut ACK_FRAME: otRadioFrame = otRadioFrame {
     },
 };
 
+/// Caller is required to ensure mac arg is sufficient length (6 bytes)
 #[no_mangle]
-pub extern "C" fn otPlatRadioGetIeeeEui64(_instance: *const otInstance, _out: *mut u8) {
-    todo!()
+pub extern "C" fn otPlatRadioGetIeeeEui64(_instance: *const otInstance, mac: *mut u8) {
+    let efuse_mac = esp_hal::efuse::Efuse::get_mac_address();
+    let dest_slice = unsafe { core::slice::from_raw_parts_mut(mac, 6) };
+    dest_slice[..6].copy_from_slice(&efuse_mac);
 }
 
 #[no_mangle]
@@ -94,7 +97,7 @@ pub extern "C" fn otPlatRadioGetCaps(instance: *const otInstance) -> u8 {
 #[no_mangle]
 pub extern "C" fn otPlatRadioGetTransmitBuffer(instance: *const otInstance) -> *mut otRadioFrame {
     log::info!("otPlatRadioGetTransmitBuffer {:p}", instance);
-    unsafe { addr_of_mut!(TRANSMIT_BUFFER) }
+    addr_of_mut!(TRANSMIT_BUFFER)
 }
 
 #[no_mangle]
@@ -139,14 +142,29 @@ pub extern "C" fn otPlatRadioSetPromiscuous(_instance: *const otInstance, enable
 
 #[no_mangle]
 pub extern "C" fn otPlatRadioGetRssi(_instance: *const otInstance) -> i8 {
-    log::error!("otPlatRadioGetRssi unimplemented");
-    33
+    let rssi = unsafe { crate::RCV_FRAME.mInfo.mRxInfo.mRssi };
+    log::trace!("otPlatRadioGetRssi {rssi:}");
+
+    // If no rcv frame has set rssi yet, or if rssi is not valid,
+    // then use a fake value instead of 0
+    if rssi == 0 {
+        33
+    } else {
+        rssi
+    }
+}
+
+// from https://github.com/espressif/esp-idf/blob/release/v5.3/components/openthread/src/port/esp_openthread_radio.c#L35
+#[no_mangle]
+pub extern "C" fn otPlatRadioGetReceiveSensitivity(_instance: *const otInstance) -> i8 {
+    log::trace!("otPlatRadioGetReceiveSensitivity");
+    -120
 }
 
 #[no_mangle]
-pub extern "C" fn otPlatRadioGetReceiveSensitivity(_instance: *const otInstance) -> i8 {
-    log::error!("otPlatRadioGetReceiveSensitivity unimplemented");
-    -33
+pub extern "C" fn otPlatRadioIsEnabled(_instance: *mut otInstance) -> bool {
+    // todo
+    true
 }
 
 #[no_mangle]

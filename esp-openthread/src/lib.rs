@@ -38,7 +38,7 @@ use sys::{
         otPlatRadioReceiveDone, otPskc, otRadioFrame, otRadioFrame__bindgen_ty_1,
         otRadioFrame__bindgen_ty_1__bindgen_ty_2, otSecurityPolicy, otSetStateChangedCallback,
         otSockAddr, otTaskletsArePending, otTaskletsProcess, otThreadSetEnabled, otTimestamp,
-        otUdpBind, otUdpClose, otUdpNewMessage, otUdpOpen, otUdpSend, otUdpSocket,
+        otUdpBind, otUdpClose, otUdpNewMessage, otUdpOpen, otUdpSend, otUdpSocket, otPlatRadioGetIeeeEui64,
         OT_CHANGED_ACTIVE_DATASET, OT_CHANGED_CHANNEL_MANAGER_NEW_CHANNEL,
         OT_CHANGED_COMMISSIONER_STATE, OT_CHANGED_IP6_ADDRESS_ADDED,
         OT_CHANGED_IP6_ADDRESS_REMOVED, OT_CHANGED_IP6_MULTICAST_SUBSCRIBED,
@@ -81,7 +81,7 @@ static CHANGE_CALLBACK: Mutex<RefCell<Option<&'static mut (dyn FnMut(ChangedFlag
 static mut RCV_FRAME_PSDU: [u8; OT_RADIO_FRAME_MAX_SIZE as usize] =
     [0u8; OT_RADIO_FRAME_MAX_SIZE as usize];
 static mut RCV_FRAME: otRadioFrame = otRadioFrame {
-    mPsdu: unsafe { addr_of_mut!(RCV_FRAME_PSDU) as *mut u8 },
+    mPsdu: addr_of_mut!(RCV_FRAME_PSDU) as *mut u8,
     mLength: 0,
     mChannel: 0,
     mRadioType: 0,
@@ -701,6 +701,10 @@ impl<'a> OpenThread<'a> {
                 }
             };
         }
+    }
+
+    pub fn get_eui(&self, out: &mut [u8]) {
+        unsafe { otPlatRadioGetIeeeEui64(self.instance, out.as_mut_ptr()) }
     }
 
     #[cfg(feature = "srp-client")]
