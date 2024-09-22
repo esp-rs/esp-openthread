@@ -5,9 +5,9 @@ edition = "2021"
 
 [dependencies]
 esp-openthread-sys = { path = "../esp-openthread-sys" }
-esp-hal = {version= "0.20.1", git = "https://github.com/esp-rs/esp-hal.git"}
-esp-hal-procmacros = {version= "0.13.0", git = "https://github.com/esp-rs/esp-hal.git", features=["interrupt"]}
-esp-ieee802154 = {version= "0.2.0", git = "https://github.com/esp-rs/esp-hal.git"}
+esp-hal = {version= "0.20.1", git = "https://github.com/esp-rs/esp-hal.git", rev="c0a9934"}
+esp-hal-procmacros = {version= "0.13.0", git = "https://github.com/esp-rs/esp-hal.git", features=["interrupt"], rev="c0a9934"}
+esp-ieee802154 = {version= "0.2.0", git = "https://github.com/esp-rs/esp-hal.git", rev="c0a9934"}
 log = "0.4.21"
 critical-section = "1.1.1"
 fugit = "0.3.7"
