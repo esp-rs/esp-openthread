@@ -22,7 +22,7 @@ use esp_hal::{
     timer::systimer::{Alarm, SpecificComparator, SpecificUnit, Target},
     Blocking,
 };
-use esp_ieee802154::{rssi_to_lqi, Ieee802154};
+use esp_ieee802154::{rssi_to_lqi, Config, Ieee802154};
 
 // for now just re-export all
 pub use esp_openthread_sys as sys;
@@ -314,6 +314,18 @@ impl<'a> OpenThread<'a> {
             _phantom: PhantomData,
             instance,
         }
+    }
+
+    pub fn set_radio_config(&mut self, config: Config) -> Result<(), Error> {
+        critical_section::with(|cs| {
+            let mut radio = RADIO.borrow_ref_mut(cs);
+            let radio = radio.borrow_mut();
+
+            if let Some(radio) = radio.as_mut() {
+                radio.set_config(config)
+            }
+        });
+        Ok(())
     }
 
     /// Sets the Active Operational Dataset
