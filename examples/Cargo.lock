@@ -292,6 +292,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5443807d6dff69373d433ab9ef5378ad8df50ca6298caf15de6e52e24aaf54d5"
 
 [[package]]
+name = "esp-alloc"
+version = "0.4.0"
+source = "git+https://github.com/esp-rs/esp-hal.git?rev=c0a9934#c0a9934e6292d860b2d110950526761dc13f9dab"
+dependencies = [
+ "critical-section",
+ "enumset",
+ "linked_list_allocator",
+]
+
+[[package]]
 name = "esp-backtrace"
 version = "0.14.1"
 source = "git+https://github.com/esp-rs/esp-hal.git?rev=c0a9934#c0a9934e6292d860b2d110950526761dc13f9dab"
@@ -418,6 +428,7 @@ name = "esp-openthread-examples"
 version = "0.1.0"
 dependencies = [
  "critical-section",
+ "esp-alloc",
  "esp-backtrace",
  "esp-hal",
  "esp-ieee802154",
@@ -620,6 +631,12 @@ dependencies = [
  "equivalent",
  "hashbrown",
 ]
+
+[[package]]
+name = "linked_list_allocator"
+version = "0.10.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9afa463f5405ee81cdb9cc2baf37e08ec7e4c8209442b5d72c04cfb2cd6e6286"
 
 [[package]]
 name = "litrs"

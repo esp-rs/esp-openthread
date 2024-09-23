@@ -9,6 +9,7 @@ license = "MIT OR Apache-2.0"
 debug = true
 
 [dependencies]
+esp-alloc = {version= "0.4.0", git = "https://github.com/esp-rs/esp-hal.git", rev="c0a9934", optional=true}
 esp-hal = {version= "0.20.1", git = "https://github.com/esp-rs/esp-hal.git", rev="c0a9934"}
 esp-backtrace = { version="0.14.1", git = "https://github.com/esp-rs/esp-hal.git", features = ["panic-handler", "exception-handler", "println"], rev="c0a9934" }
 esp-println       = { version= "0.11.0", git = "https://github.com/esp-rs/esp-hal.git", features = ["log"], rev="c0a9934" }
@@ -24,7 +25,7 @@ esp-openthread = { path = "../esp-openthread" }
 [features]
 esp32c6 = [ "esp-hal/esp32c6", "esp-ieee802154/esp32c6", "esp-openthread/esp32c6", "esp-backtrace/esp32c6", "esp-println/esp32c6" ]
 esp32h2 = [ "esp-hal/esp32h2", "esp-ieee802154/esp32h2", "esp-openthread/esp32h2", "esp-backtrace/esp32h2", "esp-println/esp32h2" ]
-srp-client = ["esp-openthread/srp-client"]
+srp-client = ["esp-openthread/srp-client", "dep:esp-alloc"]
 
 [[bin]]
 path = "./src/bin/basic_example.rs"

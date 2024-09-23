@@ -3,8 +3,7 @@
 #![no_std]
 #![no_main]
 
-use core::cell::RefCell;
-use core::pin::pin;
+use core::{borrow::BorrowMut, cell::RefCell, pin::pin};
 
 use critical_section::Mutex;
 use esp_backtrace as _;
@@ -20,21 +19,31 @@ use esp_openthread::{
 use esp_println::println;
 use static_cell::StaticCell;
 
-// May need to modify the hostname and service name values if a previous node
-// was up & successfully registers, but due to error/power event not able to
-// unregister the service. Host names and service names must be unique and are
+// Host names and service names must be unique and are
 // accepted by SRP server on first come first serve basis.
-static HOSTNAME: Mutex<RefCell<&str>> = Mutex::new(RefCell::new("ot-esp32\0"));
-static SERVICENAME: Mutex<RefCell<&str>> = Mutex::new(RefCell::new("ot-service"));
-static INSTANCENAME: Mutex<RefCell<&str>> = Mutex::new(RefCell::new("_otpps._tcp"));
+// Note that in the code below the names are modified,
+// at runtime, to avoid collisions
+static HOSTNAME: Mutex<RefCell<&'static str>> = Mutex::new(RefCell::new(BASE_HOSTNAME));
+static SERVICENAME: Mutex<RefCell<&'static str>> = Mutex::new(RefCell::new(BASE_SERVICENAME));
+static INSTANCENAME: Mutex<RefCell<&'static str>> = Mutex::new(RefCell::new(BASE_INSTANCENAME));
 static DNSTXT: Mutex<RefCell<&'static str>> = Mutex::new(RefCell::new(""));
 static SUBTYPES: Mutex<RefCell<&'static [&'static str]>> = Mutex::new(RefCell::new(&[]));
 
+const BASE_HOSTNAME: &str = "-ot-esp32\0";
+const BASE_SERVICENAME: &str = "-ot-service";
+const BASE_INSTANCENAME: &str = "_otpps._tcp";
+
 const BOUND_PORT: u16 = 1212;
 
-#[entry]
+extern crate alloc;
+
+use alloc::string::{ToString, String};
+
+#[entry] 
 fn main() -> ! {
     esp_println::logger::init_logger_from_env();
+
+    esp_alloc::heap_allocator!(32 * 1024);
 
     let mut peripherals = esp_hal::init(esp_hal::Config::default());
 
@@ -86,6 +95,25 @@ fn main() -> ! {
 
     openthread.set_active_dataset(dataset).unwrap();
 
+    let rand = esp_openthread::get_random_u32().to_string();
+
+    // Add some random bytes so host name and service name are "unique"
+    // every time this code runs (to avoid SRP collisions)
+    let mut base_host: String = rand.clone();
+    base_host.push_str(BASE_HOSTNAME);
+
+    let mut base_srvc: String = rand;
+    base_srvc.push_str(BASE_SERVICENAME);
+
+    critical_section::with(|cs| {
+        let mut host = HOSTNAME.borrow_ref_mut(cs);
+        let host = (&mut *host).borrow_mut();
+        *host = unsafe { core::mem::transmute(base_host.as_str() ) };
+        let mut srvc = SERVICENAME.borrow_ref_mut(cs);
+        let srvc = (&mut *srvc).borrow_mut();
+        *srvc = unsafe { core::mem::transmute(base_srvc.as_str() ) };
+    });
+
     openthread.ipv6_set_enabled(true).unwrap();
 
     openthread.thread_set_enabled(true).unwrap();
@@ -112,9 +140,13 @@ fn main() -> ! {
 
         if register {
             critical_section::with(|cs| {
-                if let Err(e) = openthread.setup_srp_client_set_hostname(*HOSTNAME.borrow_ref(cs)) {
+                let mut host = HOSTNAME.borrow_ref_mut(cs);
+                let host = host.borrow_mut();
+
+                if let Err(e) = openthread.setup_srp_client_set_hostname((*host).as_ref()) {
                     log::error!("Error enabling srp client {e:?}");
                 }
+
             });
 
             if let Err(e) = openthread.setup_srp_client_host_addr_autoconfig() {
