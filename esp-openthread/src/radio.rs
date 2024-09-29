@@ -7,7 +7,10 @@ use esp_openthread_sys::bindings::{
     otRadioFrame__bindgen_ty_1__bindgen_ty_1, OT_RADIO_FRAME_MAX_SIZE, OT_RADIO_FRAME_MIN_SIZE,
 };
 
-use crate::{get_settings, platform::CURRENT_INSTANCE, set_settings, with_radio, NetworkSettings};
+use crate::{
+    get_settings, platform::CURRENT_INSTANCE, set_settings, with_radio, NetworkSettings,
+    TASKLETS_SHOULD_RUN,
+};
 
 pub static mut PSDU: [u8; OT_RADIO_FRAME_MAX_SIZE as usize] =
     [0u8; OT_RADIO_FRAME_MAX_SIZE as usize];
@@ -28,7 +31,7 @@ pub static mut TRANSMIT_BUFFER: otRadioFrame = otRadioFrame {
             _bitfield_1: __BindgenBitfieldUnit::new([0u8; 1]),
             mRxChannelAfterTxDone: 0,
             mTxPower: 0,
-            __bindgen_padding_0: [0u8; 3],
+            mTimestamp: 0,
         },
     },
 };
@@ -52,7 +55,7 @@ static mut SENT_FRAME: otRadioFrame = otRadioFrame {
             _bitfield_1: __BindgenBitfieldUnit::new([0u8; 1]),
             mRxChannelAfterTxDone: 0,
             mTxPower: 0,
-            __bindgen_padding_0: [0u8; 3],
+            mTimestamp: 0,
         },
     },
 };
@@ -75,7 +78,7 @@ static mut ACK_FRAME: otRadioFrame = otRadioFrame {
             _bitfield_1: __BindgenBitfieldUnit::new([0u8; 1]),
             mRxChannelAfterTxDone: 0,
             mTxPower: 0,
-            __bindgen_padding_0: [0u8; 3],
+            mTimestamp: 0,
         },
     },
 };
@@ -90,25 +93,25 @@ pub extern "C" fn otPlatRadioGetIeeeEui64(_instance: *const otInstance, mac: *mu
 
 #[no_mangle]
 pub extern "C" fn otPlatRadioGetCaps(instance: *const otInstance) -> u8 {
-    log::info!("otPlatRadioGetCaps {:p}", instance);
+    log::debug!("otPlatRadioGetCaps {:p}", instance);
     0 // Radio supports no capability. See OT_RADIO_CAPS_*
 }
 
 #[no_mangle]
 pub extern "C" fn otPlatRadioGetTransmitBuffer(instance: *const otInstance) -> *mut otRadioFrame {
-    log::info!("otPlatRadioGetTransmitBuffer {:p}", instance);
+    log::debug!("otPlatRadioGetTransmitBuffer {:p}", instance);
     addr_of_mut!(TRANSMIT_BUFFER)
 }
 
 #[no_mangle]
 pub extern "C" fn otPlatRadioEnable(instance: *const otInstance) -> otError {
-    log::info!("otPlatRadioEnable {:p}", instance);
+    log::debug!("otPlatRadioEnable {:p}", instance);
     otError_OT_ERROR_NONE
 }
 
 #[no_mangle]
 pub extern "C" fn otPlatRadioSleep(instance: *const otInstance) -> otError {
-    log::info!("otPlatRadioSleep {:p}", instance);
+    log::debug!("otPlatRadioSleep {:p}", instance);
     otError_OT_ERROR_NONE
 }
 
@@ -143,7 +146,7 @@ pub extern "C" fn otPlatRadioSetPromiscuous(_instance: *const otInstance, enable
 #[no_mangle]
 pub extern "C" fn otPlatRadioGetRssi(_instance: *const otInstance) -> i8 {
     let rssi = unsafe { crate::RCV_FRAME.mInfo.mRxInfo.mRssi };
-    log::trace!("otPlatRadioGetRssi {rssi:}");
+    log::debug!("otPlatRadioGetRssi {rssi:}");
 
     // If no rcv frame has set rssi yet, or if rssi is not valid,
     // then use a fake value instead of 0
@@ -157,7 +160,7 @@ pub extern "C" fn otPlatRadioGetRssi(_instance: *const otInstance) -> i8 {
 // from https://github.com/espressif/esp-idf/blob/release/v5.3/components/openthread/src/port/esp_openthread_radio.c#L35
 #[no_mangle]
 pub extern "C" fn otPlatRadioGetReceiveSensitivity(_instance: *const otInstance) -> i8 {
-    log::trace!("otPlatRadioGetReceiveSensitivity");
+    log::debug!("otPlatRadioGetReceiveSensitivity");
     -120
 }
 
@@ -178,13 +181,13 @@ pub extern "C" fn otPlatRadioEnergyScan(
 
 #[no_mangle]
 pub extern "C" fn otPlatRadioGetPromiscuous(_instance: *const otInstance) -> bool {
-    log::info!("otPlatRadioGetPromiscuous");
+    log::debug!("otPlatRadioGetPromiscuous");
     get_settings().promiscuous
 }
 
 #[no_mangle]
 pub extern "C" fn otPlatRadioSetExtendedAddress(instance: *const otInstance, address: *const u8) {
-    log::info!("otPlatRadioSetExtendedAddress {:p}", instance);
+    log::debug!("otPlatRadioSetExtendedAddress {:p}", instance);
     let ext_addr = u64::from_be_bytes(
         unsafe { core::slice::from_raw_parts(address, 8) }
             .try_into()
@@ -213,7 +216,7 @@ pub extern "C" fn otPlatRadioSetExtendedAddress(instance: *const otInstance, add
 
 #[no_mangle]
 pub extern "C" fn otPlatRadioSetShortAddress(instance: *const otInstance, address: u16) {
-    log::info!("otPlatRadioSetShortAddress {:p} {}", instance, address);
+    log::debug!("otPlatRadioSetShortAddress {:p} {}", instance, address);
     set_settings(NetworkSettings {
         short_address: address,
         ..get_settings()
@@ -236,8 +239,14 @@ pub extern "C" fn otPlatRadioSetShortAddress(instance: *const otInstance, addres
 }
 
 #[no_mangle]
+pub extern "C" fn otTaskletsSignalPending(_instance: *mut otInstance) {
+    log::debug!("tasklets pending!!");
+    critical_section::with(|cs| *TASKLETS_SHOULD_RUN.borrow_ref_mut(cs) = true);
+}
+
+#[no_mangle]
 pub extern "C" fn otPlatRadioSetPanId(_instance: *const otInstance, pan_id: u16) {
-    log::info!("otPlatRadioSetPanId {pan_id}");
+    log::debug!("otPlatRadioSetPanId {pan_id}");
     set_settings(NetworkSettings {
         pan_id,
         ..get_settings()
@@ -267,14 +276,14 @@ pub extern "C" fn otPlatRadioTransmit(
     let frame = unsafe { &*frame };
     let data = unsafe { core::slice::from_raw_parts(frame.mPsdu, frame.mLength as usize) };
 
-    log::trace!(
+    log::debug!(
         "otPlatRadioTransmit channel={} {:02x?}",
         frame.mChannel,
         &data
     );
 
     let settings = get_settings();
-    log::info!("Settings {:x?}", settings);
+    log::debug!("Settings {:x?}", settings);
 
     with_radio(|radio| {
         radio.set_config(Config {
@@ -303,16 +312,16 @@ pub extern "C" fn otPlatRadioTransmit(
         otPlatRadioTxStarted(instance as *mut otInstance, core::mem::transmute(frame));
     }
 
-    log::info!("TX done");
+    log::debug!("TX done");
 
     otError_OT_ERROR_NONE
 }
 
 #[no_mangle]
 pub extern "C" fn otPlatRadioReceive(_instance: *mut otInstance, channel: u8) -> otError {
-    log::info!("otPlatRadioReceive channel = {channel}");
+    log::debug!("otPlatRadioReceive channel = {channel}");
     let settings: NetworkSettings = get_settings();
-    log::info!("Settings {:x?}", settings);
+    log::debug!("Settings {:x?}", settings);
 
     set_settings(NetworkSettings {
         channel,
@@ -339,13 +348,12 @@ pub extern "C" fn otPlatRadioReceive(_instance: *mut otInstance, channel: u8) ->
 
 pub(crate) fn trigger_tx_done() {
     log::warn!("trigger_tx_done");
-
-    unsafe {
+    critical_section::with(|_cs| unsafe {
         otPlatRadioTxDone(
             CURRENT_INSTANCE as *mut otInstance,
             addr_of_mut!(SENT_FRAME),
             addr_of_mut!(ACK_FRAME),
             otError_OT_ERROR_NONE,
         );
-    }
+    });
 }

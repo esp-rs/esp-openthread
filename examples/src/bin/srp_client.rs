@@ -124,6 +124,13 @@ fn main() -> ! {
     print_all_addresses(addrs);
 
     let mut register = false;
+
+    let srp_changed = Mutex::new(RefCell::new((0, 0, 0, 0,)));
+    let mut srp_callback = |error, a, b, c| {
+        println!("SRP error callback: {:?}", error);
+        critical_section::with(|cs| *srp_changed.borrow_ref_mut(cs) = (error, a, b, c));
+    };
+
     loop {
         openthread.process();
         openthread.run_tasklets();
@@ -139,6 +146,9 @@ fn main() -> ! {
         });
 
         if register {
+
+            openthread.set_srp_state_callback(Some(&mut srp_callback));
+
             critical_section::with(|cs| {
                 let mut host = HOSTNAME.borrow_ref_mut(cs);
                 let host = host.borrow_mut();
@@ -177,7 +187,7 @@ fn main() -> ! {
             });
 
             break;
-        }
+        } 
     }
 
     // restrict scope of socket (so we can mutably borrow openthread after we break out of loop)
@@ -189,8 +199,10 @@ fn main() -> ! {
         let mut buffer = [0u8; 512];
 
         loop {
+
             openthread.process();
             openthread.run_tasklets();
+
             let (len, from, port) = socket.receive(&mut buffer).unwrap();
 
             // When the program receives a UDP packet, it will unregister SRP services
@@ -229,6 +241,7 @@ fn main() -> ! {
     loop {
         openthread.process();
         openthread.run_tasklets();
+
         critical_section::with(|cs| {
             let mut c = changed.borrow_ref_mut(cs);
             if c.0 {

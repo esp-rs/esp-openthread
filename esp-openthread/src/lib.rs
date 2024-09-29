@@ -32,7 +32,7 @@ pub use esp_openthread_sys as sys;
 use no_std_net::Ipv6Addr;
 use sys::{
     bindings::{
-        __BindgenBitfieldUnit, otChangedFlags, otDatasetSetActive, otError_OT_ERROR_NONE,
+        __BindgenBitfieldUnit, otChangedFlags, otDatasetSetActive, otError, otError_OT_ERROR_NONE,
         otExtendedPanId, otInstance, otInstanceInitSingle, otIp6Address,
         otIp6Address__bindgen_ty_1, otIp6GetUnicastAddresses, otIp6SetEnabled, otMeshLocalPrefix,
         otMessage, otMessageAppend, otMessageFree, otMessageGetLength, otMessageInfo,
@@ -40,17 +40,17 @@ use sys::{
         otOperationalDataset, otOperationalDatasetComponents, otPlatRadioEnergyScanDone,
         otPlatRadioGetIeeeEui64, otPlatRadioReceiveDone, otPskc, otRadioFrame,
         otRadioFrame__bindgen_ty_1, otRadioFrame__bindgen_ty_1__bindgen_ty_2, otSecurityPolicy,
-        otSetStateChangedCallback, otSockAddr, otTaskletsArePending, otTaskletsProcess,
-        otThreadSetEnabled, otTimestamp, otUdpBind, otUdpClose, otUdpNewMessage, otUdpOpen,
-        otUdpSend, otUdpSocket, OT_CHANGED_ACTIVE_DATASET, OT_CHANGED_CHANNEL_MANAGER_NEW_CHANNEL,
-        OT_CHANGED_COMMISSIONER_STATE, OT_CHANGED_IP6_ADDRESS_ADDED,
-        OT_CHANGED_IP6_ADDRESS_REMOVED, OT_CHANGED_IP6_MULTICAST_SUBSCRIBED,
-        OT_CHANGED_IP6_MULTICAST_UNSUBSCRIBED, OT_CHANGED_JOINER_STATE,
-        OT_CHANGED_NAT64_TRANSLATOR_STATE, OT_CHANGED_NETWORK_KEY, OT_CHANGED_PARENT_LINK_QUALITY,
-        OT_CHANGED_PENDING_DATASET, OT_CHANGED_PSKC, OT_CHANGED_SECURITY_POLICY,
-        OT_CHANGED_SUPPORTED_CHANNEL_MASK, OT_CHANGED_THREAD_BACKBONE_ROUTER_LOCAL,
-        OT_CHANGED_THREAD_BACKBONE_ROUTER_STATE, OT_CHANGED_THREAD_CHANNEL,
-        OT_CHANGED_THREAD_CHILD_ADDED, OT_CHANGED_THREAD_CHILD_REMOVED,
+        otSetStateChangedCallback, otSockAddr, otSrpClientHostInfo, otSrpClientService,
+        otSrpClientSetCallback, otTaskletsProcess, otThreadSetEnabled, otTimestamp, otUdpBind,
+        otUdpClose, otUdpNewMessage, otUdpOpen, otUdpSend, otUdpSocket, OT_CHANGED_ACTIVE_DATASET,
+        OT_CHANGED_CHANNEL_MANAGER_NEW_CHANNEL, OT_CHANGED_COMMISSIONER_STATE,
+        OT_CHANGED_IP6_ADDRESS_ADDED, OT_CHANGED_IP6_ADDRESS_REMOVED,
+        OT_CHANGED_IP6_MULTICAST_SUBSCRIBED, OT_CHANGED_IP6_MULTICAST_UNSUBSCRIBED,
+        OT_CHANGED_JOINER_STATE, OT_CHANGED_NAT64_TRANSLATOR_STATE, OT_CHANGED_NETWORK_KEY,
+        OT_CHANGED_PARENT_LINK_QUALITY, OT_CHANGED_PENDING_DATASET, OT_CHANGED_PSKC,
+        OT_CHANGED_SECURITY_POLICY, OT_CHANGED_SUPPORTED_CHANNEL_MASK,
+        OT_CHANGED_THREAD_BACKBONE_ROUTER_LOCAL, OT_CHANGED_THREAD_BACKBONE_ROUTER_STATE,
+        OT_CHANGED_THREAD_CHANNEL, OT_CHANGED_THREAD_CHILD_ADDED, OT_CHANGED_THREAD_CHILD_REMOVED,
         OT_CHANGED_THREAD_EXT_PANID, OT_CHANGED_THREAD_KEY_SEQUENCE_COUNTER,
         OT_CHANGED_THREAD_LL_ADDR, OT_CHANGED_THREAD_ML_ADDR, OT_CHANGED_THREAD_NETDATA,
         OT_CHANGED_THREAD_NETIF_STATE, OT_CHANGED_THREAD_NETWORK_NAME, OT_CHANGED_THREAD_PANID,
@@ -80,6 +80,22 @@ static NETWORK_SETTINGS: Mutex<RefCell<Option<NetworkSettings>>> = Mutex::new(Re
 
 static CHANGE_CALLBACK: Mutex<RefCell<Option<&'static mut (dyn FnMut(ChangedFlags) + Send)>>> =
     Mutex::new(RefCell::new(None));
+
+pub(crate) static TASKLETS_SHOULD_RUN: Mutex<RefCell<bool>> = Mutex::new(RefCell::new(false));
+
+#[cfg(feature = "srp-client")]
+static SRP_CHANGE_CALLBACK: Mutex<
+    RefCell<
+        Option<
+            &'static mut (dyn FnMut(
+                otError,
+                usize, // this replaces *const otSrpClientHostInfo,
+                usize, // this replaces *const otSrpClientService,
+                usize, // this replaces *const otSrpClientService,
+            ) + Send),
+        >,
+    >,
+> = Mutex::new(RefCell::new(None));
 
 static mut RCV_FRAME_PSDU: [u8; OT_RADIO_FRAME_MAX_SIZE as usize] =
     [0u8; OT_RADIO_FRAME_MAX_SIZE as usize];
@@ -308,6 +324,10 @@ impl<'a> OpenThread<'a> {
         let instance = unsafe { otInstanceInitSingle() };
         log::debug!("otInstanceInitSingle done, instance = {:p}", instance);
 
+        unsafe {
+            crate::platform::CURRENT_INSTANCE = instance as usize;
+        }
+
         let res = unsafe {
             otSetStateChangedCallback(instance, Some(change_callback), core::ptr::null_mut())
         };
@@ -373,7 +393,9 @@ impl<'a> OpenThread<'a> {
                 mIsPskcPresent: false,
                 mIsSecurityPolicyPresent: false,
                 mIsChannelMaskPresent: false,
+                mIsWakeupChannelPresent: false, // not supporting Thread in Mobile at this time
             },
+            mWakeupChannel: 0, // not supporting Thread in Mobile at this time
         };
 
         let mut active_timestamp_present = false;
@@ -499,6 +521,7 @@ impl<'a> OpenThread<'a> {
             mIsPskcPresent: pskc_present,
             mIsSecurityPolicyPresent: security_policy_present,
             mIsChannelMaskPresent: channel_mask_present,
+            mIsWakeupChannelPresent: false, // we are not supporting Thread in Mobile in this lib right now
         };
 
         checked!(unsafe { otDatasetSetActive(self.instance, &raw_dataset) })
@@ -611,8 +634,14 @@ impl<'a> OpenThread<'a> {
     ///
     /// Make sure to periodically call this function.
     pub fn run_tasklets(&self) {
-        unsafe {
-            if otTaskletsArePending(self.instance) {
+        let should_run = critical_section::with(|cs| {
+            let should_run = *TASKLETS_SHOULD_RUN.borrow_ref_mut(cs);
+            *TASKLETS_SHOULD_RUN.borrow_ref_mut(cs) = false;
+            should_run
+        });
+
+        if should_run {
+            unsafe {
                 otTaskletsProcess(self.instance);
             }
         }
@@ -622,9 +651,8 @@ impl<'a> OpenThread<'a> {
     ///
     /// Make sure to periodically call this function.
     pub fn process(&self) {
-        crate::timer::run_if_due();
-
-        while let Some(raw) = with_radio(|radio| radio.get_raw_received()).unwrap() {
+        crate::timer::run_if_due(self.instance);
+        if let Some(raw) = with_radio(|radio| radio.get_raw_received()).unwrap() {
             match frame_get_type(&raw.data) {
                 IEEE802154_FRAME_TYPE_DATA => {
                     let rssi: i8 = {
@@ -682,6 +710,7 @@ impl<'a> OpenThread<'a> {
                         RCV_FRAME.mInfo.mRxInfo.mRssi = rssi;
                         RCV_FRAME.mInfo.mRxInfo.mLqi = rssi_to_lqi(rssi);
                         RCV_FRAME.mInfo.mRxInfo.mTimestamp = current_millis() * 1000;
+
                         otPlatRadioReceiveDone(
                             self.instance,
                             addr_of_mut!(RCV_FRAME),
@@ -811,10 +840,12 @@ impl<'a> OpenThread<'a> {
     pub fn get_srp_client_state(&mut self) -> Result<Option<SrpClientItemState>, Error> {
         Ok(srp_client::get_srp_client_host_state(self.instance))
     }
+
     #[cfg(feature = "srp-client")]
     pub fn clear_srp_client_host_buffers(&mut self) {
         srp_client::srp_clear_all_client_services(self.instance)
     }
+
     /// If there are any services already registered, unregister them
     #[cfg(feature = "srp-client")]
     pub fn srp_unregister_all_services(
@@ -829,21 +860,44 @@ impl<'a> OpenThread<'a> {
         )?;
         Ok(())
     }
+
     #[cfg(feature = "srp-client")]
     pub fn srp_clear_service(&mut self, service: SrpClientService) -> Result<(), Error> {
         srp_client::srp_clear_service(self.instance, service)?;
         Ok(())
     }
+
     #[cfg(feature = "srp-client")]
     pub fn srp_unregister_service(&mut self, service: SrpClientService) -> Result<(), Error> {
         srp_client::srp_unregister_service(self.instance, service)?;
         Ok(())
     }
+
     #[cfg(feature = "srp-client")]
     pub fn srp_get_services(
         &mut self,
     ) -> heapless::Vec<SrpClientService, { srp_client::MAX_SERVICES }> {
         srp_client::get_srp_client_services(self.instance)
+    }
+
+    /// caller must call this prior to setting up the host config
+    #[cfg(feature = "srp-client")]
+    pub fn set_srp_state_callback(
+        &mut self,
+        callback: Option<&'a mut (dyn FnMut(otError, usize, usize, usize) + Send)>,
+    ) {
+        critical_section::with(|cs| {
+            let mut srp_change_callback = SRP_CHANGE_CALLBACK.borrow_ref_mut(cs);
+            *srp_change_callback = unsafe { core::mem::transmute(callback) };
+        });
+
+        unsafe {
+            otSrpClientSetCallback(
+                self.instance,
+                Some(srp_state_callback),
+                core::ptr::null_mut(),
+            )
+        }
     }
 }
 
@@ -853,6 +907,8 @@ impl<'a> Drop for OpenThread<'a> {
             RADIO.borrow_ref_mut(cs).take();
             NETWORK_SETTINGS.borrow_ref_mut(cs).take();
             CHANGE_CALLBACK.borrow_ref_mut(cs).take();
+            #[cfg(feature = "srp-client")]
+            SRP_CHANGE_CALLBACK.borrow_ref_mut(cs).take();
         });
     }
 }
@@ -895,6 +951,26 @@ unsafe extern "C" fn change_callback(
     });
 }
 
+#[cfg(feature = "srp-client")]
+unsafe extern "C" fn srp_state_callback(
+    error: otError,
+    host_info: *const otSrpClientHostInfo,
+    services: *const otSrpClientService,
+    removed_services: *const otSrpClientService,
+    _context: *mut esp_openthread_sys::c_types::c_void,
+) {
+    log::debug!("srp change callback");
+    critical_section::with(|cs| {
+        let mut srp_change_callback = SRP_CHANGE_CALLBACK.borrow_ref_mut(cs);
+        let srp_callback = srp_change_callback.as_mut();
+
+        if let Some(callback) = srp_callback {
+            log::warn!("SRP change callback error {:?}", error);
+            callback(error, host_info as _, services as _, removed_services as _);
+        }
+    });
+}
+
 fn with_radio<F, T>(f: F) -> Option<T>
 where
     F: FnOnce(&mut Ieee802154) -> T,
@@ -927,11 +1003,6 @@ fn get_settings() -> NetworkSettings {
 
 fn set_settings(settings: NetworkSettings) {
     critical_section::with(|cs| {
-        log::info!(
-            "Setting settings to {:?}\nwere {:?}",
-            settings,
-            NETWORK_SETTINGS.borrow_ref(cs)
-        );
         NETWORK_SETTINGS
             .borrow_ref_mut(cs)
             .borrow_mut()

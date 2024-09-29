@@ -189,10 +189,14 @@ impl From<SrpClientService> for otSrpClientService {
 }
 
 pub(crate) fn check_srp_autostart_enabled(instance: *mut otInstance) -> bool {
+    log::debug!("otSrpClientIsAutoStartModeEnabled");
+
     unsafe { otSrpClientIsAutoStartModeEnabled(instance) }
 }
 
 pub(crate) fn enable_srp_autostart(instance: *mut otInstance) {
+    log::debug!("otSrpClient auto start");
+
     unsafe {
         otSrpClientEnableAutoStartMode(instance, None, null_mut());
     };
@@ -203,12 +207,16 @@ pub(crate) fn enable_srp_autostart_with_callback_and_context(
     callback: otSrpClientAutoStartCallback,
     context: *mut c_types::c_void,
 ) {
+    log::debug!("otSrpClient auto start with callback");
+
     unsafe {
         otSrpClientEnableAutoStartMode(instance, callback, context);
     };
 }
 
 pub(crate) fn get_srp_client_host_info(instance: *mut otInstance) -> *const otSrpClientHostInfo {
+    log::debug!("otSrpClient get host info");
+
     unsafe { otSrpClientGetHostInfo(instance) }
 }
 
@@ -216,6 +224,8 @@ pub(crate) fn set_srp_client_host_name(
     instance: *mut otInstance,
     host_name: *mut c_types::c_char,
 ) -> Result<(), Error> {
+    log::debug!("otSrpClient set host name");
+
     checked!(unsafe { otSrpClientSetHostName(instance, host_name) })
 }
 
@@ -223,10 +233,14 @@ pub(crate) fn get_srp_client_host_name(
     instance: *mut otInstance,
     size: &mut u16,
 ) -> *mut c_types::c_char {
+    log::debug!("otSrpClient get host name string");
+
     unsafe { otSrpClientBuffersGetHostNameString(instance, size) }
 }
 
 pub(crate) fn get_srp_client_host_state(instance: *mut otInstance) -> Option<SrpClientItemState> {
+    log::debug!("otSrpClient get host state");
+
     let host_info = get_srp_client_host_info(instance);
     let state = unsafe { (*host_info).mState };
     if let Ok(state) = state.try_into() {
@@ -240,6 +254,8 @@ pub(crate) fn get_srp_client_host_state(instance: *mut otInstance) -> Option<Srp
 pub(crate) fn get_srp_client_host_addresses(
     instance: *mut otInstance,
 ) -> Option<heapless::Vec<no_std_net::Ipv6Addr, MAX_SRP_ADDRS>> {
+    log::debug!("otSrpClient get host addresses");
+
     let host_info = get_srp_client_host_info(instance);
     if unsafe { (*host_info).mAutoAddress } {
         None
@@ -283,6 +299,8 @@ pub(crate) fn set_srp_client_host_addresses(
     addrs: *mut otIp6Address,
     mut num_addr: u8,
 ) -> Result<(), Error> {
+    log::debug!("otSrpClient set host addresses");
+
     if num_addr > MAX_SRP_ADDRS as u8 {
         num_addr = MAX_SRP_ADDRS as u8;
     }
@@ -292,6 +310,8 @@ pub(crate) fn set_srp_client_host_addresses(
 pub(crate) fn set_srp_client_host_addresses_auto_config(
     instance: *mut otInstance,
 ) -> Result<(), Error> {
+    log::debug!("otSrpClient auto host addr config");
+
     checked!(unsafe { otSrpClientEnableAutoHostAddress(instance) })
 }
 
@@ -300,12 +320,19 @@ pub(crate) fn srp_unregister_and_remove_all_client_services(
     remove_key_lease: bool,
     send_unreg_to_server: bool,
 ) -> Result<(), Error> {
+    log::debug!(
+        "otSrpClient remove host and services remove key lease: \
+        {remove_key_lease:} and send unreg {send_unreg_to_server:}"
+    );
+
     checked!(unsafe {
         otSrpClientRemoveHostAndServices(instance, remove_key_lease, send_unreg_to_server)
     })
 }
 
 pub(crate) fn srp_clear_all_client_services(instance: *mut otInstance) {
+    log::debug!("otSrpClient clear all services");
+
     unsafe {
         otSrpClientClearHostAndServices(instance);
         otSrpClientBuffersFreeAllServices(instance);
@@ -313,18 +340,26 @@ pub(crate) fn srp_clear_all_client_services(instance: *mut otInstance) {
 }
 
 pub(crate) fn get_srp_client_lease_interval(instance: *mut otInstance) -> u32 {
+    log::debug!("otSrpClient get lease interval");
+
     unsafe { otSrpClientGetLeaseInterval(instance) }
 }
 
 pub(crate) fn set_srp_client_lease_interval(instance: *mut otInstance, interval: u32) {
+    log::debug!("otSrpClient set lease interval");
+
     unsafe { otSrpClientSetLeaseInterval(instance, interval) }
 }
 
 pub(crate) fn get_srp_client_key_lease_interval(instance: *mut otInstance) -> u32 {
+    log::debug!("otSrpClient get key lease interval");
+
     unsafe { otSrpClientGetKeyLeaseInterval(instance) }
 }
 
 pub(crate) fn set_srp_client_key_lease_interval(instance: *mut otInstance, interval: u32) {
+    log::debug!("otSrpClient set key lease interval");
+
     unsafe { otSrpClientSetKeyLeaseInterval(instance, interval) }
 }
 
@@ -332,6 +367,7 @@ pub(crate) fn set_srp_client_key_lease_interval(instance: *mut otInstance, inter
 // will return the unspecified addr (0.0.0.0.0.0.0.0)
 pub(crate) fn get_srp_client_server_addr(instance: *mut otInstance) -> no_std_net::SocketAddrV6 {
     let addr: *const otSockAddr = unsafe { otSrpClientGetServerAddress(instance) };
+    log::debug!("otSrpClient server addr");
 
     unsafe {
         no_std_net::SocketAddrV6::new(
@@ -355,6 +391,8 @@ pub(crate) fn get_srp_client_server_addr(instance: *mut otInstance) -> no_std_ne
 pub(crate) fn get_srp_client_services(
     instance: *mut otInstance,
 ) -> heapless::Vec<SrpClientService, MAX_SERVICES> {
+    log::debug!("otSrpClient get client services");
+
     let mut result = heapless::Vec::new();
 
     let mut services: *const otSrpClientService = unsafe { otSrpClientGetServices(instance) };
@@ -393,6 +431,8 @@ pub(crate) fn add_srp_client_service(
     lease: Option<u32>,
     key_lease: Option<u32>,
 ) -> Result<(), Error> {
+    log::debug!("otSrpClient add service");
+
     let entry: *mut otSrpClientBuffersServiceEntry =
         unsafe { otSrpClientBuffersAllocateService(instance) };
     if entry.is_null() {
@@ -486,6 +526,8 @@ pub(crate) fn add_srp_client_service(
         unsafe { otSrpClientBuffersFreeService(instance, entry) };
         Err(e)
     } else {
+        log::debug!("otSrpClient add service success");
+
         Ok(())
     }
 }
@@ -494,6 +536,8 @@ pub(crate) fn srp_unregister_service(
     instance: *mut otInstance,
     service: SrpClientService,
 ) -> Result<(), Error> {
+    log::debug!("otSrpClient unregister service");
+
     checked!(unsafe { otSrpClientRemoveService(instance, service.srp_buff_ptr) })
 }
 
@@ -501,25 +545,37 @@ pub(crate) fn srp_clear_service(
     instance: *mut otInstance,
     service: SrpClientService,
 ) -> Result<(), Error> {
+    log::debug!("otSrpClient clear service");
+
     checked!(unsafe { otSrpClientClearService(instance, service.srp_buff_ptr) })
 }
 
 pub(crate) fn srp_client_start(instance: *mut otInstance, addr: otSockAddr) -> Result<(), Error> {
+    log::debug!("otSrpClient start");
+
     checked!(unsafe { otSrpClientStart(instance, &addr) })
 }
 
 pub(crate) fn srp_client_stop(instance: *mut otInstance) {
+    log::debug!("otSrpClient stop");
+
     unsafe { otSrpClientStop(instance) }
 }
 
 pub(crate) fn is_srp_client_running(instance: *mut otInstance) -> bool {
+    log::debug!("otSrpClient is running");
+
     unsafe { otSrpClientIsRunning(instance) }
 }
 
 pub(crate) fn set_srp_client_ttl(instance: *mut otInstance, ttl: u32) {
+    log::debug!("otSrpClient set TTL");
+
     unsafe { otSrpClientSetTtl(instance, ttl) }
 }
 
 pub(crate) fn get_srp_client_ttl(instance: *mut otInstance) -> u32 {
+    log::debug!("otSrpClient get TTL");
+
     unsafe { otSrpClientGetTtl(instance) }
 }
