@@ -38,6 +38,7 @@ build()
         -DCMAKE_BUILD_TYPE=MinSizeRel \
         -DOT_SRP_CLIENT=ON \
         -DOT_ECDSA=ON \
+        -DOT_PING_SENDER=ON \
         -DOT_COMPILE_WARNING_AS_ERROR=ON "$@" "${OT_SRCDIR}"
 
     if [[ -n ${OT_CMAKE_NINJA_TARGET[*]} ]]; then
