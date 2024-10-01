@@ -1,5 +1,5 @@
 [target.riscv32imac-unknown-none-elf]
-runner = "espflash flash --monitor"
+runner = "probe-rs run --chip esp32c6"
 
 
 [build]
@@ -7,7 +7,7 @@ rustflags = [
   "-C", "link-arg=-Tlinkall.x",
   # Required to obtain backtraces (e.g. when using the "esp-backtrace" crate.)
   # NOTE: May negatively impact performance of produced code
-  "-C", "force-frame-pointers",
+  #"-C", "force-frame-pointers",
 
   # needed by 802.15.4
   "-C", "link-arg=-Trom_coexist.x",
@@ -18,4 +18,4 @@ rustflags = [
 target = "riscv32imac-unknown-none-elf"
 
 [unstable]
-build-std = ["core"]
+build-std = ["core","alloc"]

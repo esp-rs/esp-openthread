@@ -3,8 +3,7 @@
 #![no_std]
 #![no_main]
 
-use core::cell::RefCell;
-use core::pin::pin;
+use core::{borrow::BorrowMut, cell::RefCell, pin::pin};
 
 use critical_section::Mutex;
 use esp_backtrace as _;
@@ -20,14 +19,31 @@ use esp_openthread::{
 use esp_println::println;
 use static_cell::StaticCell;
 
-// Must be null terminated string
-const HOSTNAME: &str = "ot-esp32\0";
+// Host names and service names must be unique and are
+// accepted by SRP server on first come first serve basis.
+// Note that in the code below the names are modified,
+// at runtime, to avoid collisions
+static HOSTNAME: Mutex<RefCell<&'static str>> = Mutex::new(RefCell::new(BASE_HOSTNAME));
+static SERVICENAME: Mutex<RefCell<&'static str>> = Mutex::new(RefCell::new(BASE_SERVICENAME));
+static INSTANCENAME: Mutex<RefCell<&'static str>> = Mutex::new(RefCell::new(BASE_INSTANCENAME));
+static DNSTXT: Mutex<RefCell<&'static str>> = Mutex::new(RefCell::new(""));
+static SUBTYPES: Mutex<RefCell<&'static [&'static str]>> = Mutex::new(RefCell::new(&[]));
+
+const BASE_HOSTNAME: &str = "-ot-esp32\0";
+const BASE_SERVICENAME: &str = "-ot-service";
+const BASE_INSTANCENAME: &str = "_otpps._tcp";
 
 const BOUND_PORT: u16 = 1212;
 
-#[entry]
+extern crate alloc;
+
+use alloc::string::{ToString, String};
+
+#[entry] 
 fn main() -> ! {
     esp_println::logger::init_logger_from_env();
+
+    esp_alloc::heap_allocator!(32 * 1024);
 
     let mut peripherals = esp_hal::init(esp_hal::Config::default());
 
@@ -79,6 +95,25 @@ fn main() -> ! {
 
     openthread.set_active_dataset(dataset).unwrap();
 
+    let rand = esp_openthread::get_random_u32().to_string();
+
+    // Add some random bytes so host name and service name are "unique"
+    // every time this code runs (to avoid SRP collisions)
+    let mut base_host: String = rand.clone();
+    base_host.push_str(BASE_HOSTNAME);
+
+    let mut base_srvc: String = rand;
+    base_srvc.push_str(BASE_SERVICENAME);
+
+    critical_section::with(|cs| {
+        let mut host = HOSTNAME.borrow_ref_mut(cs);
+        let host = (&mut *host).borrow_mut();
+        *host = unsafe { core::mem::transmute(base_host.as_str() ) };
+        let mut srvc = SERVICENAME.borrow_ref_mut(cs);
+        let srvc = (&mut *srvc).borrow_mut();
+        *srvc = unsafe { core::mem::transmute(base_srvc.as_str() ) };
+    });
+
     openthread.ipv6_set_enabled(true).unwrap();
 
     openthread.thread_set_enabled(true).unwrap();
@@ -89,6 +124,13 @@ fn main() -> ! {
     print_all_addresses(addrs);
 
     let mut register = false;
+
+    let srp_changed = Mutex::new(RefCell::new((0, 0, 0, 0,)));
+    let mut srp_callback = |error, a, b, c| {
+        println!("SRP error callback: {:?}", error);
+        critical_section::with(|cs| *srp_changed.borrow_ref_mut(cs) = (error, a, b, c));
+    };
+
     loop {
         openthread.process();
         openthread.run_tasklets();
@@ -104,53 +146,101 @@ fn main() -> ! {
         });
 
         if register {
-            // Must be a NULL terminated string with static lifetime
-            if let Err(e) = openthread.setup_srp_client_set_hostname(HOSTNAME) {
-                log::error!("Error enabling srp client {e:?}");
-            }
+
+            openthread.set_srp_state_callback(Some(&mut srp_callback));
+
+            critical_section::with(|cs| {
+                let mut host = HOSTNAME.borrow_ref_mut(cs);
+                let host = host.borrow_mut();
+
+                if let Err(e) = openthread.setup_srp_client_set_hostname((*host).as_ref()) {
+                    log::error!("Error enabling srp client {e:?}");
+                }
+
+            });
 
             if let Err(e) = openthread.setup_srp_client_host_addr_autoconfig() {
                 log::error!("Error enabling srp client {e:?}");
             }
 
-            if let Err(e) = openthread.register_service_with_srp_client(
-                "ot-service",
-                "_ipps._tcp",
-                &[],
-                "",
-                12345,
-                None,
-                None,
-                None,
-                None,
-            ) {
-                log::error!("Error registering service {e:?}");
-            }
+            critical_section::with(|cs| {
+                if let Err(e) = openthread.register_service_with_srp_client(
+                    *SERVICENAME.borrow_ref(cs),
+                    *INSTANCENAME.borrow_ref(cs),
+                    *SUBTYPES.borrow_ref(cs),
+                    *DNSTXT.borrow_ref(cs),
+                    12345,
+                    None,
+                    None,
+                    None,
+                    None,
+                ) {
+                    log::error!("Error registering service {e:?}");
+                } else {
+                    println!(
+                        "Registered SRP service; hostname {:?}, {:?}, {:?}",
+                        *HOSTNAME.borrow_ref(cs),
+                        *SERVICENAME.borrow_ref(cs),
+                        *INSTANCENAME.borrow_ref(cs)
+                    );
+                }
+            });
+
             break;
+        } 
+    }
+
+    // restrict scope of socket (so we can mutably borrow openthread after we break out of loop)
+    {
+        let mut socket = openthread.get_udp_socket::<512>().unwrap();
+        let mut socket = pin!(socket);
+        socket.bind(BOUND_PORT).unwrap();
+
+        let mut buffer = [0u8; 512];
+
+        loop {
+
+            openthread.process();
+            openthread.run_tasklets();
+
+            let (len, from, port) = socket.receive(&mut buffer).unwrap();
+
+            // When the program receives a UDP packet, it will unregister SRP services
+            if len > 0 {
+                println!(
+                    "received {:02x?} from {:?} port {}",
+                    &buffer[..len],
+                    from,
+                    port
+                );
+                socket.send(from, BOUND_PORT, b"Hello").unwrap();
+                println!("Sent response message, now unregistering SRP service!");
+                break;
+            }
+
+            critical_section::with(|cs| {
+                let mut c = changed.borrow_ref_mut(cs);
+                if c.0 {
+                    let addrs: heapless::Vec<NetworkInterfaceUnicastAddress, 5> =
+                        openthread.ipv6_get_unicast_addresses();
+
+                    print_all_addresses(addrs);
+                    c.0 = false;
+                }
+            });
         }
     }
 
-    let mut socket = openthread.get_udp_socket::<512>().unwrap();
-    let mut socket = pin!(socket);
-    socket.bind(BOUND_PORT).unwrap();
+    if let Err(e) = openthread.srp_unregister_all_services(true, true) {
+        log::error!("Failure to unregister all services {e:?}");
+    }
 
-    let mut buffer = [0u8; 512];
+    println!("SRP services unregistered, no longer receiving UDP packets");
 
+    let mut break_loop = false;
     loop {
         openthread.process();
         openthread.run_tasklets();
-        let (len, from, port) = socket.receive(&mut buffer).unwrap();
-        if len > 0 {
-            println!(
-                "received {:02x?} from {:?} port {}",
-                &buffer[..len],
-                from,
-                port
-            );
-
-            socket.send(from, BOUND_PORT, b"Hello").unwrap();
-            println!("Sent message");
-        }
 
         critical_section::with(|cs| {
             let mut c = changed.borrow_ref_mut(cs);
@@ -159,10 +249,22 @@ fn main() -> ! {
                     openthread.ipv6_get_unicast_addresses();
 
                 print_all_addresses(addrs);
+
+                if c.1.contains(ChangedFlags::ThreadRlocRemoved) {
+                    println!("Dropped from Thread network, resetting!");
+                    break_loop = true;
+                }
                 c.0 = false;
             }
         });
+        if break_loop {
+            break;
+        }
     }
+
+    esp_hal::reset::software_reset_cpu();
+    // This wont execute
+    loop {}
 }
 
 fn print_all_addresses(addrs: heapless::Vec<NetworkInterfaceUnicastAddress, 5>) {

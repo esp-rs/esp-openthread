@@ -1,4 +1,3 @@
-use crate::platform::CURRENT_INSTANCE;
 use core::cell::RefCell;
 use critical_section::Mutex;
 use esp_hal::peripherals::Interrupt;
@@ -58,7 +57,7 @@ pub fn install_isr(
 
 pub fn set_timer_target(when: u32) {
     let timestamp = when as u64 * (TICKS_PER_SECOND / 1000);
-    log::trace!("Setting timer target {timestamp:}");
+    log::debug!("Setting timer target {timestamp:}");
     critical_section::with(|cs| {
         let mut timer = TIMER.borrow_ref_mut(cs);
         let timer = timer.as_mut().unwrap();
@@ -78,7 +77,7 @@ pub fn stop() {
 
 #[handler]
 fn SYSTIMER_TARGET0() {
-    log::warn!("timer interrupt triggered at {}", current_millis());
+    log::debug!("timer interrupt triggered at {}", current_millis());
     // clear the interrupt
     critical_section::with(|cs| {
         TIMER.borrow_ref_mut(cs).as_mut().unwrap().clear_interrupt();
@@ -93,27 +92,23 @@ pub fn current_millis() -> u64 {
 
 #[no_mangle]
 pub extern "C" fn otPlatAlarmMilliGetNow(_instance: *const otInstance) -> u32 {
-    log::trace!("otPlatAlarmMilliGetNow");
     crate::timer::current_millis() as u32
 }
 
 #[no_mangle]
 pub extern "C" fn otPlatAlarmMilliStartAt(
-    instance: *mut otInstance,
+    _instance: *mut otInstance,
     at0: u32,
     adt: u32,
 ) -> otError {
-    log::trace!("otPlatAlarmMilliStartAt {at0} {adt}");
-    unsafe {
-        CURRENT_INSTANCE = instance as usize;
-    }
+    log::debug!("otPlatAlarmMilliStartAt {at0:} {adt:}");
     crate::timer::set_timer_target(at0 + adt);
     otError_OT_ERROR_NONE
 }
 
 #[no_mangle]
 pub extern "C" fn otPlatAlarmMilliStop(_instance: *const otInstance) -> otError {
-    log::trace!("otPlatAlarmMilliStop");
+    log::debug!("otPlatAlarmMilliStop");
     crate::timer::stop();
     otError_OT_ERROR_NONE
 }
@@ -122,7 +117,7 @@ fn timer_triggered() {
     critical_section::with(|cs| *TIMER_CALLBACK_SHOULD_RUN.borrow_ref_mut(cs) = true);
 }
 
-pub(crate) fn run_if_due() {
+pub(crate) fn run_if_due(instance: *mut otInstance) {
     let should_run = critical_section::with(|cs| {
         let res = *TIMER_CALLBACK_SHOULD_RUN.borrow_ref_mut(cs);
         *TIMER_CALLBACK_SHOULD_RUN.borrow_ref_mut(cs) = false;
@@ -131,7 +126,6 @@ pub(crate) fn run_if_due() {
 
     if should_run {
         unsafe {
-            let instance = CURRENT_INSTANCE as *mut otInstance;
             otPlatAlarmMilliFired(instance);
         }
     }
