@@ -24,12 +24,12 @@ const BOUND_PORT: u16 = 1212;
 fn main() -> ! {
     esp_println::logger::init_logger_from_env();
 
-    let mut peripherals = esp_hal::init(esp_hal::Config::default());
+    let peripherals = esp_hal::init(esp_hal::Config::default());
 
     println!("Initializing");
 
     let radio = peripherals.IEEE802154;
-    let mut ieee802154 = Ieee802154::new(radio, &mut peripherals.RADIO_CLK);
+    let mut ieee802154 = Ieee802154::new(radio, peripherals.RADIO_CLK);
 
     // init timer for otPlatAlarm
     let systimer = SystemTimer::new(peripherals.SYSTIMER);
