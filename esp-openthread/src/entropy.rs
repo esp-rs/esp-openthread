@@ -1,12 +1,21 @@
+use core::{borrow::BorrowMut, cell::RefCell};
+
+use critical_section::Mutex;
+
 use esp_openthread_sys::bindings::{otError, otError_OT_ERROR_NONE};
 
 use esp_hal::rng::Rng;
 
-pub(crate) static mut RANDOM_GENERATOR: Option<Rng> = None;
+pub(crate) static RANDOM_GENERATOR: Mutex<RefCell<Option<Rng>>> = Mutex::new(RefCell::new(None));
 
 pub fn init_rng(rng: Rng) {
     unsafe {
-        RANDOM_GENERATOR = Some(core::mem::transmute(rng));
+        critical_section::with(|cs| {
+            RANDOM_GENERATOR
+                .borrow_ref_mut(cs)
+                .borrow_mut()
+                .replace(core::mem::transmute(rng));
+        });
     }
 }
 
@@ -14,11 +23,16 @@ pub fn init_rng(rng: Rng) {
 pub extern "C" fn otPlatEntropyGet(output: *mut u8, len: u16) -> otError {
     log::trace!("otPlatEntropyGet");
     unsafe {
-        let rng = crate::entropy::RANDOM_GENERATOR.as_mut().unwrap();
+        critical_section::with(|cs| {
+            let mut rng = crate::entropy::RANDOM_GENERATOR.borrow_ref_mut(cs);
+            let rng = rng.borrow_mut();
 
-        for i in 0..len as usize {
-            output.add(i).write_volatile(rng.random() as u8);
-        }
+            if let Some(rng) = rng.as_mut() {
+                for i in 0..len as usize {
+                    output.add(i).write_volatile(rng.random() as u8);
+                }
+            }
+        });
     }
 
     otError_OT_ERROR_NONE
