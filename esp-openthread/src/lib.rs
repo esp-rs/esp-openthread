@@ -676,18 +676,18 @@ impl<'a> OpenThread<'a> {
                     unsafe {
                         // len indexes into both the RCV_FRAME_PSDU and raw.data array
                         // so must be sized appropriately
-                        let len = if raw.data[0] as usize > RCV_FRAME_PSDU.len()
-                            && raw.data[1..].len() >= RCV_FRAME_PSDU.len()
+                        let len = if raw.data[0] as usize > OT_RADIO_FRAME_MAX_SIZE as usize
+                            && raw.data[1..].len() >= OT_RADIO_FRAME_MAX_SIZE as usize
                         {
                             log::warn!(
                                 "raw.data[0] {:?} larger than rcv frame \
                                 psdu len and raw.data.len()! RCV {:02x?}",
                                 raw.data[0],
-                                &raw.data[1..][..RCV_FRAME_PSDU.len()]
+                                &raw.data[1..][..OT_RADIO_FRAME_MAX_SIZE as usize]
                             );
-                            RCV_FRAME_PSDU.len()
-                        } else if raw.data[0] as usize > RCV_FRAME_PSDU.len()
-                            && raw.data[1..].len() < RCV_FRAME_PSDU.len()
+                            OT_RADIO_FRAME_MAX_SIZE as usize
+                        } else if raw.data[0] as usize > OT_RADIO_FRAME_MAX_SIZE as usize
+                            && raw.data[1..].len() < OT_RADIO_FRAME_MAX_SIZE as usize
                         {
                             log::warn!(
                                 "raw.data[0] {:?} larger than raw.data.len()! \
@@ -1012,13 +1012,15 @@ fn set_settings(settings: NetworkSettings) {
 
 /// Allow callers to generate a random u32
 pub fn get_random_u32() -> u32 {
-    unsafe {
-        if let Some(mut rng) = crate::entropy::RANDOM_GENERATOR {
+    critical_section::with(|cs| {
+        let mut rng = crate::entropy::RANDOM_GENERATOR.borrow_ref_mut(cs);
+        let rng = rng.borrow_mut();
+        if let Some(rng) = rng.as_mut() {
             rng.random()
         } else {
             0
         }
-    }
+    })
 }
 
 /// A UdpSocket

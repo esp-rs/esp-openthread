@@ -45,12 +45,12 @@ fn main() -> ! {
 
     esp_alloc::heap_allocator!(32 * 1024);
 
-    let mut peripherals = esp_hal::init(esp_hal::Config::default());
+    let peripherals = esp_hal::init(esp_hal::Config::default());
 
     println!("Initializing");
 
     let radio = peripherals.IEEE802154;
-    let mut ieee802154 = Ieee802154::new(radio, &mut peripherals.RADIO_CLK);
+    let mut ieee802154 = Ieee802154::new(radio, peripherals.RADIO_CLK);
 
     // init timer for otPlatAlarm
     let systimer = SystemTimer::new(peripherals.SYSTIMER);
