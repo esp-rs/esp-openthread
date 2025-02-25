@@ -25,6 +25,8 @@ pub use esp_openthread_sys as sys;
 pub use radio::*;
 
 mod dataset;
+#[cfg(any(feature = "embassy-net-driver-channel"))]
+pub mod enet;
 #[cfg(any(feature = "esp32h2", feature = "esp32c6"))]
 pub mod esp;
 mod platform;
@@ -99,7 +101,7 @@ pub struct OtController<'a, C, F>(&'a OpenThread<C, F>);
 impl<C, F> OtController<'_, C, F>
 where
     C: RngCore,
-    F: FnMut(OtRx),
+    F: OtRx,
 {
     pub fn set_dataset(&mut self, dataset: &OperationalDataset<'_>) -> Result<(), OtError> {
         let mut ot_active = self.0.activate();
@@ -168,21 +170,45 @@ impl<R, C, F> OtRunner<'_, R, C, F>
 where
     R: Radio,
     C: RngCore,
-    F: FnMut(OtRx),
+    F: OtRx,
 {
     pub async fn run(&mut self) -> ! {
         self.ot.run(&mut self.radio).await
     }
 }
 
-pub struct OtRx(*const otMessage);
+pub trait OtRx {
+    fn rx(&mut self, packet: OtRxPacket);
+}
 
-impl OtRx {
+impl<T> OtRx for &mut T
+where
+    T: OtRx,
+{
+    fn rx(&mut self, packet: OtRxPacket) {
+        T::rx(self, packet)
+    }
+}
+
+pub struct FnOtRx<F>(F);
+
+impl<F> OtRx for FnOtRx<F>
+where
+    F: FnMut(OtRxPacket),
+{
+    fn rx(&mut self, packet: OtRxPacket) {
+        self.0(packet)
+    }
+}
+
+pub struct OtRxPacket(*const otMessage);
+
+impl OtRxPacket {
     pub fn len(&self) -> usize {
         unsafe { otMessageGetLength(self.0) as _ }
     }
 
-    pub fn copy_to(&self, buf: &mut [u8]) {
+    pub fn copy_to(&self, buf: &mut [u8]) -> usize {
         let len = self.len();
 
         if len <= buf.len() {
@@ -190,6 +216,8 @@ impl OtRx {
                 otMessageRead(self.0, 0, buf.as_mut_ptr() as *mut _, len as _);
             }
         }
+
+        len
     }
 }
 
@@ -198,7 +226,7 @@ pub struct OtTx<'a, C, F>(&'a OpenThread<C, F>);
 impl<C, F> OtTx<'_, C, F>
 where
     C: RngCore,
-    F: FnMut(OtRx),
+    F: OtRx,
 {
     pub fn tx(&mut self, packet: &[u8]) -> Result<(), OtError> {
         self.0.activate().tx_ip6(packet)
@@ -215,7 +243,7 @@ pub struct OpenThread<C, F> {
 impl<C, F> OpenThread<C, F>
 where
     C: RngCore,
-    F: FnMut(OtRx),
+    F: OtRx,
 {
     pub fn new(rng: C, rx: F) -> Result<Self, OtError> {
         // TODO: Optimize the memory of this
@@ -413,7 +441,7 @@ struct ActiveOpenThread<'a, C, F> {
 impl<'a, C, F> ActiveOpenThread<'a, C, F>
 where
     C: RngCore,
-    F: FnMut(OtRx),
+    F: OtRx,
 {
     fn new(ot: &'a OpenThread<C, F>) -> Self {
         Self {
@@ -926,14 +954,14 @@ where
 impl<C, F> OtCallback for ActiveOpenThread<'_, C, F>
 where
     C: RngCore,
-    F: FnMut(OtRx),
+    F: OtRx,
 {
 }
 
 impl<C, F> OtPlatformCallback for ActiveOpenThread<'_, C, F>
 where
     C: RngCore,
-    F: FnMut(OtRx),
+    F: OtRx,
 {
     fn reset(&mut self) -> Result<(), OtError> {
         todo!()
@@ -951,7 +979,7 @@ where
     }
 
     fn ipv6_received(&mut self, msg: *mut otMessage) {
-        (self.rx_ipv6)(OtRx(msg as *const _));
+        self.rx_ipv6.rx(OtRxPacket(msg as *const _));
 
         unsafe {
             otMessageFree(msg);
@@ -987,7 +1015,7 @@ where
 impl<C, F> OtPlatformRadioCallback for ActiveOpenThread<'_, C, F>
 where
     C: RngCore,
-    F: FnMut(OtRx),
+    F: OtRx,
 {
     fn ieee_eui64(&mut self, mac: &mut [u8; 6]) {
         mac.fill(0);
