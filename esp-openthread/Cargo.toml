@@ -8,23 +8,17 @@ harness = false
 
 [dependencies]
 esp-openthread-sys = { path = "../esp-openthread-sys" }
-esp-hal = "0.23.1"
-esp-hal-procmacros = "0.16"
-esp-println = "0.13"
-esp-ieee802154 = "0.5"
-log = "0.4.21"
-critical-section = "1.1.1"
-fugit = "0.3.7"
-bitflags = "2.5.0"
-heapless = "0.8.0"
-no-std-net = "0.6.0"
+log = { version = "0.4", default-features = false }
 rand_core = "0.9"
 embassy-sync = "0.6"
 embassy-time = "0.4"
 embassy-futures = "0.1"
+#bitflags = "2.5"
+#heapless = "0.8"
+esp-ieee802154 = { version = "0.5", optional = true }
 
 [features]
 default = ["esp32c6"]
-esp32c6 = [ "esp-ieee802154/esp32c6", "esp-hal/esp32c6", "esp-println/esp32c6"]
-esp32h2 = [ "esp-ieee802154/esp32h2", "esp-hal/esp32h2", "esp-println/esp32h2"]
+esp32c6 = [ "esp-ieee802154/esp32c6"]
+esp32h2 = [ "esp-ieee802154/esp32h2"]
 srp-client = []

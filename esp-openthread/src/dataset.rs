@@ -4,7 +4,7 @@ use esp_openthread_sys::{
 };
 
 /// Active or Pending Operational Dataset
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Eq, PartialEq, Hash)]
 pub struct OperationalDataset<'a> {
     /// Active Timestamp
     pub active_timestamp: Option<ThreadTimestamp>,
@@ -182,7 +182,7 @@ impl OperationalDataset<'_> {
 }
 
 /// Security Policy
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Eq, PartialEq, Hash)]
 pub struct SecurityPolicy {
     /// The value for thrKeyRotation in units of hours.
     pub rotation_time: u16,
@@ -209,7 +209,7 @@ pub struct SecurityPolicy {
 }
 
 /// Thread Dataset timestamp
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct ThreadTimestamp {
     pub seconds: u64,
     pub ticks: u16,

@@ -64,7 +64,7 @@ pub trait Radio {
 
     async fn transmit(&mut self, frame: &[u8]) -> Result<(), Self::Error>;
 
-    async fn receive(&mut self, channel: u8, frame: &mut [u8]) -> Result<(), Self::Error>;
+    async fn receive(&mut self, channel: u8, frame_buf: &mut [u8]) -> Result<usize, Self::Error>;
 }
 
 impl<T> Radio for &mut T
@@ -85,7 +85,7 @@ where
         T::transmit(self, frame).await
     }
 
-    async fn receive(&mut self, channel: u8, frame: &mut [u8]) -> Result<(), Self::Error> {
-        T::receive(self, channel, frame).await
+    async fn receive(&mut self, channel: u8, frame_buf: &mut [u8]) -> Result<usize, Self::Error> {
+        T::receive(self, channel, frame_buf).await
     }
 }

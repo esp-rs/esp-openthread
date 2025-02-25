@@ -8,7 +8,6 @@ use core::net::Ipv6Addr;
 use core::pin::pin;
 use core::ptr::addr_of_mut;
 
-use dataset::OperationalDataset;
 use embassy_futures::select::{Either, Either3};
 use embassy_sync::{blocking_mutex::raw::NoopRawMutex, signal::Signal};
 
@@ -17,14 +16,17 @@ use embassy_time::Instant;
 use esp_openthread_sys::{otMessageFree, otMessageGetLength, otMessageRead};
 use platform::{OtCallCProxy, OtCallback, OtPlatformCallback, OtPlatformRadioCallback};
 
-use radio::Radio;
 use rand_core::RngCore;
 
 use sys::{otOperationalDataset, otPlatAlarmMilliFired, otTaskletsProcess};
 
+pub use dataset::*;
 pub use esp_openthread_sys as sys;
+pub use radio::*;
 
 mod dataset;
+#[cfg(any(feature = "esp32h2", feature = "esp32c6"))]
+pub mod esp;
 mod platform;
 mod radio;
 #[cfg(feature = "srp-client")]
