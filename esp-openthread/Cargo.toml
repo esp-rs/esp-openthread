@@ -3,19 +3,28 @@ name = "esp-openthread"
 version = "0.5.0"
 edition = "2021"
 
+[lib]
+harness = false
+
 [dependencies]
 esp-openthread-sys = { path = "../esp-openthread-sys" }
-esp-hal = {version= "0.21.1", git = "https://github.com/esp-rs/esp-hal.git",  rev="39c0baf2c7bf3a45cd16a844f100c52d84c9b727"}
-esp-hal-procmacros = {version= "0.14.0", git = "https://github.com/esp-rs/esp-hal.git", features=["interrupt"], rev="39c0baf2c7bf3a45cd16a844f100c52d84c9b727"}
-esp-ieee802154 = {version= "0.3.1", git = "https://github.com/esp-rs/esp-hal.git", rev="39c0baf2c7bf3a45cd16a844f100c52d84c9b727"}
+esp-hal = "0.23.1"
+esp-hal-procmacros = "0.16"
+esp-println = "0.13"
+esp-ieee802154 = "0.5"
 log = "0.4.21"
 critical-section = "1.1.1"
 fugit = "0.3.7"
 bitflags = "2.5.0"
 heapless = "0.8.0"
 no-std-net = "0.6.0"
+rand_core = "0.9"
+embassy-sync = "0.6"
+embassy-time = "0.4"
+embassy-futures = "0.1"
 
 [features]
-esp32c6 = [ "esp-ieee802154/esp32c6", "esp-hal/esp32c6"]
-esp32h2 = [ "esp-ieee802154/esp32h2", "esp-hal/esp32h2"]
+default = ["esp32c6"]
+esp32c6 = [ "esp-ieee802154/esp32c6", "esp-hal/esp32c6", "esp-println/esp32c6"]
+esp32h2 = [ "esp-ieee802154/esp32h2", "esp-hal/esp32h2", "esp-println/esp32h2"]
 srp-client = []

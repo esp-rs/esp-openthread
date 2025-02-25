@@ -1,64 +1,42 @@
 #![no_std]
-#![feature(c_variadic)]
+#![allow(async_fn_in_trait)]
+#![feature(c_variadic)] // TODO: otPlatLog
 
-mod entropy;
+use core::cell::{RefCell, RefMut};
+use core::mem::MaybeUninit;
+use core::net::Ipv6Addr;
+use core::pin::pin;
+use core::ptr::addr_of_mut;
+
+use dataset::OperationalDataset;
+use embassy_futures::select::{Either, Either3};
+use embassy_sync::{blocking_mutex::raw::NoopRawMutex, signal::Signal};
+
+use embassy_time::Instant;
+
+use esp_openthread_sys::{otMessageFree, otMessageGetLength, otMessageRead};
+use platform::{OtCallCProxy, OtCallback, OtPlatformCallback, OtPlatformRadioCallback};
+
+use radio::Radio;
+use rand_core::RngCore;
+
+use sys::{otOperationalDataset, otPlatAlarmMilliFired, otTaskletsProcess};
+
+pub use esp_openthread_sys as sys;
+
+mod dataset;
 mod platform;
 mod radio;
 #[cfg(feature = "srp-client")]
 mod srp_client;
-mod timer;
 
-use core::{
-    borrow::BorrowMut,
-    cell::RefCell,
-    marker::{PhantomData, PhantomPinned},
-    pin::Pin,
-    ptr::addr_of_mut,
-};
-
-use bitflags::bitflags;
-use critical_section::Mutex;
-use esp_hal::{
-    timer::systimer::{Alarm, SpecificComparator, SpecificUnit, Target},
-    Blocking,
-};
-use esp_ieee802154::{rssi_to_lqi, Config, Ieee802154};
-
-#[cfg(feature = "srp-client")]
-pub use srp_client::{SrpClientItemState, SrpClientService};
-
-// for now just re-export all
-pub use esp_openthread_sys as sys;
-use no_std_net::Ipv6Addr;
 use sys::{
-    bindings::{
-        __BindgenBitfieldUnit, otChangedFlags, otDatasetSetActive, otError, otError_OT_ERROR_NONE,
-        otExtendedPanId, otInstance, otInstanceInitSingle, otIp6Address,
-        otIp6Address__bindgen_ty_1, otIp6GetUnicastAddresses, otIp6SetEnabled, otMeshLocalPrefix,
-        otMessage, otMessageAppend, otMessageFree, otMessageGetLength, otMessageInfo,
-        otMessageRead, otNetifIdentifier_OT_NETIF_THREAD, otNetworkKey, otNetworkName,
-        otOperationalDataset, otOperationalDatasetComponents, otPlatRadioEnergyScanDone,
-        otPlatRadioGetIeeeEui64, otPlatRadioReceiveDone, otPskc, otRadioFrame,
-        otRadioFrame__bindgen_ty_1, otRadioFrame__bindgen_ty_1__bindgen_ty_2, otSecurityPolicy,
-        otSetStateChangedCallback, otSockAddr, otSrpClientHostInfo, otSrpClientService,
-        otSrpClientSetCallback, otTaskletsProcess, otThreadSetEnabled, otTimestamp, otUdpBind,
-        otUdpClose, otUdpNewMessage, otUdpOpen, otUdpSend, otUdpSocket, OT_CHANGED_ACTIVE_DATASET,
-        OT_CHANGED_CHANNEL_MANAGER_NEW_CHANNEL, OT_CHANGED_COMMISSIONER_STATE,
-        OT_CHANGED_IP6_ADDRESS_ADDED, OT_CHANGED_IP6_ADDRESS_REMOVED,
-        OT_CHANGED_IP6_MULTICAST_SUBSCRIBED, OT_CHANGED_IP6_MULTICAST_UNSUBSCRIBED,
-        OT_CHANGED_JOINER_STATE, OT_CHANGED_NAT64_TRANSLATOR_STATE, OT_CHANGED_NETWORK_KEY,
-        OT_CHANGED_PARENT_LINK_QUALITY, OT_CHANGED_PENDING_DATASET, OT_CHANGED_PSKC,
-        OT_CHANGED_SECURITY_POLICY, OT_CHANGED_SUPPORTED_CHANNEL_MASK,
-        OT_CHANGED_THREAD_BACKBONE_ROUTER_LOCAL, OT_CHANGED_THREAD_BACKBONE_ROUTER_STATE,
-        OT_CHANGED_THREAD_CHANNEL, OT_CHANGED_THREAD_CHILD_ADDED, OT_CHANGED_THREAD_CHILD_REMOVED,
-        OT_CHANGED_THREAD_EXT_PANID, OT_CHANGED_THREAD_KEY_SEQUENCE_COUNTER,
-        OT_CHANGED_THREAD_LL_ADDR, OT_CHANGED_THREAD_ML_ADDR, OT_CHANGED_THREAD_NETDATA,
-        OT_CHANGED_THREAD_NETIF_STATE, OT_CHANGED_THREAD_NETWORK_NAME, OT_CHANGED_THREAD_PANID,
-        OT_CHANGED_THREAD_PARTITION_ID, OT_CHANGED_THREAD_RLOC_ADDED,
-        OT_CHANGED_THREAD_RLOC_REMOVED, OT_CHANGED_THREAD_ROLE, OT_NETWORK_NAME_MAX_SIZE,
-        OT_RADIO_FRAME_MAX_SIZE,
-    },
-    c_types::c_void,
+    c_void, otChangedFlags, otDatasetSetActive, otError, otError_OT_ERROR_NONE, otInstance,
+    otInstanceInitSingle, otIp6GetUnicastAddresses, otIp6NewMessageFromBuffer, otIp6Send,
+    otIp6SetEnabled, otIp6SetReceiveCallback, otMessage,
+    otMessagePriority_OT_MESSAGE_PRIORITY_NORMAL, otMessageSettings, otPlatRadioReceiveDone,
+    otPlatRadioTxDone, otPlatRadioTxStarted, otRadioFrame, otSetStateChangedCallback,
+    otThreadSetEnabled, OT_RADIO_FRAME_MAX_SIZE,
 };
 
 /// https://github.com/espressif/esp-idf/blob/release/v5.3/components/ieee802154/private_include/esp_ieee802154_frame.h#L20
@@ -69,852 +47,1130 @@ const IEEE802154_FRAME_TYPE_DATA: u8 = 0x01;
 const IEEE802154_FRAME_TYPE_ACK: u8 = 0x02;
 const IEEE802154_FRAME_TYPE_COMMAND: u8 = 0x03;
 
-// ed_rss for H2 and C6 is the same
-const ENERGY_DETECT_RSS: i8 = 16;
+// TODO
+// // ed_rss for H2 and C6 is the same
+// const ENERGY_DETECT_RSS: i8 = 16;
 
-use crate::timer::current_millis;
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub struct OtError(otError);
 
-static RADIO: Mutex<RefCell<Option<&'static mut Ieee802154>>> = Mutex::new(RefCell::new(None));
+impl OtError {
+    pub const fn new(value: otError) -> Self {
+        Self(value)
+    }
 
-static NETWORK_SETTINGS: Mutex<RefCell<Option<NetworkSettings>>> = Mutex::new(RefCell::new(None));
-
-static CHANGE_CALLBACK: Mutex<RefCell<Option<&'static mut (dyn FnMut(ChangedFlags) + Send)>>> =
-    Mutex::new(RefCell::new(None));
-
-pub(crate) static TASKLETS_SHOULD_RUN: Mutex<RefCell<bool>> = Mutex::new(RefCell::new(false));
-
-#[cfg(feature = "srp-client")]
-static SRP_CHANGE_CALLBACK: Mutex<
-    RefCell<
-        Option<
-            &'static mut (dyn FnMut(
-                otError,
-                usize, // this replaces *const otSrpClientHostInfo,
-                usize, // this replaces *const otSrpClientService,
-                usize, // this replaces *const otSrpClientService,
-            ) + Send),
-        >,
-    >,
-> = Mutex::new(RefCell::new(None));
-
-static mut RCV_FRAME_PSDU: [u8; OT_RADIO_FRAME_MAX_SIZE as usize] =
-    [0u8; OT_RADIO_FRAME_MAX_SIZE as usize];
-static mut RCV_FRAME: otRadioFrame = otRadioFrame {
-    mPsdu: addr_of_mut!(RCV_FRAME_PSDU) as *mut u8,
-    mLength: 0,
-    mChannel: 0,
-    mRadioType: 0,
-    mInfo: otRadioFrame__bindgen_ty_1 {
-        mRxInfo: otRadioFrame__bindgen_ty_1__bindgen_ty_2 {
-            mTimestamp: 0,
-            mAckFrameCounter: 0,
-            mAckKeyId: 0,
-            mRssi: 0,
-            mLqi: 0,
-            _bitfield_align_1: [0u8; 0],
-            _bitfield_1: __BindgenBitfieldUnit::new([0u8; 1]),
-        },
-    },
-};
-
-#[doc(hidden)]
-#[macro_export]
-macro_rules! checked {
-    ($value:expr) => {
-        if $value != 0 {
-            Err(crate::Error::InternalError($value))
-        } else {
-            core::result::Result::<(), crate::Error>::Ok(())
-        }
-    };
-}
-
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum Error {
-    InternalError(u32),
-}
-
-bitflags! {
-    /// Specific state/configuration that has changed
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    pub struct ChangedFlags: u32 {
-        /// IPv6 address was added
-        const Ipv6AddressAdded = OT_CHANGED_IP6_ADDRESS_ADDED;
-        /// IPv6 address was removed
-        const Ipv6AddressRemoved = OT_CHANGED_IP6_ADDRESS_REMOVED;
-        /// Role (disabled, detached, child, router, leader) changed
-        const ThreadRoleChanged = OT_CHANGED_THREAD_ROLE;
-        /// The link-local address changed
-        const ThreadLlAddressChanged = OT_CHANGED_THREAD_LL_ADDR;
-        /// The mesh-local address changed
-        const ThreadMeshLocalAddressChanged = OT_CHANGED_THREAD_ML_ADDR;
-        ///  RLOC was added
-        const ThreadRlocAdded = OT_CHANGED_THREAD_RLOC_ADDED;
-        /// RLOC was removed
-        const ThreadRlocRemoved = OT_CHANGED_THREAD_RLOC_REMOVED;
-        /// Partition ID changed
-        const ThreadPartitionIdChanged = OT_CHANGED_THREAD_PARTITION_ID;
-        /// Thread Key Sequence changed
-        const ThreadKeySequenceChanged = OT_CHANGED_THREAD_KEY_SEQUENCE_COUNTER;
-        /// Thread Network Data changed
-        const ThreadNetworkDataChanged = OT_CHANGED_THREAD_NETDATA;
-        /// Child was added
-        const ThreadChildAdded = OT_CHANGED_THREAD_CHILD_ADDED;
-        /// Child was removed
-        const ThreadChildRemoved = OT_CHANGED_THREAD_CHILD_REMOVED;
-        /// Subscribed to a IPv6 multicast address
-        const Ipv6MulticastSubscribed = OT_CHANGED_IP6_MULTICAST_SUBSCRIBED;
-        /// Unsubscribed from a IPv6 multicast address
-        const Ipv6MulticastUnsubscribed = OT_CHANGED_IP6_MULTICAST_UNSUBSCRIBED;
-        /// Thread network channel changed
-        const ThreadNetworkChannelChanged = OT_CHANGED_THREAD_CHANNEL;
-        /// Thread network PAN Id changed
-        const ThreadPanIdChanged = OT_CHANGED_THREAD_PANID;
-        /// Thread network name changed
-        const ThreadNetworkNameChanged = OT_CHANGED_THREAD_NETWORK_NAME;
-        /// Thread network extended PAN ID changed
-        const ThreadExtendedPanIdChanged = OT_CHANGED_THREAD_EXT_PANID;
-        /// Network key changed
-        const ThreadNetworkKeyChanged = OT_CHANGED_NETWORK_KEY;
-        /// PSKc changed
-        const ThreadPskcChanged = OT_CHANGED_PSKC;
-        /// Security Policy changed
-        const ThreadSecurityPolicyChanged = OT_CHANGED_SECURITY_POLICY;
-        /// Channel Manager new pending Thread channel changed
-        const ChannelManagerNewChannelChanged = OT_CHANGED_CHANNEL_MANAGER_NEW_CHANNEL;
-        /// Supported channel mask changed
-        const SupportedChannelMaskChanged = OT_CHANGED_SUPPORTED_CHANNEL_MASK;
-        /// Commissioner state changed
-        const CommissionerStateChanged = OT_CHANGED_COMMISSIONER_STATE;
-        /// Thread network interface state changed
-        const ThreadNetworkInterfaceStateChanged = OT_CHANGED_THREAD_NETIF_STATE;
-        /// Backbone Router state changed
-        const ThreadBackboneRouterStateChanged = OT_CHANGED_THREAD_BACKBONE_ROUTER_STATE;
-        /// Local Backbone Router configuration changed
-        const ThreadBackboneRouterLocalChanged = OT_CHANGED_THREAD_BACKBONE_ROUTER_LOCAL;
-        /// Joiner state changed
-        const JoinerStateChanged = OT_CHANGED_JOINER_STATE;
-        /// Active Operational Dataset changed
-        const ActiveDatasetChanged = OT_CHANGED_ACTIVE_DATASET;
-        /// Pending Operational Dataset changed
-        const PendingDatasetChanged = OT_CHANGED_PENDING_DATASET;
-        /// State of the Nat64 Translator changed
-        const Nat64TranslatorStateChanged= OT_CHANGED_NAT64_TRANSLATOR_STATE;
-        /// Parent link quality changed
-        const ParentLinkQualityChanged = OT_CHANGED_PARENT_LINK_QUALITY;
+    pub fn into_inner(self) -> otError {
+        self.0
     }
 }
 
-/// IPv6 network interface unicast address
-#[derive(Debug, Clone, Copy)]
-pub struct NetworkInterfaceUnicastAddress {
-    /// The IPv6 unicast address
-    pub address: no_std_net::Ipv6Addr,
-    /// The Prefix length (in bits)
-    pub prefix: u8,
-    /// The IPv6 address origin
-    pub origin: u8,
+impl From<u32> for OtError {
+    fn from(value: u32) -> Self {
+        Self(value)
+    }
 }
 
-/// Thread Dataset timestamp
-#[derive(Debug, Clone, Copy)]
-pub struct ThreadTimestamp {
-    pub seconds: u64,
-    pub ticks: u16,
-    pub authoritative: bool,
-}
-
-/// Security Policy
-#[derive(Debug, Clone, Default)]
-pub struct SecurityPolicy {
-    /// The value for thrKeyRotation in units of hours.
-    pub rotation_time: u16,
-    /// Autonomous Enrollment is enabled.
-    pub autonomous_enrollment_enabled: bool,
-    /// Commercial Commissioning is enabled.
-    pub commercial_commissioning_enabled: bool,
-    /// External Commissioner authentication is allowed.
-    pub external_commissioning_enabled: bool,
-    /// Native Commissioning using PSKc is allowed.
-    pub native_commissioning_enabled: bool,
-    /// Network Key Provisioning is enabled.
-    pub network_key_provisioning_enabled: bool,
-    /// Non-CCM Routers enabled.
-    pub non_ccm_routers_enabled: bool,
-    /// Obtaining the Network Key for out-of-band commissioning is enabled.
-    pub obtain_network_key_enabled: bool,
-    /// Thread 1.0/1.1.x Routers are enabled.
-    pub routers_enabled: bool,
-    /// ToBLE link is enabled.
-    pub toble_link_enabled: bool,
-    /// Version-threshold for Routing.
-    pub version_threshold_for_routing: u8,
-}
-
-/// Active or Pending Operational Dataset
-#[derive(Debug, Clone, Default)]
-pub struct OperationalDataset {
-    /// Active Timestamp
-    pub active_timestamp: Option<ThreadTimestamp>,
-    /// Pending Timestamp
-    pub pending_timestamp: Option<ThreadTimestamp>,
-    /// Network Key
-    pub network_key: Option<[u8; 16]>,
-    /// Network name
-    pub network_name: Option<heapless::String<{ OT_NETWORK_NAME_MAX_SIZE as usize }>>,
-    /// Extended PAN ID
-    pub extended_pan_id: Option<[u8; 8]>,
-    /// Mesh Local Prefix
-    pub mesh_local_prefix: Option<[u8; 8]>,
-    /// Delay Timer
-    pub delay: Option<u32>,
-    /// PAN ID
-    pub pan_id: Option<u16>,
-    /// Channel
-    pub channel: Option<u16>,
-    /// PSKc
-    pub pskc: Option<[u8; 16]>,
-    /// Security Policy.
-    pub security_policy: Option<SecurityPolicy>,
-    /// Channel Mask
-    pub channel_mask: Option<u32>,
-}
-
-#[derive(Debug, Clone, Copy, Default)]
-struct NetworkSettings {
-    promiscuous: bool,
-    rx_when_idle: bool,
-    ext_address: u64,
-    short_address: u16,
-    pan_id: u16,
-    channel: u8,
-}
-
-/// Instance of OpenThread
-#[non_exhaustive]
-pub struct OpenThread<'a> {
-    _phantom: PhantomData<&'a ()>,
-    // pub for now
-    pub instance: *mut otInstance,
-}
-
-impl<'a> OpenThread<'a> {
-    pub fn new(
-        radio: &'a mut Ieee802154,
-        timer: Alarm<
-            'static,
-            Target,
-            Blocking,
-            SpecificComparator<'static, 0>,
-            SpecificUnit<'static, 0>,
-        >,
-        rng: esp_hal::rng::Rng,
-    ) -> Self {
-        timer::install_isr(timer);
-        entropy::init_rng(rng);
-
-        radio.set_tx_done_callback_fn(radio::trigger_tx_done);
-
-        critical_section::with(|cs| {
-            RADIO
-                .borrow_ref_mut(cs)
-                .replace(unsafe { core::mem::transmute(radio) });
-        });
-
-        let instance = unsafe { otInstanceInitSingle() };
-        log::debug!("otInstanceInitSingle done, instance = {:p}", instance);
-
-        unsafe {
-            crate::platform::CURRENT_INSTANCE = instance as usize;
+macro_rules! ot {
+    ($code: expr) => {{
+        match $code {
+            $crate::sys::otError_OT_ERROR_NONE => Ok(()),
+            err => Err($crate::OtError::new(err)),
         }
+    }};
+}
 
-        let res = unsafe {
-            otSetStateChangedCallback(instance, Some(change_callback), core::ptr::null_mut())
-        };
-        log::debug!("otSetStateChangedCallback {res}");
+pub trait IntoOtCode {
+    fn into_ot_code(self) -> otError;
+}
 
-        Self {
-            _phantom: PhantomData,
-            instance,
+impl IntoOtCode for Result<(), OtError> {
+    fn into_ot_code(self) -> otError {
+        match self {
+            Ok(_) => otError_OT_ERROR_NONE,
+            Err(e) => e.into_inner(),
         }
     }
+}
 
-    pub fn set_radio_config(&mut self, config: Config) -> Result<(), Error> {
-        critical_section::with(|cs| {
-            let mut radio = RADIO.borrow_ref_mut(cs);
-            let radio = radio.borrow_mut();
+pub struct OtController<'a, C, F>(&'a OpenThread<C, F>);
 
-            if let Some(radio) = radio.as_mut() {
-                radio.set_config(config)
-            }
-        });
-        Ok(())
-    }
+impl<C, F> OtController<'_, C, F>
+where
+    C: RngCore,
+    F: FnMut(OtRx),
+{
+    pub fn set_dataset(&mut self, dataset: &OperationalDataset<'_>) -> Result<(), OtError> {
+        let mut ot_active = self.0.activate();
 
-    /// Sets the Active Operational Dataset
-    pub fn set_active_dataset(&mut self, dataset: OperationalDataset) -> Result<(), Error> {
-        let mut raw_dataset = otOperationalDataset {
-            mActiveTimestamp: otTimestamp {
-                mSeconds: 0,
-                mTicks: 0,
-                mAuthoritative: false,
-            },
-            mPendingTimestamp: otTimestamp {
-                mSeconds: 0,
-                mTicks: 0,
-                mAuthoritative: false,
-            },
-            mNetworkKey: otNetworkKey { m8: [0u8; 16] },
-            mNetworkName: otNetworkName { m8: [0i8; 17] },
-            mExtendedPanId: otExtendedPanId { m8: [0u8; 8] },
-            mMeshLocalPrefix: otMeshLocalPrefix { m8: [0u8; 8] },
-            mDelay: 0,
-            mPanId: 0,
-            mChannel: 0,
-            mPskc: otPskc { m8: [0u8; 16] },
-            mSecurityPolicy: otSecurityPolicy {
-                mRotationTime: 0,
-                _bitfield_align_1: [0u8; 0],
-                _bitfield_1: otSecurityPolicy::new_bitfield_1(
-                    false, false, false, false, false, false, false, false, false, 0,
-                ),
-            },
-            mChannelMask: 0,
-            mComponents: otOperationalDatasetComponents {
-                mIsActiveTimestampPresent: true,
-                mIsPendingTimestampPresent: false,
-                mIsNetworkKeyPresent: true,
-                mIsNetworkNamePresent: true,
-                mIsExtendedPanIdPresent: true,
-                mIsMeshLocalPrefixPresent: false,
-                mIsDelayPresent: false,
-                mIsPanIdPresent: true,
-                mIsChannelPresent: true,
-                mIsPskcPresent: false,
-                mIsSecurityPolicyPresent: false,
-                mIsChannelMaskPresent: false,
-                mIsWakeupChannelPresent: false, // not supporting Thread in Mobile at this time
-            },
-            mWakeupChannel: 0, // not supporting Thread in Mobile at this time
-        };
+        dataset.store_raw(&mut ot_active.data.dataset_resources.dataset);
 
-        let mut active_timestamp_present = false;
-        let mut pending_timestamp_present = false;
-        let mut network_key_present = false;
-        let mut network_name_present = false;
-        let mut extended_pan_present = false;
-        let mut mesh_local_prefix_present = false;
-        let mut delay_present = false;
-        let mut pan_id_present = false;
-        let mut channel_present = false;
-        let mut pskc_present = false;
-        let mut security_policy_present = false;
-        let mut channel_mask_present = false;
-
-        if let Some(active_timestamp) = dataset.active_timestamp {
-            raw_dataset.mActiveTimestamp = otTimestamp {
-                mSeconds: active_timestamp.seconds,
-                mTicks: active_timestamp.ticks,
-                mAuthoritative: active_timestamp.authoritative,
-            };
-            active_timestamp_present = true;
-        }
-
-        if let Some(pending_timestamp) = dataset.pending_timestamp {
-            raw_dataset.mActiveTimestamp = otTimestamp {
-                mSeconds: pending_timestamp.seconds,
-                mTicks: pending_timestamp.ticks,
-                mAuthoritative: pending_timestamp.authoritative,
-            };
-            pending_timestamp_present = true;
-        }
-
-        if let Some(network_key) = dataset.network_key {
-            raw_dataset.mNetworkKey = otNetworkKey { m8: network_key };
-            network_key_present = true;
-        }
-
-        if let Some(network_name) = dataset.network_name {
-            let mut raw = [0i8; 17];
-            raw[..network_name.len()]
-                .copy_from_slice(unsafe { core::mem::transmute(network_name.as_bytes()) });
-            raw_dataset.mNetworkName = otNetworkName { m8: raw };
-            network_name_present = true;
-        }
-
-        if let Some(extended_pan_id) = dataset.extended_pan_id {
-            raw_dataset.mExtendedPanId = otExtendedPanId {
-                m8: extended_pan_id,
-            };
-            extended_pan_present = true;
-        }
-
-        if let Some(mesh_local_prefix) = dataset.mesh_local_prefix {
-            raw_dataset.mMeshLocalPrefix = otMeshLocalPrefix {
-                m8: mesh_local_prefix,
-            };
-            mesh_local_prefix_present = true;
-        }
-
-        if let Some(delay) = dataset.delay {
-            raw_dataset.mDelay = delay;
-            delay_present = true;
-        }
-
-        if let Some(pan_id) = dataset.pan_id {
-            raw_dataset.mPanId = pan_id;
-            pan_id_present = true;
-            let settings: NetworkSettings = get_settings();
-            set_settings(NetworkSettings { pan_id, ..settings });
-        }
-
-        if let Some(channel) = dataset.channel {
-            raw_dataset.mChannel = channel;
-            channel_present = true;
-            let settings: NetworkSettings = get_settings();
-            set_settings(NetworkSettings {
-                channel: channel as u8,
-                ..settings
-            });
-        }
-
-        if let Some(pskc) = dataset.pskc {
-            raw_dataset.mPskc = otPskc { m8: pskc };
-            pskc_present = true;
-        }
-
-        if let Some(security_policy) = dataset.security_policy {
-            raw_dataset.mSecurityPolicy = otSecurityPolicy {
-                mRotationTime: security_policy.rotation_time,
-                _bitfield_align_1: [0u8; 0],
-                _bitfield_1: otSecurityPolicy::new_bitfield_1(
-                    security_policy.obtain_network_key_enabled,
-                    security_policy.native_commissioning_enabled,
-                    security_policy.routers_enabled,
-                    security_policy.external_commissioning_enabled,
-                    security_policy.commercial_commissioning_enabled,
-                    security_policy.autonomous_enrollment_enabled,
-                    security_policy.network_key_provisioning_enabled,
-                    security_policy.toble_link_enabled,
-                    security_policy.non_ccm_routers_enabled,
-                    security_policy.version_threshold_for_routing,
-                ),
-            };
-            security_policy_present = true;
-        }
-
-        if let Some(channel_mask) = dataset.channel_mask {
-            raw_dataset.mChannelMask = channel_mask;
-            channel_mask_present = true;
-        }
-
-        raw_dataset.mComponents = otOperationalDatasetComponents {
-            mIsActiveTimestampPresent: active_timestamp_present,
-            mIsPendingTimestampPresent: pending_timestamp_present,
-            mIsNetworkKeyPresent: network_key_present,
-            mIsNetworkNamePresent: network_name_present,
-            mIsExtendedPanIdPresent: extended_pan_present,
-            mIsMeshLocalPrefixPresent: mesh_local_prefix_present,
-            mIsDelayPresent: delay_present,
-            mIsPanIdPresent: pan_id_present,
-            mIsChannelPresent: channel_present,
-            mIsPskcPresent: pskc_present,
-            mIsSecurityPolicyPresent: security_policy_present,
-            mIsChannelMaskPresent: channel_mask_present,
-            mIsWakeupChannelPresent: false, // we are not supporting Thread in Mobile in this lib right now
-        };
-
-        checked!(unsafe { otDatasetSetActive(self.instance, &raw_dataset) })
-    }
-
-    /// Set the change callback
-    pub fn set_change_callback(
-        &mut self,
-        callback: Option<&'a mut (dyn FnMut(ChangedFlags) + Send)>,
-    ) {
-        critical_section::with(|cs| {
-            let mut change_callback = CHANGE_CALLBACK.borrow_ref_mut(cs);
-            *change_callback = unsafe { core::mem::transmute(callback) };
-        });
+        ot_active.call_c(|ot_active| {
+            ot!(unsafe {
+                otDatasetSetActive(
+                    ot_active.data.instance,
+                    &ot_active.data.dataset_resources.dataset,
+                )
+            })
+        })
     }
 
     /// Brings the IPv6 interface up or down.
-    pub fn ipv6_set_enabled(&mut self, enabled: bool) -> Result<(), Error> {
-        checked!(unsafe { otIp6SetEnabled(self.instance, enabled) })
+    pub fn enable_ipv6(&mut self, enable: bool) -> Result<(), OtError> {
+        self.0
+            .activate()
+            .call_c(|ot_active| ot!(unsafe { otIp6SetEnabled(ot_active.data.instance, enable) }))
     }
 
     /// This function starts Thread protocol operation.
     ///
     /// The interface must be up when calling this function.
-    pub fn thread_set_enabled(&mut self, enabled: bool) -> Result<(), Error> {
-        checked!(unsafe { otThreadSetEnabled(self.instance, enabled) })
+    pub fn enable_thread(&mut self, enable: bool) -> Result<(), OtError> {
+        self.0
+            .activate()
+            .call_c(|ot_active| ot!(unsafe { otThreadSetEnabled(ot_active.data.instance, enable) }))
     }
 
     /// Gets the list of IPv6 addresses assigned to the Thread interface.
-    pub fn ipv6_get_unicast_addresses<const N: usize>(
-        &self,
-    ) -> heapless::Vec<NetworkInterfaceUnicastAddress, N> {
-        let mut result = heapless::Vec::new();
-        let mut addr = unsafe { otIp6GetUnicastAddresses(self.instance) };
+    pub fn ipv6_addrs(&mut self, buf: &mut [Ipv6Addr]) -> Result<usize, OtError> {
+        let mut ot_active = self.0.activate();
 
-        loop {
-            let a = unsafe { &*addr };
+        let addrs = ot_active
+            .call_c(|ot_active| unsafe { otIp6GetUnicastAddresses(ot_active.data.instance) });
 
-            let octets = unsafe { a.mAddress.mFields.m16 };
+        let mut offset = 0;
 
-            if result
-                .push(NetworkInterfaceUnicastAddress {
-                    address: no_std_net::Ipv6Addr::new(
-                        octets[0].to_be(),
-                        octets[1].to_be(),
-                        octets[2].to_be(),
-                        octets[3].to_be(),
-                        octets[4].to_be(),
-                        octets[5].to_be(),
-                        octets[6].to_be(),
-                        octets[7].to_be(),
-                    ),
-                    prefix: a.mPrefixLength,
-                    origin: a.mAddressOrigin,
-                })
-                .is_err()
-            {
-                break;
+        while !addrs.is_null() {
+            let addrs = unsafe { addrs.as_ref() }.unwrap();
+
+            if offset < buf.len() {
+                buf[offset] = unsafe { addrs.mAddress.mFields.m16 }.into();
             }
 
-            if a.mNext.is_null() {
-                break;
-            }
-
-            addr = a.mNext;
+            offset += 1;
         }
 
-        result
+        Ok(offset)
     }
 
-    /// Creates a new UDP socket
-    pub fn get_udp_socket<'s, const BUFFER_SIZE: usize>(
-        &'s self,
-    ) -> Result<UdpSocket<'s, 'a, BUFFER_SIZE>, Error>
-    where
-        'a: 's,
-    {
-        let ot_socket = otUdpSocket {
-            mSockName: otSockAddr {
-                mAddress: otIp6Address {
-                    mFields: otIp6Address__bindgen_ty_1 { m32: [0, 0, 0, 0] },
-                },
-                mPort: 0,
-            },
-            mPeerName: otSockAddr {
-                mAddress: otIp6Address {
-                    mFields: otIp6Address__bindgen_ty_1 { m32: [0, 0, 0, 0] },
-                },
-                mPort: 0,
-            },
-            mHandler: Some(udp_receive_handler),
-            mContext: core::ptr::null_mut(),
-            mHandle: core::ptr::null_mut(),
-            mNext: core::ptr::null_mut(),
+    pub async fn wait_changed(&mut self) {
+        self.0.signals.controller.wait().await;
+    }
+}
+
+pub struct OtRunner<'a, R, C, F> {
+    radio: R,
+    ot: &'a OpenThread<C, F>,
+}
+
+impl<R, C, F> OtRunner<'_, R, C, F>
+where
+    R: Radio,
+    C: RngCore,
+    F: FnMut(OtRx),
+{
+    pub async fn run(&mut self) -> ! {
+        self.ot.run(&mut self.radio).await
+    }
+}
+
+pub struct OtRx(*const otMessage);
+
+impl OtRx {
+    pub fn len(&self) -> usize {
+        unsafe { otMessageGetLength(self.0) as _ }
+    }
+
+    pub fn copy_to(&self, buf: &mut [u8]) {
+        let len = self.len();
+
+        if len <= buf.len() {
+            unsafe {
+                otMessageRead(self.0, 0, buf.as_mut_ptr() as *mut _, len as _);
+            }
+        }
+    }
+}
+
+pub struct OtTx<'a, C, F>(&'a OpenThread<C, F>);
+
+impl<C, F> OtTx<'_, C, F>
+where
+    C: RngCore,
+    F: FnMut(OtRx),
+{
+    pub fn tx(&mut self, packet: &[u8]) -> Result<(), OtError> {
+        self.0.activate().tx_ip6(packet)
+    }
+}
+
+pub struct OpenThread<C, F> {
+    signals: OtSignals,
+    data: RefCell<OtData>,
+    rng: RefCell<C>,
+    rx_ipv6: RefCell<F>,
+}
+
+impl<C, F> OpenThread<C, F>
+where
+    C: RngCore,
+    F: FnMut(OtRx),
+{
+    pub fn new(rng: C, rx: F) -> Result<Self, OtError> {
+        // TODO: Optimize the memory of this
+        let this = Self {
+            signals: OtSignals::new(),
+            data: RefCell::new(OtData::new()),
+            rng: RefCell::new(rng),
+            rx_ipv6: RefCell::new(rx),
         };
 
-        Ok(UdpSocket {
-            ot_socket,
-            ot: self,
-            receive_len: 0,
-            receive_from: [0u8; 16],
-            receive_port: 0,
-            max: BUFFER_SIZE,
-            _pinned: PhantomPinned::default(),
-            receive_buffer: [0u8; BUFFER_SIZE],
+        let instance = unsafe { otInstanceInitSingle() };
+
+        log::debug!("otInstanceInitSingle done, instance = {:p}", instance);
+
+        this.data.borrow_mut().instance = instance;
+
+        // TODO: Remove on drop
+        this.activate().call_c(|ot_active| {
+            unsafe {
+                otIp6SetReceiveCallback(
+                    ot_active.data.instance,
+                    Some(ActiveOpenThread::<C, F>::ot_c_ip6_receive_callback),
+                    ot_active.data.instance as *mut _,
+                )
+            }
+
+            ot!(unsafe {
+                otSetStateChangedCallback(
+                    ot_active.data.instance,
+                    Some(ActiveOpenThread::<C, F>::ot_c_change_callback),
+                    ot_active.data.instance as *mut _,
+                )
+            })
+        })?;
+
+        Ok(this)
+    }
+
+    pub fn split<R>(
+        &mut self,
+        radio: R,
+    ) -> (
+        OtController<'_, C, F>,
+        OtTx<'_, C, F>,
+        OtRunner<'_, R, C, F>,
+    )
+    where
+        R: Radio,
+    {
+        self.data.borrow_mut().radio_resources.init();
+
+        (
+            OtController(&*self),
+            OtTx(&*self),
+            OtRunner { radio, ot: &*self },
+        )
+    }
+
+    fn activate(&self) -> ActiveOpenThread<'_, C, F> {
+        ActiveOpenThread::new(self)
+    }
+
+    async fn run<R>(&self, radio: R) -> !
+    where
+        R: Radio,
+    {
+        let mut radio = pin!(self.run_radio(radio));
+        let mut alarm = pin!(self.run_alarm());
+        let mut openthread = pin!(self.run_openthread());
+
+        let result =
+            embassy_futures::select::select3(&mut radio, &mut alarm, &mut openthread).await;
+
+        match result {
+            Either3::First(r) | Either3::Second(r) | Either3::Third(r) => r,
+        }
+    }
+
+    async fn run_alarm(&self) -> ! {
+        loop {
+            let mut when = self.signals.alarm.wait().await;
+
+            loop {
+                let result = embassy_futures::select::select(
+                    self.signals.alarm.wait(),
+                    embassy_time::Timer::at(when),
+                )
+                .await;
+
+                match result {
+                    Either::First(new_when) => when = new_when,
+                    Either::Second(_) => {
+                        self.signals.ot.signal(());
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    async fn run_radio<R>(&self, mut radio: R) -> !
+    where
+        R: Radio,
+    {
+        loop {
+            let mut cmd = self.signals.radio.wait().await;
+
+            // TODO: Borrow it from the resources
+            let mut psdu = [0_u8; OT_RADIO_FRAME_MAX_SIZE as usize];
+
+            loop {
+                match cmd {
+                    RadioCommand::Tx => {
+                        {
+                            let mut data = self.data.borrow_mut();
+                            psdu.copy_from_slice(&data.radio_resources.snd_psdu);
+
+                            data.radio_status = RadioStatus::TxPending;
+                        }
+
+                        self.signals.ot.signal(());
+
+                        let mut new_cmd = pin!(self.signals.radio.wait());
+                        let mut tx = pin!(radio.transmit(&psdu));
+
+                        let result = embassy_futures::select::select(&mut new_cmd, &mut tx).await;
+
+                        match result {
+                            Either::First(new_cmd) => {
+                                cmd = new_cmd;
+                                self.data.borrow_mut().radio_status = RadioStatus::TxDone; // TODO
+                                self.signals.ot.signal(());
+                            }
+                            Either::Second(result) => {
+                                result.unwrap(); // TODO
+
+                                self.data.borrow_mut().radio_status = RadioStatus::TxDone; // TODO
+                                self.signals.ot.signal(());
+
+                                break;
+                            }
+                        }
+                    }
+                    RadioCommand::Rx(channel) => {
+                        self.data.borrow_mut().radio_status = RadioStatus::RxPending;
+                        self.signals.ot.signal(());
+
+                        let result = {
+                            let mut new_cmd = pin!(self.signals.radio.wait());
+                            let mut rx = pin!(radio.receive(channel, &mut psdu));
+
+                            embassy_futures::select::select(&mut new_cmd, &mut rx).await
+                        };
+
+                        match result {
+                            Either::First(new_cmd) => {
+                                cmd = new_cmd;
+                                self.data.borrow_mut().radio_status = RadioStatus::Idle;
+                                self.signals.ot.signal(());
+                            }
+                            Either::Second(result) => {
+                                result.unwrap(); // TODO
+
+                                {
+                                    let mut data = self.data.borrow_mut();
+                                    data.radio_resources.rcv_psdu.copy_from_slice(&psdu);
+                                    data.radio_status = RadioStatus::RxDone;
+                                }
+                                self.signals.ot.signal(());
+
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    async fn run_openthread(&self) -> ! {
+        loop {
+            self.activate().process();
+            self.signals.ot.wait().await;
+        }
+    }
+}
+
+struct ActiveOpenThread<'a, C, F> {
+    signals: &'a OtSignals,
+    data: RefMut<'a, OtData>,
+    rng: RefMut<'a, C>,
+    rx_ipv6: RefMut<'a, F>,
+}
+
+impl<'a, C, F> ActiveOpenThread<'a, C, F>
+where
+    C: RngCore,
+    F: FnMut(OtRx),
+{
+    fn new(ot: &'a OpenThread<C, F>) -> Self {
+        Self {
+            signals: &ot.signals,
+            data: ot.data.borrow_mut(),
+            rng: ot.rng.borrow_mut(),
+            rx_ipv6: ot.rx_ipv6.borrow_mut(),
+        }
+    }
+
+    fn tx_ip6(&mut self, packet: &[u8]) -> Result<(), OtError> {
+        self.call_c(|ot_active| {
+            let msg = unsafe {
+                otIp6NewMessageFromBuffer(
+                    ot_active.data.instance,
+                    packet.as_ptr(),
+                    packet.len() as _,
+                    &otMessageSettings {
+                        mLinkSecurityEnabled: true,
+                        mPriority: otMessagePriority_OT_MESSAGE_PRIORITY_NORMAL as _,
+                    },
+                )
+            };
+
+            // TODO: Check if the message was allocated
+
+            ot!(unsafe { otIp6Send(ot_active.data.instance, msg) })
         })
     }
 
-    /// Run tasks
-    ///
-    /// Make sure to periodically call this function.
-    pub fn run_tasklets(&self) {
-        let should_run = critical_section::with(|cs| {
-            let should_run = *TASKLETS_SHOULD_RUN.borrow_ref_mut(cs);
-            *TASKLETS_SHOULD_RUN.borrow_ref_mut(cs) = false;
-            should_run
-        });
+    fn process(&mut self) {
+        loop {
+            let mut processed = false;
 
-        if should_run {
-            unsafe {
-                otTaskletsProcess(self.instance);
+            processed |= self.process_tasklets();
+            processed |= self.process_alarm();
+            processed |= self.process_radio();
+
+            if !processed {
+                break;
             }
         }
     }
 
-    /// Run due timers, get and forward received messages
-    ///
-    /// Make sure to periodically call this function.
-    pub fn process(&self) {
-        crate::timer::run_if_due(self.instance);
-        if let Some(raw) = with_radio(|radio| radio.get_raw_received()).unwrap() {
-            match frame_get_type(&raw.data) {
-                IEEE802154_FRAME_TYPE_DATA => {
-                    let rssi: i8 = {
-                        let idx = match (raw.data[0] as usize).cmp(&raw.data.len()) {
-                            core::cmp::Ordering::Less => {
-                                // guard against attempting to access the (0 - 1)th index
-                                if raw.data[0] == 0 {
-                                    log::warn!("raw.data[0] is 0, RSSI may be invalid",);
-                                    0
-                                } else {
-                                    raw.data[0] as usize - 1
-                                }
-                            }
-                            core::cmp::Ordering::Greater | core::cmp::Ordering::Equal => {
-                                raw.data.len() - 1
-                            }
-                        };
-                        raw.data[idx] as i8
-                    };
+    fn process_tasklets(&mut self) -> bool {
+        if self.data.run_tasklets {
+            self.data.run_tasklets = false;
 
-                    unsafe {
-                        // len indexes into both the RCV_FRAME_PSDU and raw.data array
-                        // so must be sized appropriately
-                        let len = if raw.data[0] as usize > OT_RADIO_FRAME_MAX_SIZE as usize
-                            && raw.data[1..].len() >= OT_RADIO_FRAME_MAX_SIZE as usize
-                        {
-                            log::warn!(
-                                "raw.data[0] {:?} larger than rcv frame \
-                                psdu len and raw.data.len()! RCV {:02x?}",
-                                raw.data[0],
-                                &raw.data[1..][..OT_RADIO_FRAME_MAX_SIZE as usize]
-                            );
-                            OT_RADIO_FRAME_MAX_SIZE as usize
-                        } else if raw.data[0] as usize > OT_RADIO_FRAME_MAX_SIZE as usize
-                            && raw.data[1..].len() < OT_RADIO_FRAME_MAX_SIZE as usize
-                        {
-                            log::warn!(
-                                "raw.data[0] {:?} larger than raw.data.len()! \
-                                RCV {:02x?}",
-                                raw.data[0],
-                                &raw.data[1..][..raw.data.len() - 1]
-                            );
-                            raw.data[1..].len()
-                        } else {
-                            raw.data[0] as usize
-                        };
+            self.call_c(|ot_active| unsafe { otTaskletsProcess(ot_active.data.instance) });
 
-                        log::debug!("RCV {:02x?}", &raw.data[1..][..len as usize]);
-
-                        RCV_FRAME_PSDU[..len as usize]
-                            .copy_from_slice(&raw.data[1..][..len as usize]);
-                        RCV_FRAME.mLength = len as u16;
-                        RCV_FRAME.mRadioType = 1; // ????
-                        RCV_FRAME.mChannel = raw.channel;
-                        RCV_FRAME.mInfo.mRxInfo.mRssi = rssi;
-                        RCV_FRAME.mInfo.mRxInfo.mLqi = rssi_to_lqi(rssi);
-                        RCV_FRAME.mInfo.mRxInfo.mTimestamp = current_millis() * 1000;
-
-                        otPlatRadioReceiveDone(
-                            self.instance,
-                            addr_of_mut!(RCV_FRAME),
-                            otError_OT_ERROR_NONE,
-                        );
-                    }
-                }
-                IEEE802154_FRAME_TYPE_BEACON | IEEE802154_FRAME_TYPE_COMMAND => {
-                    log::warn!("Received beacon or mac command frame, triggering scan done");
-                    unsafe {
-                        otPlatRadioEnergyScanDone(self.instance, ENERGY_DETECT_RSS);
-                    }
-                }
-                IEEE802154_FRAME_TYPE_ACK => {
-                    log::debug!("Received ack frame");
-                }
-                _ => {
-                    // Drop unsupported frames
-                    log::warn!("Unsupported frame type received");
-                }
-            };
+            true
+        } else {
+            false
         }
     }
 
-    pub fn get_eui(&self, out: &mut [u8]) {
-        unsafe { otPlatRadioGetIeeeEui64(self.instance, out.as_mut_ptr()) }
-    }
+    fn process_alarm(&mut self) -> bool {
+        if self
+            .data
+            .alarm_status
+            .take()
+            .map(|when| when <= embassy_time::Instant::now())
+            .unwrap_or(false)
+        {
+            self.call_c(|ot_active| unsafe { otPlatAlarmMilliFired(ot_active.data.instance) });
 
-    #[cfg(feature = "srp-client")]
-    pub fn setup_srp_client_autostart(
-        &mut self,
-        callback: Option<
-            unsafe extern "C" fn(aServerSockAddr: *const otSockAddr, aContext: *mut c_void),
-        >,
-    ) -> Result<(), Error> {
-        if !callback.is_some() {
-            srp_client::enable_srp_autostart(self.instance);
-            return Ok(());
+            true
+        } else {
+            false
         }
-        srp_client::enable_srp_autostart_with_callback_and_context(
-            self.instance,
-            callback,
-            core::ptr::null_mut(),
-        );
-
-        Ok(())
     }
 
-    #[cfg(feature = "srp-client")]
-    pub fn setup_srp_client_host_addr_autoconfig(&mut self) -> Result<(), Error> {
-        srp_client::set_srp_client_host_addresses_auto_config(self.instance)?;
-        Ok(())
-    }
+    fn process_radio(&mut self) -> bool {
+        match self.data.radio_status {
+            RadioStatus::TxPending => {
+                self.call_c(|ot_active| unsafe {
+                    otPlatRadioTxStarted(
+                        ot_active.data.instance,
+                        &mut ot_active.data.radio_resources.snd_frame,
+                    )
+                });
+                self.data.radio_status = RadioStatus::Idle;
 
-    #[cfg(feature = "srp-client")]
-    pub fn setup_srp_client_set_hostname(&mut self, host_name: &str) -> Result<(), Error> {
-        srp_client::set_srp_client_host_name(self.instance, host_name.as_ptr() as _)?;
-        Ok(())
-    }
+                true
+            }
+            RadioStatus::TxDone => {
+                self.call_c(|ot_active| unsafe {
+                    otPlatRadioTxDone(
+                        ot_active.data.instance,
+                        &mut ot_active.data.radio_resources.snd_frame,
+                        &mut ot_active.data.radio_resources.ack_frame,
+                        otError_OT_ERROR_NONE, /* TODO*/
+                    )
+                });
+                self.data.radio_status = RadioStatus::Idle;
 
-    #[cfg(feature = "srp-client")]
-    pub fn setup_srp_client_with_addr(
-        &mut self,
-        host_name: &str,
-        addr: otSockAddr,
-    ) -> Result<(), Error> {
-        srp_client::set_srp_client_host_name(self.instance, host_name.as_ptr() as _)?;
-        srp_client::srp_client_start(self.instance, addr)?;
-        Ok(())
-    }
+                true
+            }
+            RadioStatus::RxDone => {
+                self.call_c(|ot_active| unsafe {
+                    otPlatRadioReceiveDone(
+                        ot_active.data.instance,
+                        &mut ot_active.data.radio_resources.rcv_frame,
+                        otError_OT_ERROR_NONE, /* TODO */
+                    )
+                });
+                self.data.radio_status = RadioStatus::Idle;
 
-    // For now, txt entries are expected to be provided as hex strings to avoid having to pull in the hex crate
-    // for example a key entry of 'abc' should be provided as '03616263'
-    #[cfg(feature = "srp-client")]
-    pub fn register_service_with_srp_client(
-        &mut self,
-        instance_name: &str,
-        service_name: &str,
-        service_labels: &[&str],
-        txt_entry: &str,
-        port: u16,
-        priority: Option<u16>,
-        weight: Option<u16>,
-        lease: Option<u32>,
-        key_lease: Option<u32>,
-    ) -> Result<(), Error> {
-        if !srp_client::is_srp_client_running(self.instance) {
-            self.setup_srp_client_autostart(None)?;
+                true
+            }
+            // TODO
+            _ => false,
         }
+    }
 
-        srp_client::add_srp_client_service(
-            self.instance,
-            instance_name.as_ptr() as _,
-            instance_name.len() as _,
-            service_name.as_ptr() as _,
-            service_name.len() as _,
-            service_labels,
-            txt_entry.as_ptr() as _,
-            txt_entry.len() as _,
-            port,
-            priority,
-            weight,
-            lease,
-            key_lease,
-        )?;
+    unsafe extern "C" fn ot_c_change_callback(flags: otChangedFlags, context: *mut c_void) {
+        let instance = context as *mut otInstance;
+
+        OtCallCProxy::ot_c_callback(instance, |cb| cb.changed(flags));
+    }
+
+    unsafe extern "C" fn ot_c_ip6_receive_callback(msg: *mut otMessage, context: *mut c_void) {
+        let instance = context as *mut otInstance;
+
+        OtCallCProxy::ot_c_callback(instance, |cb| cb.ipv6_received(msg));
+    }
+
+    fn call_c<O, T>(&mut self, f: O) -> T
+    where
+        O: FnOnce(&mut ActiveOpenThread<'_, C, F>) -> T,
+    {
+        let mut proxy = unsafe { self.call_c_proxy() };
+
+        proxy.call(|| f(self))
+    }
+
+    unsafe fn call_c_proxy(&mut self) -> OtCallCProxy {
+        OtCallCProxy::new(self.data.instance, self)
+    }
+
+    // /// Run due timers, get and forward received messages
+    // ///
+    // /// Make sure to periodically call this function.
+    // pub fn process(&self) {
+    //     crate::timer::run_if_due(self.instance);
+    //     if let Some(raw) = with_radio(|radio| radio.raw_received()).unwrap() {
+    //         match frame_get_type(&raw.data) {
+    //             IEEE802154_FRAME_TYPE_DATA => {
+    //                 let rssi: i8 = {
+    //                     let idx = match (raw.data[0] as usize).cmp(&raw.data.len()) {
+    //                         core::cmp::Ordering::Less => {
+    //                             // guard against attempting to access the (0 - 1)th index
+    //                             if raw.data[0] == 0 {
+    //                                 log::warn!("raw.data[0] is 0, RSSI may be invalid",);
+    //                                 0
+    //                             } else {
+    //                                 raw.data[0] as usize - 1
+    //                             }
+    //                         }
+    //                         core::cmp::Ordering::Greater | core::cmp::Ordering::Equal => {
+    //                             raw.data.len() - 1
+    //                         }
+    //                     };
+    //                     raw.data[idx] as i8
+    //                 };
+
+    //                 unsafe {
+    //                     // len indexes into both the RCV_FRAME_PSDU and raw.data array
+    //                     // so must be sized appropriately
+    //                     let len = if raw.data[0] as usize > OT_RADIO_FRAME_MAX_SIZE as usize
+    //                         && raw.data[1..].len() >= OT_RADIO_FRAME_MAX_SIZE as usize
+    //                     {
+    //                         log::warn!(
+    //                             "raw.data[0] {:?} larger than rcv frame \
+    //                             psdu len and raw.data.len()! RCV {:02x?}",
+    //                             raw.data[0],
+    //                             &raw.data[1..][..OT_RADIO_FRAME_MAX_SIZE as usize]
+    //                         );
+    //                         OT_RADIO_FRAME_MAX_SIZE as usize
+    //                     } else if raw.data[0] as usize > OT_RADIO_FRAME_MAX_SIZE as usize
+    //                         && raw.data[1..].len() < OT_RADIO_FRAME_MAX_SIZE as usize
+    //                     {
+    //                         log::warn!(
+    //                             "raw.data[0] {:?} larger than raw.data.len()! \
+    //                             RCV {:02x?}",
+    //                             raw.data[0],
+    //                             &raw.data[1..][..raw.data.len() - 1]
+    //                         );
+    //                         raw.data[1..].len()
+    //                     } else {
+    //                         raw.data[0] as usize
+    //                     };
+
+    //                     log::debug!("RCV {:02x?}", &raw.data[1..][..len as usize]);
+
+    //                     RCV_FRAME_PSDU[..len as usize]
+    //                         .copy_from_slice(&raw.data[1..][..len as usize]);
+    //                     RCV_FRAME.mLength = len as u16;
+    //                     RCV_FRAME.mRadioType = 1; // ????
+    //                     RCV_FRAME.mChannel = raw.channel;
+    //                     RCV_FRAME.mInfo.mRxInfo.mRssi = rssi;
+    //                     RCV_FRAME.mInfo.mRxInfo.mLqi = rssi_to_lqi(rssi);
+    //                     RCV_FRAME.mInfo.mRxInfo.mTimestamp = current_millis() * 1000;
+
+    //                     otPlatRadioReceiveDone(
+    //                         self.instance,
+    //                         addr_of_mut!(RCV_FRAME),
+    //                         otError_OT_ERROR_NONE,
+    //                     );
+    //                 }
+    //             }
+    //             IEEE802154_FRAME_TYPE_BEACON | IEEE802154_FRAME_TYPE_COMMAND => {
+    //                 log::warn!("Received beacon or mac command frame, triggering scan done");
+    //                 unsafe {
+    //                     otPlatRadioEnergyScanDone(self.instance, ENERGY_DETECT_RSS);
+    //                 }
+    //             }
+    //             IEEE802154_FRAME_TYPE_ACK => {
+    //                 log::debug!("Received ack frame");
+    //             }
+    //             _ => {
+    //                 // Drop unsupported frames
+    //                 log::warn!("Unsupported frame type received");
+    //             }
+    //         };
+    //     }
+    // }
+
+    // pub fn set_radio_config(&mut self, config: Config) -> Result<(), Error> {
+    //     critical_section::with(|cs| {
+    //         let mut radio = RADIO.borrow_ref_mut(cs);
+    //         let radio = radio.borrow_mut();
+
+    //         if let Some(radio) = radio.as_mut() {
+    //             radio.set_config(config)
+    //         }
+    //     });
+    //     Ok(())
+    // }
+
+    // /// Set the change callback
+    // pub fn set_change_callback(
+    //     &mut self,
+    //     callback: Option<&'a mut (dyn FnMut(ChangedFlags) + Send)>,
+    // ) {
+    //     critical_section::with(|cs| {
+    //         let mut change_callback = CHANGE_CALLBACK.borrow_ref_mut(cs);
+    //         *change_callback = unsafe { core::mem::transmute(callback) };
+    //     });
+    // }
+
+    // /// Brings the IPv6 interface up or down.
+    // pub fn ipv6_set_enabled(&mut self, enabled: bool) -> Result<(), OtError> {
+    //     self.ot_call(|instance| ot!(unsafe { otIp6SetEnabled(instance, enabled) }))
+    // }
+
+    // /// This function starts Thread protocol operation.
+    // ///
+    // /// The interface must be up when calling this function.
+    // pub fn thread_set_enabled(&mut self, enabled: bool) -> Result<(), OtError> {
+    //     self.ot_call(|instance| ot!(unsafe { otThreadSetEnabled(instance, enabled) }))
+    // }
+
+    // /// Gets the list of IPv6 addresses assigned to the Thread interface.
+    // pub fn ipv6_get_unicast_addresses<const N: usize>(
+    //     &self,
+    // ) -> heapless::Vec<NetworkInterfaceUnicastAddress, N> {
+    //     let mut result = heapless::Vec::new();
+    //     let mut addr = unsafe { otIp6GetUnicastAddresses(self.instance) };
+
+    //     loop {
+    //         let a = unsafe { &*addr };
+
+    //         let octets = unsafe { a.mAddress.mFields.m16 };
+
+    //         if result
+    //             .push(NetworkInterfaceUnicastAddress {
+    //                 address: no_std_net::Ipv6Addr::new(
+    //                     octets[0].to_be(),
+    //                     octets[1].to_be(),
+    //                     octets[2].to_be(),
+    //                     octets[3].to_be(),
+    //                     octets[4].to_be(),
+    //                     octets[5].to_be(),
+    //                     octets[6].to_be(),
+    //                     octets[7].to_be(),
+    //                 ),
+    //                 prefix: a.mPrefixLength,
+    //                 origin: a.mAddressOrigin,
+    //             })
+    //             .is_err()
+    //         {
+    //             break;
+    //         }
+
+    //         if a.mNext.is_null() {
+    //             break;
+    //         }
+
+    //         addr = a.mNext;
+    //     }
+
+    //     result
+    // }
+
+    // /// Creates a new UDP socket
+    // pub fn get_udp_socket<'s, const BUFFER_SIZE: usize>(
+    //     &'s self,
+    // ) -> Result<UdpSocket<'s, 'a, BUFFER_SIZE>, Error>
+    // where
+    //     'a: 's,
+    // {
+    //     let ot_socket = otUdpSocket {
+    //         mSockName: otSockAddr {
+    //             mAddress: otIp6Address {
+    //                 mFields: otIp6Address__bindgen_ty_1 { m32: [0, 0, 0, 0] },
+    //             },
+    //             mPort: 0,
+    //         },
+    //         mPeerName: otSockAddr {
+    //             mAddress: otIp6Address {
+    //                 mFields: otIp6Address__bindgen_ty_1 { m32: [0, 0, 0, 0] },
+    //             },
+    //             mPort: 0,
+    //         },
+    //         mHandler: Some(udp_receive_handler),
+    //         mContext: core::ptr::null_mut(),
+    //         mHandle: core::ptr::null_mut(),
+    //         mNext: core::ptr::null_mut(),
+    //     };
+
+    //     Ok(UdpSocket {
+    //         ot_socket,
+    //         ot: self,
+    //         receive_len: 0,
+    //         receive_from: [0u8; 16],
+    //         receive_port: 0,
+    //         max: BUFFER_SIZE,
+    //         _pinned: PhantomPinned::default(),
+    //         receive_buffer: [0u8; BUFFER_SIZE],
+    //     })
+    // }
+
+    // pub fn get_eui(&self, out: &mut [u8]) {
+    //     unsafe { otPlatRadioGetIeeeEui64(self.instance, out.as_mut_ptr()) }
+    // }
+
+    // #[cfg(feature = "srp-client")]
+    // pub fn setup_srp_client_autostart(
+    //     &mut self,
+    //     callback: Option<
+    //         unsafe extern "C" fn(aServerSockAddr: *const otSockAddr, aContext: *mut c_void),
+    //     >,
+    // ) -> Result<(), Error> {
+    //     if !callback.is_some() {
+    //         srp_client::enable_srp_autostart(self.instance);
+    //         return Ok(());
+    //     }
+    //     srp_client::enable_srp_autostart_with_callback_and_context(
+    //         self.instance,
+    //         callback,
+    //         core::ptr::null_mut(),
+    //     );
+
+    //     Ok(())
+    // }
+
+    // #[cfg(feature = "srp-client")]
+    // pub fn setup_srp_client_host_addr_autoconfig(&mut self) -> Result<(), Error> {
+    //     srp_client::set_srp_client_host_addresses_auto_config(self.instance)?;
+    //     Ok(())
+    // }
+
+    // #[cfg(feature = "srp-client")]
+    // pub fn setup_srp_client_set_hostname(&mut self, host_name: &str) -> Result<(), Error> {
+    //     srp_client::set_srp_client_host_name(self.instance, host_name.as_ptr() as _)?;
+    //     Ok(())
+    // }
+
+    // #[cfg(feature = "srp-client")]
+    // pub fn setup_srp_client_with_addr(
+    //     &mut self,
+    //     host_name: &str,
+    //     addr: otSockAddr,
+    // ) -> Result<(), Error> {
+    //     srp_client::set_srp_client_host_name(self.instance, host_name.as_ptr() as _)?;
+    //     srp_client::srp_client_start(self.instance, addr)?;
+    //     Ok(())
+    // }
+
+    // // For now, txt entries are expected to be provided as hex strings to avoid having to pull in the hex crate
+    // // for example a key entry of 'abc' should be provided as '03616263'
+    // #[cfg(feature = "srp-client")]
+    // pub fn register_service_with_srp_client(
+    //     &mut self,
+    //     instance_name: &str,
+    //     service_name: &str,
+    //     service_labels: &[&str],
+    //     txt_entry: &str,
+    //     port: u16,
+    //     priority: Option<u16>,
+    //     weight: Option<u16>,
+    //     lease: Option<u32>,
+    //     key_lease: Option<u32>,
+    // ) -> Result<(), Error> {
+    //     if !srp_client::is_srp_client_running(self.instance) {
+    //         self.setup_srp_client_autostart(None)?;
+    //     }
+
+    //     srp_client::add_srp_client_service(
+    //         self.instance,
+    //         instance_name.as_ptr() as _,
+    //         instance_name.len() as _,
+    //         service_name.as_ptr() as _,
+    //         service_name.len() as _,
+    //         service_labels,
+    //         txt_entry.as_ptr() as _,
+    //         txt_entry.len() as _,
+    //         port,
+    //         priority,
+    //         weight,
+    //         lease,
+    //         key_lease,
+    //     )?;
+
+    //     Ok(())
+    // }
+
+    // #[cfg(feature = "srp-client")]
+    // pub fn set_srp_client_ttl(&mut self, ttl: u32) {
+    //     srp_client::set_srp_client_ttl(self.instance, ttl);
+    // }
+
+    // #[cfg(feature = "srp-client")]
+    // pub fn get_srp_client_ttl(&mut self) -> u32 {
+    //     srp_client::get_srp_client_ttl(self.instance)
+    // }
+
+    // #[cfg(feature = "srp-client")]
+    // pub fn stop_srp_client(&mut self) -> Result<(), Error> {
+    //     srp_client::srp_client_stop(self.instance);
+    //     Ok(())
+    // }
+
+    // #[cfg(feature = "srp-client")]
+    // pub fn get_srp_client_state(&mut self) -> Result<Option<SrpClientItemState>, Error> {
+    //     Ok(srp_client::get_srp_client_host_state(self.instance))
+    // }
+
+    // #[cfg(feature = "srp-client")]
+    // pub fn clear_srp_client_host_buffers(&mut self) {
+    //     srp_client::srp_clear_all_client_services(self.instance)
+    // }
+
+    // /// If there are any services already registered, unregister them
+    // #[cfg(feature = "srp-client")]
+    // pub fn srp_unregister_all_services(
+    //     &mut self,
+    //     remove_keylease: bool,
+    //     send_update: bool,
+    // ) -> Result<(), Error> {
+    //     srp_client::srp_unregister_and_remove_all_client_services(
+    //         self.instance,
+    //         remove_keylease,
+    //         send_update,
+    //     )?;
+    //     Ok(())
+    // }
+
+    // #[cfg(feature = "srp-client")]
+    // pub fn srp_clear_service(&mut self, service: SrpClientService) -> Result<(), Error> {
+    //     srp_client::srp_clear_service(self.instance, service)?;
+    //     Ok(())
+    // }
+
+    // #[cfg(feature = "srp-client")]
+    // pub fn srp_unregister_service(&mut self, service: SrpClientService) -> Result<(), Error> {
+    //     srp_client::srp_unregister_service(self.instance, service)?;
+    //     Ok(())
+    // }
+
+    // #[cfg(feature = "srp-client")]
+    // pub fn srp_get_services(
+    //     &mut self,
+    // ) -> heapless::Vec<SrpClientService, { srp_client::MAX_SERVICES }> {
+    //     srp_client::get_srp_client_services(self.instance)
+    // }
+
+    // /// caller must call this prior to setting up the host config
+    // #[cfg(feature = "srp-client")]
+    // pub fn set_srp_state_callback(
+    //     &mut self,
+    //     callback: Option<&'a mut (dyn FnMut(otError, usize, usize, usize) + Send)>,
+    // ) {
+    //     critical_section::with(|cs| {
+    //         let mut srp_change_callback = SRP_CHANGE_CALLBACK.borrow_ref_mut(cs);
+    //         *srp_change_callback = unsafe { core::mem::transmute(callback) };
+    //     });
+
+    //     unsafe {
+    //         otSrpClientSetCallback(
+    //             self.instance,
+    //             Some(srp_state_callback),
+    //             core::ptr::null_mut(),
+    //         )
+    //     }
+    // }
+}
+
+impl<C, F> OtCallback for ActiveOpenThread<'_, C, F>
+where
+    C: RngCore,
+    F: FnMut(OtRx),
+{
+}
+
+impl<C, F> OtPlatformCallback for ActiveOpenThread<'_, C, F>
+where
+    C: RngCore,
+    F: FnMut(OtRx),
+{
+    fn reset(&mut self) -> Result<(), OtError> {
+        todo!()
+    }
+
+    fn rand(&mut self, buf: &mut [u8]) -> Result<(), OtError> {
+        self.rng.fill_bytes(buf);
 
         Ok(())
     }
 
-    #[cfg(feature = "srp-client")]
-    pub fn set_srp_client_ttl(&mut self, ttl: u32) {
-        srp_client::set_srp_client_ttl(self.instance, ttl);
+    fn tasklets_pending(&mut self) {
+        self.data.run_tasklets = true;
+        self.signals.ot.signal(());
     }
 
-    #[cfg(feature = "srp-client")]
-    pub fn get_srp_client_ttl(&mut self) -> u32 {
-        srp_client::get_srp_client_ttl(self.instance)
-    }
-
-    #[cfg(feature = "srp-client")]
-    pub fn stop_srp_client(&mut self) -> Result<(), Error> {
-        srp_client::srp_client_stop(self.instance);
-        Ok(())
-    }
-
-    #[cfg(feature = "srp-client")]
-    pub fn get_srp_client_state(&mut self) -> Result<Option<SrpClientItemState>, Error> {
-        Ok(srp_client::get_srp_client_host_state(self.instance))
-    }
-
-    #[cfg(feature = "srp-client")]
-    pub fn clear_srp_client_host_buffers(&mut self) {
-        srp_client::srp_clear_all_client_services(self.instance)
-    }
-
-    /// If there are any services already registered, unregister them
-    #[cfg(feature = "srp-client")]
-    pub fn srp_unregister_all_services(
-        &mut self,
-        remove_keylease: bool,
-        send_update: bool,
-    ) -> Result<(), Error> {
-        srp_client::srp_unregister_and_remove_all_client_services(
-            self.instance,
-            remove_keylease,
-            send_update,
-        )?;
-        Ok(())
-    }
-
-    #[cfg(feature = "srp-client")]
-    pub fn srp_clear_service(&mut self, service: SrpClientService) -> Result<(), Error> {
-        srp_client::srp_clear_service(self.instance, service)?;
-        Ok(())
-    }
-
-    #[cfg(feature = "srp-client")]
-    pub fn srp_unregister_service(&mut self, service: SrpClientService) -> Result<(), Error> {
-        srp_client::srp_unregister_service(self.instance, service)?;
-        Ok(())
-    }
-
-    #[cfg(feature = "srp-client")]
-    pub fn srp_get_services(
-        &mut self,
-    ) -> heapless::Vec<SrpClientService, { srp_client::MAX_SERVICES }> {
-        srp_client::get_srp_client_services(self.instance)
-    }
-
-    /// caller must call this prior to setting up the host config
-    #[cfg(feature = "srp-client")]
-    pub fn set_srp_state_callback(
-        &mut self,
-        callback: Option<&'a mut (dyn FnMut(otError, usize, usize, usize) + Send)>,
-    ) {
-        critical_section::with(|cs| {
-            let mut srp_change_callback = SRP_CHANGE_CALLBACK.borrow_ref_mut(cs);
-            *srp_change_callback = unsafe { core::mem::transmute(callback) };
-        });
+    fn ipv6_received(&mut self, msg: *mut otMessage) {
+        (self.rx_ipv6)(OtRx(msg as *const _));
 
         unsafe {
-            otSrpClientSetCallback(
-                self.instance,
-                Some(srp_state_callback),
-                core::ptr::null_mut(),
-            )
+            otMessageFree(msg);
+        }
+    }
+
+    fn changed(&mut self, _flags: u32) {
+        self.signals.controller.signal(());
+    }
+
+    fn now(&mut self) -> u32 {
+        Instant::now().as_millis() as u32
+    }
+
+    fn alarm_set(&mut self, at0_ms: u32, adt_ms: u32) -> Result<(), OtError> {
+        // TODO
+        let instant =
+            embassy_time::Instant::now() + embassy_time::Duration::from_millis(at0_ms as u64);
+
+        self.data.alarm_status = Some(instant);
+        self.signals.alarm.signal(instant);
+
+        Ok(())
+    }
+
+    fn alarm_clear(&mut self) -> Result<(), OtError> {
+        self.data.alarm_status = None;
+
+        Ok(())
+    }
+}
+
+impl<C, F> OtPlatformRadioCallback for ActiveOpenThread<'_, C, F>
+where
+    C: RngCore,
+    F: FnMut(OtRx),
+{
+    fn ieee_eui64(&mut self, mac: &mut [u8; 6]) {
+        mac.fill(0);
+    }
+
+    fn caps(&mut self) -> u8 {
+        0 // TODO
+    }
+
+    fn enabled(&mut self) -> bool {
+        true // TODO
+    }
+
+    fn rssi(&mut self) -> i8 {
+        -128 // TODO
+    }
+
+    fn receive_sensitivity(&mut self) -> i8 {
+        0 // TODO
+    }
+
+    fn promiscuous(&mut self) -> bool {
+        false // TODO
+    }
+
+    fn set_enabled(&mut self, _enabled: bool) -> Result<(), OtError> {
+        Ok(()) // TODO
+    }
+
+    fn set_promiscuous(&mut self, _promiscuous: bool) {
+        // TODO
+    }
+
+    fn set_extended_address(&mut self, _address: u64) {
+        // TODO
+    }
+
+    fn set_short_address(&mut self, _address: u16) {
+        // TODO
+    }
+
+    fn set_pan_id(&mut self, _pan_id: u16) {
+        // TODO
+    }
+
+    fn energy_scan(&mut self, _channel: u8, _duration: u16) -> Result<(), OtError> {
+        unreachable!()
+    }
+
+    fn sleep(&mut self) -> Result<(), OtError> {
+        unreachable!()
+    }
+
+    fn transmit_buffer(&mut self) -> *mut otRadioFrame {
+        // TODO: This frame is private to us, perhaps don't store it in a RefCell?
+        &mut self.data.radio_resources.tns_frame
+    }
+
+    fn transmit(&mut self, frame: &otRadioFrame) -> Result<(), OtError> {
+        let psdu = unsafe { core::slice::from_raw_parts_mut(frame.mPsdu, frame.mLength as _) };
+
+        self.data.radio_resources.snd_frame = *frame;
+        self.data.radio_resources.snd_psdu[..psdu.len()].copy_from_slice(psdu);
+        self.data.radio_resources.snd_frame.mPsdu =
+            addr_of_mut!(self.data.radio_resources.snd_psdu) as *mut _;
+
+        self.signals.radio.signal(RadioCommand::Tx);
+
+        Ok(())
+    }
+
+    fn receive(&mut self, channel: u8) -> Result<(), OtError> {
+        self.signals.radio.signal(RadioCommand::Rx(channel));
+
+        Ok(())
+    }
+}
+
+struct OtData {
+    instance: *mut otInstance,
+    radio_resources: RadioResources,
+    dataset_resources: DatasetResources,
+    radio_status: RadioStatus,
+    alarm_status: Option<embassy_time::Instant>,
+    run_tasklets: bool,
+}
+
+impl OtData {
+    const fn new() -> Self {
+        Self {
+            instance: core::ptr::null_mut(),
+            radio_resources: RadioResources::new(),
+            dataset_resources: DatasetResources::new(),
+            radio_status: RadioStatus::Idle,
+            alarm_status: None,
+            run_tasklets: false,
         }
     }
 }
 
-impl<'a> Drop for OpenThread<'a> {
-    fn drop(&mut self) {
-        critical_section::with(|cs| {
-            RADIO.borrow_ref_mut(cs).take();
-            NETWORK_SETTINGS.borrow_ref_mut(cs).take();
-            CHANGE_CALLBACK.borrow_ref_mut(cs).take();
-            #[cfg(feature = "srp-client")]
-            SRP_CHANGE_CALLBACK.borrow_ref_mut(cs).take();
-        });
+struct OtSignals {
+    radio: Signal<NoopRawMutex, RadioCommand>,
+    alarm: Signal<NoopRawMutex, embassy_time::Instant>,
+    controller: Signal<NoopRawMutex, ()>,
+    ot: Signal<NoopRawMutex, ()>,
+}
+
+impl OtSignals {
+    const fn new() -> Self {
+        Self {
+            radio: Signal::new(),
+            alarm: Signal::new(),
+            controller: Signal::new(),
+            ot: Signal::new(),
+        }
     }
 }
 
-#[allow(unused)]
+#[derive(Debug)]
+enum RadioCommand {
+    Tx,
+    Rx(u8),
+}
+
+#[derive(Debug)]
+enum RadioStatus {
+    Idle,
+    TxPending,
+    TxDone,
+    RxPending,
+    RxDone,
+}
+
+// TODO: Figure out how to init efficiently
+struct RadioResources {
+    rcv_frame: otRadioFrame,
+    tns_frame: otRadioFrame,
+    snd_frame: otRadioFrame,
+    ack_frame: otRadioFrame,
+    rcv_psdu: [u8; OT_RADIO_FRAME_MAX_SIZE as usize],
+    tns_psdu: [u8; OT_RADIO_FRAME_MAX_SIZE as usize],
+    snd_psdu: [u8; OT_RADIO_FRAME_MAX_SIZE as usize],
+    ack_psdu: [u8; OT_RADIO_FRAME_MAX_SIZE as usize],
+}
+
+impl RadioResources {
+    pub const fn new() -> Self {
+        unsafe {
+            Self {
+                rcv_frame: MaybeUninit::zeroed().assume_init(),
+                tns_frame: MaybeUninit::zeroed().assume_init(),
+                snd_frame: MaybeUninit::zeroed().assume_init(),
+                ack_frame: MaybeUninit::zeroed().assume_init(),
+                rcv_psdu: MaybeUninit::zeroed().assume_init(),
+                tns_psdu: MaybeUninit::zeroed().assume_init(),
+                snd_psdu: MaybeUninit::zeroed().assume_init(),
+                ack_psdu: MaybeUninit::zeroed().assume_init(),
+            }
+        }
+    }
+
+    fn init(&mut self) {
+        self.rcv_frame.mPsdu = addr_of_mut!(self.rcv_psdu) as *mut _;
+        self.tns_frame.mPsdu = addr_of_mut!(self.tns_psdu) as *mut _;
+        self.snd_frame.mPsdu = addr_of_mut!(self.snd_psdu) as *mut _;
+        self.ack_frame.mPsdu = addr_of_mut!(self.ack_psdu) as *mut _;
+    }
+}
+// TODO: Figure out how to initialise efficiently
+struct DatasetResources {
+    dataset: otOperationalDataset,
+}
+
+impl DatasetResources {
+    pub const fn new() -> Self {
+        unsafe {
+            Self {
+                dataset: MaybeUninit::zeroed().assume_init(),
+            }
+        }
+    }
+}
+
 /// From https://github.com/espressif/esp-idf/blob/release/v5.3/components/ieee802154/driver/esp_ieee802154_frame.c#L45
+#[allow(unused)]
 fn is_supported_frame_type_raw(frame_type: u8) -> bool {
     frame_type == IEEE802154_FRAME_TYPE_BEACON
         || frame_type == IEEE802154_FRAME_TYPE_DATA
@@ -927,293 +1183,4 @@ fn frame_get_type(frame: &[u8]) -> u8 {
         return 0;
     }
     frame[IEEE802154_FRAME_TYPE_OFFSET] & IEEE802154_FRAME_TYPE_MASK
-}
-
-unsafe extern "C" fn change_callback(
-    flags: otChangedFlags,
-    _context: *mut esp_openthread_sys::c_types::c_void,
-) {
-    log::debug!("change_callback otChangedFlags={:32b}", flags);
-    critical_section::with(|cs| {
-        let mut change_callback = CHANGE_CALLBACK.borrow_ref_mut(cs);
-        let callback = change_callback.as_mut();
-
-        if let Some(callback) = callback {
-            if ChangedFlags::from_bits(flags).is_none() {
-                log::warn!(
-                    "change_callback otChangedFlags= {:?} would be None as flags",
-                    flags
-                );
-            } else {
-                callback(ChangedFlags::from_bits(flags).unwrap());
-            }
-        }
-    });
-}
-
-#[cfg(feature = "srp-client")]
-unsafe extern "C" fn srp_state_callback(
-    error: otError,
-    host_info: *const otSrpClientHostInfo,
-    services: *const otSrpClientService,
-    removed_services: *const otSrpClientService,
-    _context: *mut esp_openthread_sys::c_types::c_void,
-) {
-    log::debug!("srp change callback");
-    critical_section::with(|cs| {
-        let mut srp_change_callback = SRP_CHANGE_CALLBACK.borrow_ref_mut(cs);
-        let srp_callback = srp_change_callback.as_mut();
-
-        if let Some(callback) = srp_callback {
-            log::warn!("SRP change callback error {:?}", error);
-            callback(error, host_info as _, services as _, removed_services as _);
-        }
-    });
-}
-
-fn with_radio<F, T>(f: F) -> Option<T>
-where
-    F: FnOnce(&mut Ieee802154) -> T,
-{
-    critical_section::with(|cs| {
-        let mut radio = RADIO.borrow_ref_mut(cs);
-        let radio = radio.borrow_mut();
-
-        if let Some(radio) = radio.as_mut() {
-            Some(f(radio))
-        } else {
-            None
-        }
-    })
-}
-
-fn get_settings() -> NetworkSettings {
-    critical_section::with(|cs| {
-        let mut settings = NETWORK_SETTINGS.borrow_ref_mut(cs);
-        let settings = settings.borrow_mut();
-
-        if let Some(settings) = settings.as_mut() {
-            settings.clone()
-        } else {
-            log::error!("Generating default settings");
-            NetworkSettings::default()
-        }
-    })
-}
-
-fn set_settings(settings: NetworkSettings) {
-    critical_section::with(|cs| {
-        NETWORK_SETTINGS
-            .borrow_ref_mut(cs)
-            .borrow_mut()
-            .replace(settings);
-    });
-}
-
-/// Allow callers to generate a random u32
-pub fn get_random_u32() -> u32 {
-    critical_section::with(|cs| {
-        let mut rng = crate::entropy::RANDOM_GENERATOR.borrow_ref_mut(cs);
-        let rng = rng.borrow_mut();
-        if let Some(rng) = rng.as_mut() {
-            rng.random()
-        } else {
-            0
-        }
-    })
-}
-
-/// A UdpSocket
-///
-/// To call functions on it you have to pin it.
-/// ```no_run
-/// let mut socket = openthread.get_udp_socket::<512>().unwrap();
-/// let mut socket = pin!(socket);
-/// socket.bind(1212).unwrap();
-/// ```
-pub struct UdpSocket<'s, 'n: 's, const BUFFER_SIZE: usize> {
-    ot_socket: otUdpSocket,
-    ot: &'s OpenThread<'n>,
-    receive_len: usize,
-    receive_from: [u8; 16],
-    receive_port: u16,
-    max: usize,
-    _pinned: PhantomPinned,
-    // must be last because the callback doesn't know about the actual const generic parameter
-    receive_buffer: [u8; BUFFER_SIZE],
-}
-
-impl<'s, 'n: 's, const BUFFER_SIZE: usize> UdpSocket<'s, 'n, BUFFER_SIZE> {
-    /// Open and bind a UDP/IPv6 socket
-    pub fn bind(self: &mut Pin<&mut Self>, port: u16) -> Result<(), Error> {
-        let mut sock_addr = otSockAddr {
-            mAddress: otIp6Address {
-                mFields: otIp6Address__bindgen_ty_1 { m32: [0, 0, 0, 0] },
-            },
-            mPort: 0,
-        };
-        sock_addr.mPort = port;
-
-        unsafe {
-            checked!(otUdpOpen(
-                self.ot.instance,
-                &self.ot_socket as *const _ as *mut otUdpSocket,
-                Some(udp_receive_handler),
-                self.as_mut().get_unchecked_mut() as *mut _ as *mut crate::sys::c_types::c_void,
-            ))?;
-        }
-
-        unsafe {
-            checked!(otUdpBind(
-                self.ot.instance,
-                &self.ot_socket as *const _ as *mut otUdpSocket,
-                &mut sock_addr,
-                otNetifIdentifier_OT_NETIF_THREAD,
-            ))?;
-        }
-
-        Ok(())
-    }
-
-    /// Open a UDP/IPv6 socket
-    pub fn open(self: &mut Pin<&mut Self>, port: u16) -> Result<(), Error> {
-        let mut sock_addr = otSockAddr {
-            mAddress: otIp6Address {
-                mFields: otIp6Address__bindgen_ty_1 { m32: [0, 0, 0, 0] },
-            },
-            mPort: 0,
-        };
-        sock_addr.mPort = port;
-
-        unsafe {
-            checked!(otUdpOpen(
-                self.ot.instance,
-                &self.ot_socket as *const _ as *mut otUdpSocket,
-                Some(udp_receive_handler),
-                self.as_mut().get_unchecked_mut() as *mut _ as *mut crate::sys::c_types::c_void,
-            ))?;
-        }
-        Ok(())
-    }
-
-    /// Get latest data received on this socket
-    pub fn receive(
-        self: &mut Pin<&mut Self>,
-        data: &mut [u8],
-    ) -> Result<(usize, Ipv6Addr, u16), Error> {
-        critical_section::with(|_| {
-            let len = self.receive_len as usize;
-            if len == 0 {
-                Ok((0, Ipv6Addr::UNSPECIFIED, 0))
-            } else {
-                unsafe { self.as_mut().get_unchecked_mut() }.receive_len = 0;
-                data[..len].copy_from_slice(&self.receive_buffer[..len]);
-                let ip = Ipv6Addr::from(self.receive_from);
-                Ok((len, ip, self.receive_port))
-            }
-        })
-    }
-
-    /// Send data to the given peer
-    pub fn send(
-        self: &mut Pin<&mut Self>,
-        dst: Ipv6Addr,
-        port: u16,
-        data: &[u8],
-    ) -> Result<(), Error> {
-        let mut message_info = otMessageInfo {
-            mSockAddr: otIp6Address {
-                mFields: otIp6Address__bindgen_ty_1 { m32: [0, 0, 0, 0] },
-            },
-            mPeerAddr: otIp6Address {
-                mFields: otIp6Address__bindgen_ty_1 { m32: [0, 0, 0, 0] },
-            },
-            mSockPort: 0,
-            mPeerPort: 0,
-            mHopLimit: 0,
-            _bitfield_align_1: [0u8; 0],
-            _bitfield_1: __BindgenBitfieldUnit::new([0u8; 1]),
-        };
-        message_info.mPeerAddr.mFields.m8 = dst.octets();
-        message_info.mPeerPort = port;
-
-        let message = unsafe { otUdpNewMessage(self.ot.instance, core::ptr::null()) };
-        if message.is_null() {
-            return Err(Error::InternalError(0));
-        }
-
-        unsafe {
-            checked!(otMessageAppend(
-                message,
-                data.as_ptr() as *const c_void,
-                data.len() as u16
-            ))?;
-        }
-
-        unsafe {
-            let err = otUdpSend(
-                self.ot.instance,
-                &self.ot_socket as *const _ as *mut otUdpSocket,
-                message,
-                &mut message_info,
-            );
-
-            if err != otError_OT_ERROR_NONE && !message.is_null() {
-                otMessageFree(message);
-                return Err(Error::InternalError(err));
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Close a UDP/IPv6 socket
-    pub fn close(self: &mut Pin<&mut Self>) -> Result<(), Error> {
-        unsafe {
-            checked!(otUdpClose(
-                self.ot.instance,
-                &self.ot_socket as *const _ as *mut otUdpSocket,
-            ))?;
-        }
-
-        Ok(())
-    }
-
-    fn close_internal(&mut self) -> Result<(), Error> {
-        unsafe {
-            checked!(otUdpClose(
-                self.ot.instance,
-                &self.ot_socket as *const _ as *mut otUdpSocket,
-            ))?;
-        }
-
-        Ok(())
-    }
-}
-
-impl<'s, 'n: 's, const BUFFER_SIZE: usize> Drop for UdpSocket<'s, 'n, BUFFER_SIZE> {
-    fn drop(&mut self) {
-        self.close_internal().ok();
-    }
-}
-
-unsafe extern "C" fn udp_receive_handler(
-    context: *mut crate::sys::c_types::c_void,
-    message: *mut otMessage,
-    message_info: *const otMessageInfo,
-) {
-    let socket = context as *mut UdpSocket<1024>;
-    let len = u16::min((*socket).max as u16, otMessageGetLength(message));
-
-    critical_section::with(|_| {
-        otMessageRead(
-            message,
-            0,
-            &mut (*socket).receive_buffer as *mut _ as *mut crate::sys::c_types::c_void,
-            len,
-        );
-        (*socket).receive_port = (*message_info).mPeerPort;
-        (*socket).receive_from = (*message_info).mPeerAddr.mFields.m8;
-        (*socket).receive_len = len as usize;
-    });
 }

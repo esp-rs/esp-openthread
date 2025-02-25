@@ -8,11 +8,9 @@ use core::pin::pin;
 
 use critical_section::Mutex;
 use esp_backtrace as _;
-use esp_hal::{
-    prelude::*,
-    rng::Rng,
-    timer::systimer::{Alarm, FrozenUnit, SpecificUnit, SystemTimer},
-};
+use esp_hal::main;
+use esp_hal::rng::Rng;
+use esp_hal::timer::systimer::{Alarm, SystemTimer};
 use esp_ieee802154::Ieee802154;
 use esp_openthread::{NetworkInterfaceUnicastAddress, OperationalDataset, ThreadTimestamp};
 use esp_println::println;
@@ -20,7 +18,7 @@ use static_cell::StaticCell;
 
 const BOUND_PORT: u16 = 1212;
 
-#[entry]
+#[main]
 fn main() -> ! {
     esp_println::logger::init_logger_from_env();
 
@@ -33,13 +31,11 @@ fn main() -> ! {
 
     // init timer for otPlatAlarm
     let systimer = SystemTimer::new(peripherals.SYSTIMER);
-    static UNIT0: StaticCell<SpecificUnit<'static, 0>> = StaticCell::new();
-    let unit0 = UNIT0.init(systimer.unit0);
-    let frozen_unit = FrozenUnit::new(unit0);
-    let alarm = Alarm::new(systimer.comparator0, &frozen_unit);
+    let mut timer = PeriodicTimer::new(systimer.alarm0);
+    timer.start(1u64.secs());
 
     let mut openthread =
-        esp_openthread::OpenThread::new(&mut ieee802154, alarm, Rng::new(peripherals.RNG));
+        esp_openthread::OpenThread::new(&mut ieee802154, timer, Rng::new(peripherals.RNG));
 
     let changed = Mutex::new(RefCell::new(false));
     let mut callback = |flags| {

@@ -1,4 +1,9 @@
 #![no_std]
+
 #[allow(improper_ctypes)]
-pub mod bindings;
-pub mod c_types;
+
+pub use bindings::*;
+pub use c_types::*;
+
+mod bindings;
+mod c_types;
