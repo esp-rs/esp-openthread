@@ -40,6 +40,13 @@ pub struct Config {
     //pub auto_ack_tx: bool,
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub struct PsduMeta {
+    pub len: usize,
+    pub channel: u8,
+    pub rssi: Option<i8>,
+}
+
 pub trait Radio {
     type Error: RadioError;
 
@@ -62,9 +69,9 @@ pub trait Radio {
     // TODO
     //fn energy_scan(&mut self, channel: u8, duration: u16) -> Result<(), Self::Error>;
 
-    async fn transmit(&mut self, frame: &[u8]) -> Result<(), Self::Error>;
+    async fn transmit(&mut self, psdu: &[u8]) -> Result<(), Self::Error>;
 
-    async fn receive(&mut self, channel: u8, frame_buf: &mut [u8]) -> Result<usize, Self::Error>;
+    async fn receive(&mut self, channel: u8, psdu_buf: &mut [u8]) -> Result<PsduMeta, Self::Error>;
 }
 
 impl<T> Radio for &mut T
@@ -81,11 +88,11 @@ where
         T::set_config(self, config).await
     }
 
-    async fn transmit(&mut self, frame: &[u8]) -> Result<(), Self::Error> {
-        T::transmit(self, frame).await
+    async fn transmit(&mut self, psdu: &[u8]) -> Result<(), Self::Error> {
+        T::transmit(self, psdu).await
     }
 
-    async fn receive(&mut self, channel: u8, frame_buf: &mut [u8]) -> Result<usize, Self::Error> {
-        T::receive(self, channel, frame_buf).await
+    async fn receive(&mut self, channel: u8, psdu_buf: &mut [u8]) -> Result<PsduMeta, Self::Error> {
+        T::receive(self, channel, psdu_buf).await
     }
 }

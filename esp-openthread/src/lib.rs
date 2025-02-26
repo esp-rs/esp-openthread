@@ -14,12 +14,14 @@ use embassy_sync::{blocking_mutex::raw::NoopRawMutex, signal::Signal};
 
 use embassy_time::Instant;
 
-use esp_openthread_sys::{otMessageFree, otMessageGetLength, otMessageRead};
 use platform::OT_ACTIVE_STATE;
 
 use rand_core::RngCore;
 
-use sys::{otOperationalDataset, otPlatAlarmMilliFired, otTaskletsProcess};
+use sys::{
+    otMessageFree, otMessageGetLength, otMessageRead, otOperationalDataset, otPlatAlarmMilliFired,
+    otPlatRadioEnergyScanDone, otTaskletsProcess,
+};
 
 pub use dataset::*;
 pub use esp_openthread_sys as sys;
@@ -45,16 +47,15 @@ use sys::{
 };
 
 /// https://github.com/espressif/esp-idf/blob/release/v5.3/components/ieee802154/private_include/esp_ieee802154_frame.h#L20
-const IEEE802154_FRAME_TYPE_OFFSET: usize = 1;
+const IEEE802154_FRAME_TYPE_OFFSET: usize = 1 - 1; // .. as we have removed the PHR and we are indexing the PSDU
 const IEEE802154_FRAME_TYPE_MASK: u8 = 0x07;
 const IEEE802154_FRAME_TYPE_BEACON: u8 = 0x00;
 const IEEE802154_FRAME_TYPE_DATA: u8 = 0x01;
 const IEEE802154_FRAME_TYPE_ACK: u8 = 0x02;
 const IEEE802154_FRAME_TYPE_COMMAND: u8 = 0x03;
 
-// TODO
-// // ed_rss for H2 and C6 is the same
-// const ENERGY_DETECT_RSS: i8 = 16;
+// ed_rss for H2 and C6 is the same
+const ENERGY_DETECT_RSS: i8 = 16;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct OtError(otError);
@@ -513,67 +514,176 @@ impl OtState {
             let mut cmd = self.signals.radio.wait().await;
 
             // TODO: Borrow it from the resources
-            let mut psdu = [0_u8; OT_RADIO_FRAME_MAX_SIZE as usize];
+            let mut psdu_buf = [0_u8; OT_RADIO_FRAME_MAX_SIZE as usize];
 
             loop {
                 match cmd {
                     RadioCommand::Tx => {
-                        {
-                            let mut data = self.data.borrow_mut();
-                            psdu.copy_from_slice(&data.radio_resources.snd_psdu);
+                        let psdu_len = {
+                            let mut ot = self.activate();
+                            let state = ot.state();
 
-                            data.radio_status = RadioStatus::TxPending;
-                        }
+                            let psdu_len = state.data.radio_resources.snd_frame.mLength as usize;
+                            psdu_buf[..psdu_len]
+                                .copy_from_slice(&state.data.radio_resources.snd_psdu[..psdu_len]);
 
-                        self.signals.ot.signal(());
+                            unsafe {
+                                otPlatRadioTxStarted(
+                                    state.data.instance,
+                                    &mut state.data.radio_resources.snd_frame,
+                                );
+                            }
+
+                            psdu_len
+                        };
 
                         let mut new_cmd = pin!(self.signals.radio.wait());
-                        let mut tx = pin!(radio.transmit(&psdu));
+                        let mut tx = pin!(radio.transmit(&psdu_buf[..psdu_len]));
 
                         let result = embassy_futures::select::select(&mut new_cmd, &mut tx).await;
 
                         match result {
                             Either::First(new_cmd) => {
+                                let mut ot = self.activate();
+                                let state = ot.state();
+
+                                unsafe {
+                                    otPlatRadioTxDone(
+                                        state.data.instance,
+                                        &mut state.data.radio_resources.snd_frame,
+                                        &mut state.data.radio_resources.ack_frame,
+                                        otError_OT_ERROR_NONE, // TODO
+                                    );
+                                }
+
                                 cmd = new_cmd;
-                                self.data.borrow_mut().radio_status = RadioStatus::TxDone; // TODO
-                                self.signals.ot.signal(());
                             }
                             Either::Second(result) => {
                                 result.unwrap(); // TODO
 
-                                self.data.borrow_mut().radio_status = RadioStatus::TxDone; // TODO
-                                self.signals.ot.signal(());
+                                let mut ot = self.activate();
+                                let state = ot.state();
+
+                                unsafe {
+                                    otPlatRadioTxDone(
+                                        state.data.instance,
+                                        &mut state.data.radio_resources.snd_frame,
+                                        &mut state.data.radio_resources.ack_frame,
+                                        otError_OT_ERROR_NONE, // TODO
+                                    );
+                                }
 
                                 break;
                             }
                         }
                     }
                     RadioCommand::Rx(channel) => {
-                        self.data.borrow_mut().radio_status = RadioStatus::RxPending;
-                        self.signals.ot.signal(());
-
                         let result = {
                             let mut new_cmd = pin!(self.signals.radio.wait());
-                            let mut rx = pin!(radio.receive(channel, &mut psdu));
+                            let mut rx = pin!(radio.receive(channel, &mut psdu_buf));
 
                             embassy_futures::select::select(&mut new_cmd, &mut rx).await
                         };
 
                         match result {
                             Either::First(new_cmd) => {
+                                let mut ot = self.activate();
+                                let state = ot.state();
+
+                                unsafe {
+                                    otPlatRadioReceiveDone(
+                                        state.data.instance,
+                                        &mut state.data.radio_resources.rcv_frame,
+                                        otError_OT_ERROR_NONE, // TODO
+                                    );
+                                }
+
                                 cmd = new_cmd;
-                                self.data.borrow_mut().radio_status = RadioStatus::Idle;
-                                self.signals.ot.signal(());
                             }
                             Either::Second(result) => {
-                                result.unwrap(); // TODO
+                                let psdu_meta = result.unwrap(); // TODO
 
-                                {
-                                    let mut data = self.data.borrow_mut();
-                                    data.radio_resources.rcv_psdu.copy_from_slice(&psdu);
-                                    data.radio_status = RadioStatus::RxDone;
+                                let mut ot = self.activate();
+                                let state = ot.state();
+
+                                state.data.radio_resources.rcv_psdu[..psdu_meta.len]
+                                    .copy_from_slice(&psdu_buf[..psdu_meta.len]);
+
+                                fn frame_type(psdu: &[u8]) -> u8 {
+                                    if psdu.len() == IEEE802154_FRAME_TYPE_OFFSET {
+                                        return 0;
+                                    }
+
+                                    psdu[IEEE802154_FRAME_TYPE_OFFSET] & IEEE802154_FRAME_TYPE_MASK
                                 }
-                                self.signals.ot.signal(());
+
+                                /// Convert from RSSI (Received Signal Strength Indicator) to LQI (Link Quality
+                                /// Indication)
+                                ///
+                                /// RSSI is a measure of incoherent (raw) RF power in a channel. LQI is a
+                                /// cumulative value used in multi-hop networks to assess the cost of a link.
+                                fn rssi_to_lqi(rssi: i8) -> u8 {
+                                    if rssi < -80 {
+                                        0
+                                    } else if rssi > -30 {
+                                        0xff
+                                    } else {
+                                        let lqi_convert = ((rssi as u32).wrapping_add(80)) * 255;
+                                        (lqi_convert / 50) as u8
+                                    }
+                                }
+
+                                let psdu = &psdu_buf[..psdu_meta.len];
+
+                                match frame_type(psdu) {
+                                    IEEE802154_FRAME_TYPE_DATA => {
+                                        log::debug!("RCV {:02x?}", psdu);
+
+                                        let rssi = psdu_meta.rssi.unwrap_or(0);
+
+                                        state.data.radio_resources.rcv_frame.mLength =
+                                            psdu.len() as u16;
+                                        state.data.radio_resources.rcv_frame.mRadioType = 1; // ????
+                                        state.data.radio_resources.rcv_frame.mChannel = channel;
+                                        state.data.radio_resources.rcv_frame.mInfo.mRxInfo.mRssi =
+                                            rssi;
+                                        state.data.radio_resources.rcv_frame.mInfo.mRxInfo.mLqi =
+                                            rssi_to_lqi(rssi);
+                                        state
+                                            .data
+                                            .radio_resources
+                                            .rcv_frame
+                                            .mInfo
+                                            .mRxInfo
+                                            .mTimestamp = Instant::now().as_micros();
+
+                                        unsafe {
+                                            otPlatRadioReceiveDone(
+                                                state.data.instance,
+                                                &mut state.data.radio_resources.rcv_frame,
+                                                otError_OT_ERROR_NONE, // TODO
+                                            );
+                                        }
+                                    }
+                                    IEEE802154_FRAME_TYPE_BEACON
+                                    | IEEE802154_FRAME_TYPE_COMMAND => {
+                                        log::warn!("Received beacon or MAC command frame, triggering scan done");
+
+                                        unsafe {
+                                            otPlatRadioEnergyScanDone(
+                                                state.data.instance,
+                                                ENERGY_DETECT_RSS,
+                                            );
+                                        }
+                                    }
+                                    IEEE802154_FRAME_TYPE_ACK => {
+                                        log::debug!("Received ack frame");
+                                    }
+                                    _ => {
+                                        // Drop unsupported frames
+                                        log::warn!("Unsupported frame type received");
+                                    }
+                                }
 
                                 break;
                             }
@@ -665,7 +775,6 @@ impl<'a> OpenThread<'a> {
 
             processed |= self.process_tasklets();
             processed |= self.process_alarm();
-            processed |= self.process_radio();
 
             if !processed {
                 break;
@@ -702,54 +811,6 @@ impl<'a> OpenThread<'a> {
             true
         } else {
             false
-        }
-    }
-
-    fn process_radio(&mut self) -> bool {
-        let state = self.state();
-
-        match state.data.radio_status {
-            RadioStatus::TxPending => {
-                unsafe {
-                    otPlatRadioTxStarted(
-                        state.data.instance,
-                        &mut state.data.radio_resources.snd_frame,
-                    )
-                }
-
-                state.data.radio_status = RadioStatus::Idle;
-
-                true
-            }
-            RadioStatus::TxDone => {
-                unsafe {
-                    otPlatRadioTxDone(
-                        state.data.instance,
-                        &mut state.data.radio_resources.snd_frame,
-                        &mut state.data.radio_resources.ack_frame,
-                        otError_OT_ERROR_NONE, /* TODO*/
-                    )
-                }
-
-                state.data.radio_status = RadioStatus::Idle;
-
-                true
-            }
-            RadioStatus::RxDone => {
-                unsafe {
-                    otPlatRadioReceiveDone(
-                        state.data.instance,
-                        &mut state.data.radio_resources.rcv_frame,
-                        otError_OT_ERROR_NONE, /* TODO */
-                    )
-                }
-
-                state.data.radio_status = RadioStatus::Idle;
-
-                true
-            }
-            // TODO
-            _ => false,
         }
     }
 
@@ -806,9 +867,8 @@ impl<'a> OpenThread<'a> {
     fn plat_alarm_set(&mut self, at0_ms: u32, adt_ms: u32) -> Result<(), OtError> {
         let state = self.state();
 
-        // TODO
-        let instant =
-            embassy_time::Instant::now() + embassy_time::Duration::from_millis(at0_ms as u64);
+        let instant = embassy_time::Instant::from_millis(at0_ms as _)
+            + embassy_time::Duration::from_millis(adt_ms as _);
 
         state.data.alarm_status = Some(instant);
         state.signals.alarm.signal(instant);
@@ -838,6 +898,7 @@ impl<'a> OpenThread<'a> {
         -128 // TODO
     }
 
+    // from https://github.com/espressif/esp-idf/blob/release/v5.3/components/openthread/src/port/esp_openthread_radio.c#L35
     fn plat_radio_receive_sensititivy(&mut self) -> i8 {
         0 // TODO
     }
@@ -903,94 +964,6 @@ impl<'a> OpenThread<'a> {
 
         Ok(())
     }
-
-    // /// Run due timers, get and forward received messages
-    // ///
-    // /// Make sure to periodically call this function.
-    // pub fn process(&self) {
-    //     crate::timer::run_if_due(self.instance);
-    //     if let Some(raw) = with_radio(|radio| radio.raw_received()).unwrap() {
-    //         match frame_get_type(&raw.data) {
-    //             IEEE802154_FRAME_TYPE_DATA => {
-    //                 let rssi: i8 = {
-    //                     let idx = match (raw.data[0] as usize).cmp(&raw.data.len()) {
-    //                         core::cmp::Ordering::Less => {
-    //                             // guard against attempting to access the (0 - 1)th index
-    //                             if raw.data[0] == 0 {
-    //                                 log::warn!("raw.data[0] is 0, RSSI may be invalid",);
-    //                                 0
-    //                             } else {
-    //                                 raw.data[0] as usize - 1
-    //                             }
-    //                         }
-    //                         core::cmp::Ordering::Greater | core::cmp::Ordering::Equal => {
-    //                             raw.data.len() - 1
-    //                         }
-    //                     };
-    //                     raw.data[idx] as i8
-    //                 };
-
-    //                 unsafe {
-    //                     // len indexes into both the RCV_FRAME_PSDU and raw.data array
-    //                     // so must be sized appropriately
-    //                     let len = if raw.data[0] as usize > OT_RADIO_FRAME_MAX_SIZE as usize
-    //                         && raw.data[1..].len() >= OT_RADIO_FRAME_MAX_SIZE as usize
-    //                     {
-    //                         log::warn!(
-    //                             "raw.data[0] {:?} larger than rcv frame \
-    //                             psdu len and raw.data.len()! RCV {:02x?}",
-    //                             raw.data[0],
-    //                             &raw.data[1..][..OT_RADIO_FRAME_MAX_SIZE as usize]
-    //                         );
-    //                         OT_RADIO_FRAME_MAX_SIZE as usize
-    //                     } else if raw.data[0] as usize > OT_RADIO_FRAME_MAX_SIZE as usize
-    //                         && raw.data[1..].len() < OT_RADIO_FRAME_MAX_SIZE as usize
-    //                     {
-    //                         log::warn!(
-    //                             "raw.data[0] {:?} larger than raw.data.len()! \
-    //                             RCV {:02x?}",
-    //                             raw.data[0],
-    //                             &raw.data[1..][..raw.data.len() - 1]
-    //                         );
-    //                         raw.data[1..].len()
-    //                     } else {
-    //                         raw.data[0] as usize
-    //                     };
-
-    //                     log::debug!("RCV {:02x?}", &raw.data[1..][..len as usize]);
-
-    //                     RCV_FRAME_PSDU[..len as usize]
-    //                         .copy_from_slice(&raw.data[1..][..len as usize]);
-    //                     RCV_FRAME.mLength = len as u16;
-    //                     RCV_FRAME.mRadioType = 1; // ????
-    //                     RCV_FRAME.mChannel = raw.channel;
-    //                     RCV_FRAME.mInfo.mRxInfo.mRssi = rssi;
-    //                     RCV_FRAME.mInfo.mRxInfo.mLqi = rssi_to_lqi(rssi);
-    //                     RCV_FRAME.mInfo.mRxInfo.mTimestamp = current_millis() * 1000;
-
-    //                     otPlatRadioReceiveDone(
-    //                         self.instance,
-    //                         addr_of_mut!(RCV_FRAME),
-    //                         otError_OT_ERROR_NONE,
-    //                     );
-    //                 }
-    //             }
-    //             IEEE802154_FRAME_TYPE_BEACON | IEEE802154_FRAME_TYPE_COMMAND => {
-    //                 log::warn!("Received beacon or mac command frame, triggering scan done");
-    //                 unsafe {
-    //                     otPlatRadioEnergyScanDone(self.instance, ENERGY_DETECT_RSS);
-    //                 }
-    //             }
-    //             IEEE802154_FRAME_TYPE_ACK => {
-    //                 log::debug!("Received ack frame");
-    //             }
-    //             _ => {
-    //                 // Drop unsupported frames
-    //                 log::warn!("Unsupported frame type received");
-    //             }
-    //         };
-    //     }
-    // }
 
     // /// Creates a new UDP socket
     // pub fn get_udp_socket<'s, const BUFFER_SIZE: usize>(
@@ -1073,7 +1046,6 @@ struct OtData {
     rcv_packet_ipv6: *mut otMessage,
     radio_resources: RadioResources,
     dataset_resources: DatasetResources,
-    radio_status: RadioStatus,
     alarm_status: Option<embassy_time::Instant>,
     run_tasklets: bool,
 }
@@ -1086,7 +1058,6 @@ impl OtData {
             rcv_packet_ipv6: core::ptr::null_mut(),
             radio_resources: RadioResources::new(),
             dataset_resources: DatasetResources::new(),
-            radio_status: RadioStatus::Idle,
             alarm_status: None,
             run_tasklets: false,
         }
@@ -1117,15 +1088,6 @@ impl OtSignals {
 enum RadioCommand {
     Tx,
     Rx(u8),
-}
-
-#[derive(Debug)]
-enum RadioStatus {
-    Idle,
-    TxPending,
-    TxDone,
-    RxPending,
-    RxDone,
 }
 
 // TODO: Figure out how to init efficiently
@@ -1185,11 +1147,4 @@ fn is_supported_frame_type_raw(frame_type: u8) -> bool {
         || frame_type == IEEE802154_FRAME_TYPE_DATA
         || frame_type == IEEE802154_FRAME_TYPE_ACK
         || frame_type == IEEE802154_FRAME_TYPE_COMMAND // Are child nodes expected to respond to MacCommand frames?
-}
-
-fn frame_get_type(frame: &[u8]) -> u8 {
-    if frame.len() <= IEEE802154_FRAME_TYPE_OFFSET {
-        return 0;
-    }
-    frame[IEEE802154_FRAME_TYPE_OFFSET] & IEEE802154_FRAME_TYPE_MASK
 }

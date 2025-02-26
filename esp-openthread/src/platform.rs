@@ -101,7 +101,6 @@ pub extern "C" fn otPlatRadioGetRssi(instance: *const otInstance) -> i8 {
     OpenThread::callback(instance).plat_radio_get_rssi()
 }
 
-// from https://github.com/espressif/esp-idf/blob/release/v5.3/components/openthread/src/port/esp_openthread_radio.c#L35
 #[no_mangle]
 pub extern "C" fn otPlatRadioGetReceiveSensitivity(instance: *const otInstance) -> i8 {
     OpenThread::callback(instance).plat_radio_receive_sensititivy()
