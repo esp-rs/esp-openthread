@@ -47,7 +47,7 @@ use sys::{
 };
 
 /// https://github.com/espressif/esp-idf/blob/release/v5.3/components/ieee802154/private_include/esp_ieee802154_frame.h#L20
-const IEEE802154_FRAME_TYPE_OFFSET: usize = 1 - 1; // .. as we have removed the PHR and we are indexing the PSDU
+const IEEE802154_FRAME_TYPE_OFFSET: usize = 0; // .. as we have removed the PHR and we are indexing the PSDU
 const IEEE802154_FRAME_TYPE_MASK: u8 = 0x07;
 const IEEE802154_FRAME_TYPE_BEACON: u8 = 0x00;
 const IEEE802154_FRAME_TYPE_DATA: u8 = 0x01;
@@ -385,6 +385,12 @@ impl OtTx<'_> {
 
 pub struct OtResources {
     state: MaybeUninit<OtState>,
+}
+
+impl Default for OtResources {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl OtResources {

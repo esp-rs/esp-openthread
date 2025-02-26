@@ -1,5 +1,7 @@
 use core::fmt::Debug;
 
+use bitflags::bitflags;
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum RadioErrorKind {
     Other,
@@ -9,12 +11,13 @@ pub trait RadioError: Debug {
     fn kind(&self) -> RadioErrorKind;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum Cca {
     /// Carrier sense
-    CarrierSense,
+    #[default]
+    Carrier,
     /// Energy Detection / Energy Above Threshold
-    EnergyDetection {
+    Ed {
         /// Energy measurements above this value mean that the channel is assumed to be busy.
         /// Note the measurement range is 0..0xFF - where 0 means that the received power was
         /// less than 10 dB above the selected receiver sensitivity. This value is not given in dBm,
@@ -22,9 +25,30 @@ pub enum Cca {
         /// for details.
         ed_threshold: u8,
     },
+    CarrierOrEd {
+        ed_threshold: u8,
+    },
+    CarrierAndEd {
+        ed_threshold: u8,
+    },
 }
 
-#[derive(Debug, Clone)]
+bitflags! {
+    #[repr(transparent)]
+    #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub struct Capabilities: u16 {
+        const ENERGY_SCAN = 0x01;
+        const PROMISCUOUS = 0x02;
+        const SLEEP = 0x04;
+        const AUTO_ACK = 0x08;
+        const RX_WHEN_IDLE = 0x10;
+        const FILTER_SHORT_ADDR = 0x20;
+        const FILTER_EXT_ADDR = 0x40;
+        const FILTER_PAN_ID = 0x80;
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Config {
     pub channel: u8,
     pub power: i8,
@@ -35,9 +59,31 @@ pub struct Config {
     pub pan_id: Option<u16>,
     pub short_addr: Option<u16>,
     pub ext_addr: Option<u64>,
-    //pub rx_when_idle: bool,
-    //pub auto_ack_rx: bool,
-    //pub auto_ack_tx: bool,
+    pub rx_when_idle: bool,
+    pub auto_ack: bool,
+}
+
+impl Config {
+    pub const fn new() -> Self {
+        Self {
+            channel: 15,
+            power: 10,
+            cca: Cca::Carrier,
+            sfd: 0,
+            promiscuous: false,
+            pan_id: None,
+            short_addr: None,
+            ext_addr: None,
+            rx_when_idle: false,
+            auto_ack: false,
+        }
+    }
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
@@ -50,7 +96,7 @@ pub struct PsduMeta {
 pub trait Radio {
     type Error: RadioError;
 
-    async fn caps(&mut self) -> u8;
+    async fn caps(&mut self) -> Capabilities;
 
     async fn set_config(&mut self, config: &Config) -> Result<(), Self::Error>;
 
@@ -80,7 +126,7 @@ where
 {
     type Error = T::Error;
 
-    async fn caps(&mut self) -> u8 {
+    async fn caps(&mut self) -> Capabilities {
         T::caps(self).await
     }
 
