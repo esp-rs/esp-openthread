@@ -1,42 +1,97 @@
-use embassy_net_driver_channel::{RxRunner, State, TxRunner};
+use core::pin::pin;
+
+use embassy_futures::select::{select3, Either3};
+use embassy_net_driver_channel::{
+    driver::HardwareAddress, Device, RxRunner, State, StateRunner, TxRunner,
+};
 
 use rand_core::RngCore;
 
-use crate::{OtRx, OtRxPacket, OtTx};
+use crate::{OtController, OtError, OtResources, OtRunner, OtRx, OtTx, Radio};
 
 pub fn new<'d, const MTU: usize, const N_RX: usize, const N_TX: usize>(
+    rng: &'d mut dyn RngCore,
     state: &'d mut State<MTU, N_RX, N_TX>,
-) {
+    resources: &'d mut OtResources,
+) -> Result<
+    (
+        OtController<'d>,
+        StateRunner<'d>,
+        EnetRunner<'d, MTU>,
+        Device<'d, MTU>,
+    ),
+    OtError,
+> {
+    let (ot_controller, ot_rx, ot_tx, ot_runner) = crate::new(rng, resources)?;
+
+    let (runner, device) = embassy_net_driver_channel::new(state, HardwareAddress::Ip);
+
+    let (state_runner, rx_runner, tx_runner) = runner.split();
+
+    Ok((
+        ot_controller,
+        state_runner,
+        EnetRunner {
+            rx: ot_rx,
+            tx: ot_tx,
+            rx_runner,
+            tx_runner,
+            ot_runner,
+        },
+        device,
+    ))
 }
 
-pub struct EnetOtRx<'a, const MTU: usize>(RxRunner<'a, MTU>);
-
-impl<'a, const MTU: usize> EnetOtRx<'a, MTU> {
-    pub const fn new(rx_runner: RxRunner<'a, MTU>) -> Self {
-        Self(rx_runner)
-    }
+pub struct EnetRunner<'d, const MTU: usize> {
+    rx: OtRx<'d>,
+    tx: OtTx<'d>,
+    rx_runner: RxRunner<'d, MTU>,
+    tx_runner: TxRunner<'d, MTU>,
+    ot_runner: OtRunner<'d>,
 }
 
-impl<'a, const MTU: usize> OtRx for EnetOtRx<'a, MTU> {
-    fn rx(&mut self, packet: OtRxPacket) {
-        if let Some(buf) = self.0.try_rx_buf() {
-            let len = packet.copy_to(buf);
+impl<const MTU: usize> EnetRunner<'_, MTU> {
+    pub async fn run<R>(&mut self, mut radio: R) -> !
+    where
+        R: Radio,
+    {
+        let mut rx = pin!(Self::run_rx(&mut self.rx, &mut self.rx_runner));
+        let mut tx = pin!(Self::run_tx(&mut self.tx, &mut self.tx_runner));
+        let mut ot = pin!(Self::run_ot(&mut self.ot_runner, &mut radio));
 
-            self.0.rx_done(len);
+        match select3(&mut rx, &mut tx, &mut ot).await {
+            Either3::First(r) | Either3::Second(r) | Either3::Third(r) => r,
         }
     }
-}
 
-pub async fn enet_tx<C, F, const MTU: usize>(
-    mut tx_runner: TxRunner<'_, MTU>,
-    mut tx: OtTx<'_, C, F>,
-) where
-    C: RngCore,
-    F: OtRx,
-{
-    let packet = &*tx_runner.tx_buf().await;
+    async fn run_rx(rx: &mut OtRx<'_>, rx_runner: &mut RxRunner<'_, MTU>) -> ! {
+        loop {
+            rx.wait_available().await.unwrap();
 
-    let _ = tx.tx(packet);
+            let buf = rx_runner.rx_buf().await;
 
-    tx_runner.tx_done();
+            let len = rx.rx(buf).await.unwrap();
+
+            rx_runner.rx_done(len);
+        }
+    }
+
+    async fn run_tx(tx: &mut OtTx<'_>, tx_runner: &mut TxRunner<'_, MTU>) -> ! {
+        loop {
+            tx.wait_available().await.unwrap();
+
+            let buf = tx_runner.tx_buf().await;
+
+            tx.tx(buf).await.unwrap();
+
+            tx_runner.tx_done();
+        }
+    }
+
+    async fn run_ot<R>(runner: &mut OtRunner<'_>, radio: R) -> !
+    where
+        R: Radio,
+    {
+        runner.run(radio).await
+    }
 }

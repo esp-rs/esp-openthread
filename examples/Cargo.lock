@@ -192,6 +192,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f878075b9794c1e4ac788c95b728f26aa6366d32eeb10c7051389f898f7d067"
 
 [[package]]
+name = "embassy-net-driver"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "524eb3c489760508f71360112bca70f6e53173e6fe48fc5f0efd0f5ab217751d"
+
+[[package]]
+name = "embassy-net-driver-channel"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4818c32afec43e3cae234f324bad9a976c9aa7501022d26ff60a4017a1a006b7"
+dependencies = [
+ "embassy-futures",
+ "embassy-net-driver",
+ "embassy-sync",
+]
+
+[[package]]
 name = "embassy-sync"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -483,20 +500,13 @@ dependencies = [
 name = "esp-openthread"
 version = "0.5.0"
 dependencies = [
- "bitflags",
- "critical-section",
  "embassy-futures",
+ "embassy-net-driver-channel",
  "embassy-sync",
  "embassy-time",
- "esp-hal",
- "esp-hal-procmacros",
  "esp-ieee802154",
  "esp-openthread-sys",
- "esp-println",
- "fugit",
- "heapless",
  "log",
- "no-std-net",
  "rand_core 0.9.2",
 ]
 
