@@ -1,32 +1,16 @@
 use std::env;
-use std::fs::{self, File};
-use std::io::Write;
-use std::path::PathBuf;
 
 use anyhow::Result;
 
-fn main() -> Result<()> {
-    // Put the linker script somewhere the linker can find it
-    let out = PathBuf::from(env::var_os("OUT_DIR").unwrap());
+const ESP32_RISCV_TARGET: &str = "riscv32imac-unknown-none-elf";
 
-    copy_file(&out, "libs/libeverest.a", "libeverest.a")?;
-    copy_file(&out, "libs/libmbedcrypto.a", "libmbedcrypto.a")?;
-    copy_file(&out, "libs/libmbedtls.a", "libmbedtls.a")?;
-    copy_file(&out, "libs/libmbedx509.a", "libmbedx509.a")?;
-    copy_file(&out, "libs/libopenthread-mtd.a", "libopenthread-mtd.a")?;
-    copy_file(
-        &out,
-        "libs/libopenthread-platform-utils-static.a",
-        "libopenthread-platform-utils-static.a",
-    )?;
-    copy_file(
-        &out,
-        "libs/libopenthread-platform.a",
-        "libopenthread-platform.a",
-    )?;
-    copy_file(&out, "libs/libp256m.a", "libp256m.a")?;
-    copy_file(&out, "libs/libplatform.a", "libplatform.a")?;
-    copy_file(&out, "libs/libtcplp-mtd.a", "libtcplp-mtd.a")?;
+fn main() -> Result<()> {
+    let crate_root_dir = env::var("CARGO_MANIFEST_DIR")?;
+    let target = env::var("TARGET")?;
+
+    if target != ESP32_RISCV_TARGET {
+        panic!("This build script only supports the `riscv32imac-unknown-none-elf` target for now");
+    }
 
     println!("cargo:rustc-link-lib={}", "everest");
     println!("cargo:rustc-link-lib={}", "mbedcrypto");
@@ -42,14 +26,7 @@ fn main() -> Result<()> {
     println!("cargo:rustc-link-lib={}", "platform");
     println!("cargo:rustc-link-lib={}", "tcplp-mtd");
 
-    println!("cargo:rustc-link-search={}", out.display());
-
-    Ok(())
-}
-
-fn copy_file(out: &PathBuf, from: &str, to: &str) -> Result<()> {
-    let mut file = File::create(out.join(to))?;
-    file.write_all(&fs::read(from)?)?;
+    println!("cargo:rustc-link-search={}/libs/{target}", crate_root_dir);
 
     Ok(())
 }

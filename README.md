@@ -4,8 +4,8 @@ Platform-agnostic, async Rust bindings for the [`OpenThread`](https://openthread
 
 Tailored for Rust embedded baremetal, with out of the box support for [`embassy-net`](https://crates.io/crates/embassy-net).
 
-For certain MCUs, the OpenThread libraries are pre-compiled for convenience. 
-Find the build script in `build_openthread` (TBD)
+For certain MCUs, the OpenThread libraries are pre-compiled for convenience.
+Look at the `openthread-sys` crate for more information (TBD)
 
 ## Goals
 
