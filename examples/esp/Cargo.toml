@@ -1,0 +1,46 @@
+[package]
+name = "esp-openthread-examples"
+version = "0.1.0"
+authors = ["bjoernQ <bjoern.quentin@mobile-j.de>"]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[profile.release]
+debug = true
+
+[dependencies]
+embassy-executor = { version = "0.7", features = ["task-arena-size-32768"] }
+embassy-sync = "0.6"
+embassy-futures = "0.1"
+embassy-time = "0.4"
+embassy-net = { version = "0.6", features = ["proto-ipv6", "medium-ip", "udp"] }
+esp-hal = "0.23.1"
+esp-hal-embassy = "0.6"
+esp-alloc = { version = "0.6", optional = true }
+esp-backtrace = { version = "0.15", features = ["panic-handler", "exception-handler", "println"] }
+esp-println = { version = "0.13", features = ["log"] }
+esp-ieee802154 = "0.5"
+log = "0.4"
+heapless = "0.8"
+critical-section = "1.1"
+rand_core = "0.6"
+static_cell = "2.1"
+
+esp-openthread = { path = "../../esp-openthread", features = ["embassy-net-driver-channel"] }
+
+[features]
+default = ["esp32c6"]
+esp32c6 = [ "esp-hal-embassy/esp32c6", "esp-ieee802154/esp32c6", "esp-openthread/esp32c6", "esp-backtrace/esp32c6", "esp-println/esp32c6", "esp-openthread/esp32c6" ]
+esp32h2 = [ "esp-hal-embassy/esp32h2", "esp-ieee802154/esp32h2", "esp-openthread/esp32h2", "esp-backtrace/esp32h2", "esp-println/esp32h2", "esp-openthread/esp32c6" ]
+#srp-client = ["esp-openthread/srp-client", "dep:esp-alloc"]
+
+[[bin]]
+path = "./src/bin/basic.rs"
+name = "basic"
+harness = false
+
+#[[bin]]
+#path = "./src/bin/srp_client.rs"
+#name = "srp-client"
+#required-features=["srp-client"]
+#harness = false

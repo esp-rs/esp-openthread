@@ -9,7 +9,7 @@ harness = false
 [dependencies]
 esp-openthread-sys = { path = "../esp-openthread-sys" }
 log = { version = "0.4", default-features = false }
-rand_core = "0.9"
+rand_core = "0.6"
 embassy-sync = "0.6"
 embassy-time = "0.4"
 embassy-futures = "0.1"

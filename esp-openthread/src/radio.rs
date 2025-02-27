@@ -54,7 +54,6 @@ pub struct Config {
     pub power: i8,
     pub cca: Cca,
     pub sfd: u8,
-
     pub promiscuous: bool,
     pub pan_id: Option<u16>,
     pub short_addr: Option<u16>,
