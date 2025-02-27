@@ -528,22 +528,19 @@ impl OtState {
     /// NOTE: This method assumes that tbe `OtState` contents is already initialized
     /// (i.e. all signals are in their initial values, and the data which represents OpenThread C types is all zeroed-out)
     fn init(&mut self, rng: &'static mut dyn RngCore) -> Result<(), OtError> {
-        let instance = unsafe { otInstanceInitSingle() };
-
-        log::debug!("otInstanceInitSingle done, instance = {:p}", instance);
-
         {
-            let mut data = self.data.borrow_mut();
-
-            // TODO: Need to deinitialize the OT instance at some point?
-
-            data.instance = instance;
-            data.rng = Some(rng);
-        }
-
-        {
+            // TODO: Not ideal but we have to activate even before we have the instance
+            // Reason: `otPlatEntropyGet` is called back
             let mut ot = self.activate();
             let state = ot.state();
+
+            state.data.rng = Some(rng);
+            state.data.instance = unsafe { otInstanceInitSingle() };
+
+            log::debug!(
+                "otInstanceInitSingle done, instance = {:p}",
+                state.data.instance
+            );
 
             // TODO: Remove on drop
 
@@ -921,7 +918,9 @@ impl<'a> OpenThread<'a> {
     /// The above ^^^ will not lead to a memory corruption, but the code will panic due to an attempt
     /// to mutably borrow the `OtState` `RefCell`d data twice.
     fn activate_for(ot: &'a OtState) -> Self {
-        assert!(unsafe { OT_ACTIVE_STATE.0.get().as_mut() }.is_none());
+        assert!(unsafe { OT_ACTIVE_STATE.0.get().as_mut() }
+            .unwrap()
+            .is_none());
 
         // Needed so that we convert from the fake `'static` lifetime in `OT_ACTIVE_STATE` to the actual `'a` lifetime of `ot`
         #[allow(clippy::missing_transmute_annotations)]
@@ -941,7 +940,9 @@ impl<'a> OpenThread<'a> {
     ///
     /// This method is called when the OpenThread C library calls us back.
     fn callback(_instance: *const otInstance) -> Self {
-        assert!(unsafe { OT_ACTIVE_STATE.0.get().as_mut() }.is_some());
+        assert!(unsafe { OT_ACTIVE_STATE.0.get().as_mut() }
+            .unwrap()
+            .is_some());
 
         Self {
             callback: true,
@@ -1182,7 +1183,7 @@ impl<'a> OpenThread<'a> {
     }
 
     fn plat_radio_sleep(&mut self) -> Result<(), OtError> {
-        unreachable!()
+        Ok(()) // TODO
     }
 
     fn plat_radio_transmit_buffer(&mut self) -> *mut otRadioFrame {

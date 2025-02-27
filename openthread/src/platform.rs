@@ -182,18 +182,15 @@ pub unsafe extern "C" fn otPlatLog(
 
 #[no_mangle]
 pub extern "C" fn iscntrl(v: u32) -> bool {
-    log::info!("iscntrl {}", v as u8 as char);
-    false // TODO
+    v < ' ' as u32
 }
 
 #[no_mangle]
-pub extern "C" fn isprint() -> bool {
-    log::error!("isprint not implemented");
-    true // TODO
+pub extern "C" fn isprint(v: u32) -> bool {
+    v >= ' ' as u32 && v <= 127
 }
 
 #[no_mangle]
-pub extern "C" fn isupper() -> bool {
-    log::error!("isupper not implemented");
-    true // TODO
+pub extern "C" fn isupper(v: u32) -> bool {
+    v >= 'A' as u32 && v <= 'Z' as u32
 }
