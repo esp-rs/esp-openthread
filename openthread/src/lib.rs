@@ -403,22 +403,23 @@ impl OtRx<'_> {
     pub async fn rx(&mut self, buf: &mut [u8]) -> Result<usize, OtError> {
         loop {
             {
-                let mut data = self.0.data.borrow_mut();
+                let mut ot = self.0.activate();
+                let state = ot.state();
 
-                if !data.rcv_packet_ipv6.is_null() {
-                    let len = unsafe { otMessageGetLength(data.rcv_packet_ipv6) as usize };
+                if !state.data.rcv_packet_ipv6.is_null() {
+                    let len = unsafe { otMessageGetLength(state.data.rcv_packet_ipv6) as usize };
 
                     unsafe {
                         otMessageRead(
-                            data.rcv_packet_ipv6,
+                            state.data.rcv_packet_ipv6,
                             0,
                             buf.as_mut_ptr() as *mut _,
                             len.min(buf.len()) as _,
                         );
-                        otMessageFree(data.rcv_packet_ipv6);
+                        otMessageFree(state.data.rcv_packet_ipv6);
                     }
 
-                    data.rcv_packet_ipv6 = core::ptr::null_mut();
+                    state.data.rcv_packet_ipv6 = core::ptr::null_mut();
 
                     return Ok(len);
                 }
@@ -637,11 +638,23 @@ impl OtState {
         loop {
             let mut cmd = self.signals.radio.wait().await;
 
+            let config = {
+                let mut ot = self.activate();
+                let state = ot.state();
+
+                state.data.radio_pending_conf.take()
+            };
+
+            if let Some(config) = config {
+                let _ = radio.set_config(&config).await;
+            }
+
             // TODO: Borrow it from the resources
             let mut psdu_buf = [0_u8; OT_RADIO_FRAME_MAX_SIZE as usize];
 
             loop {
                 match cmd {
+                    RadioCommand::Conf => (),
                     RadioCommand::Tx => {
                         let psdu_len = {
                             let mut ot = self.activate();
@@ -1088,7 +1101,7 @@ impl<'a> OpenThread<'a> {
         Ok(())
     }
 
-    fn plat_radio_ieee_eui64(&mut self, mac: &mut [u8; 6]) {
+    fn plat_radio_ieee_eui64(&mut self, mac: &mut [u8; 8]) {
         mac.fill(0);
     }
 
@@ -1121,20 +1134,44 @@ impl<'a> OpenThread<'a> {
         Ok(()) // TODO
     }
 
-    fn plat_radio_set_promiscuous(&mut self, _promiscuous: bool) {
-        // TODO
+    fn plat_radio_set_promiscuous(&mut self, promiscuous: bool) {
+        let state = self.state();
+
+        if state.data.radio_conf.promiscuous != promiscuous {
+            state.data.radio_conf.promiscuous = promiscuous;
+            state.data.radio_pending_conf = Some(state.data.radio_conf.clone());
+            state.signals.radio.signal(RadioCommand::Conf);
+        }
     }
 
-    fn plat_radio_set_extended_address(&mut self, _address: u64) {
-        // TODO
+    fn plat_radio_set_extended_address(&mut self, address: u64) {
+        let state = self.state();
+
+        if state.data.radio_conf.ext_addr != Some(address) {
+            state.data.radio_conf.ext_addr = Some(address);
+            state.data.radio_pending_conf = Some(state.data.radio_conf.clone());
+            state.signals.radio.signal(RadioCommand::Conf);
+        }
     }
 
-    fn plat_radio_set_short_address(&mut self, _address: u16) {
-        // TODO
+    fn plat_radio_set_short_address(&mut self, address: u16) {
+        let state = self.state();
+
+        if state.data.radio_conf.short_addr != Some(address) {
+            state.data.radio_conf.short_addr = Some(address);
+            state.data.radio_pending_conf = Some(state.data.radio_conf.clone());
+            state.signals.radio.signal(RadioCommand::Conf);
+        }
     }
 
-    fn plat_radio_set_pan_id(&mut self, _pan_id: u16) {
-        // TODO
+    fn plat_radio_set_pan_id(&mut self, pan_id: u16) {
+        let state = self.state();
+
+        if state.data.radio_conf.pan_id != Some(pan_id) {
+            state.data.radio_conf.pan_id = Some(pan_id);
+            state.data.radio_pending_conf = Some(state.data.radio_conf.clone());
+            state.signals.radio.signal(RadioCommand::Conf);
+        }
     }
 
     fn plat_radio_energy_scan(&mut self, _channel: u8, _duration: u16) -> Result<(), OtError> {
@@ -1269,6 +1306,8 @@ struct OtData {
     alarm_status: Option<embassy_time::Instant>,
     /// If `true`, the tasklets need to be run. Set by the OpenThread C library via the `otPlatTaskletsSignalPending` callback
     run_tasklets: bool,
+    radio_conf: radio::Config,
+    radio_pending_conf: Option<radio::Config>,
 }
 
 impl OtData {
@@ -1282,6 +1321,8 @@ impl OtData {
             dataset_resources: DatasetResources::new(),
             alarm_status: None,
             run_tasklets: false,
+            radio_conf: radio::Config::new(),
+            radio_pending_conf: None,
         }
     }
 }
@@ -1319,6 +1360,7 @@ impl OtSignals {
 /// A command for the radio runner to process.
 #[derive(Debug)]
 enum RadioCommand {
+    Conf,
     /// Transmit a frame
     /// The data of the frame is in `OtData::radio_resources.snd_frame` and `OtData::radio_resources.snd_psdu`
     ///

@@ -58,10 +58,9 @@ pub extern "C" fn otPlatAlarmMilliStop(instance: *const otInstance) -> otError {
         .into_ot_code()
 }
 
-/// Caller is required to ensure mac arg is sufficient length (6 bytes)
 #[no_mangle]
 pub extern "C" fn otPlatRadioGetIeeeEui64(instance: *const otInstance, mac: *mut u8) {
-    let mac = unsafe { core::ptr::slice_from_raw_parts_mut(mac, 6).as_mut() }.unwrap();
+    let mac = unsafe { core::ptr::slice_from_raw_parts_mut(mac, 8).as_mut() }.unwrap();
 
     OpenThread::callback(instance).plat_radio_ieee_eui64(mac.try_into().unwrap());
 }
