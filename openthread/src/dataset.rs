@@ -98,8 +98,7 @@ impl OperationalDataset<'_> {
 
         if let Some(network_name) = dataset.network_name {
             let mut raw = [0u8; 17];
-            raw[..network_name.len()]
-                .copy_from_slice(unsafe { core::mem::transmute(network_name.as_bytes()) });
+            raw[..network_name.len()].copy_from_slice(network_name.as_bytes());
             raw_dataset.mNetworkName = otNetworkName { m8: raw };
             network_name_present = true;
         }

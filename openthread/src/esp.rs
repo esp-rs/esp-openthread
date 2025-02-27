@@ -5,11 +5,12 @@ use embassy_sync::signal::Signal;
 
 use esp_ieee802154::{Config as EspConfig, Error, Ieee802154};
 
-use crate::{Capabilities, Cca, Config, PsduMeta, Radio, RadioError};
+use crate::{Capabilities, Cca, Config, PsduMeta, Radio, RadioError, RadioErrorKind};
 
 impl RadioError for Error {
-    fn kind(&self) -> crate::RadioErrorKind {
-        todo!()
+    fn kind(&self) -> RadioErrorKind {
+        // TODO
+        RadioErrorKind::Other
     }
 }
 

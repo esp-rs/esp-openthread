@@ -16,7 +16,7 @@ pub use embassy_net_driver_channel::{
 /// Create a new OpenThread driver for `embassy-net`, by internally instantiating the `openthread` API types
 /// and combining them with the `embassy-net-driver-channel` runner types.
 ///
-/// The driver is communicating with `embassy-net` and `smoltcp` using plain Ipv6 frames, without
+/// The driver is communicating with `embassy-net` and `smoltcp` using naked Ipv6 frames, without
 /// any hardware address and any additional framing (like e.g. Ethernet) attached.
 ///
 /// All details about the network stack (i.e. that it is based on IEEE 802.15.4) are abstracted away and

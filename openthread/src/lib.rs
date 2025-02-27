@@ -30,7 +30,7 @@ pub use openthread_sys as sys;
 pub use radio::*;
 
 mod dataset;
-#[cfg(any(feature = "embassy-net-driver-channel"))]
+#[cfg(feature = "embassy-net-driver-channel")]
 pub mod enet;
 #[cfg(any(feature = "esp32h2", feature = "esp32c6"))]
 pub mod esp;
@@ -73,7 +73,7 @@ impl OtError {
         Self(value)
     }
 
-    /// Converrt to the raw `otError` value.
+    /// Convert to the raw `otError` value.
     pub fn into_inner(self) -> otError {
         self.0
     }
@@ -119,14 +119,16 @@ impl IntoOtCode for Result<(), OtError> {
 /// Returns:
 /// - In case there were no errors related to initializing the OpenThread library, a tuple containing:
 ///   - The OpenThread controller
-///   - The OpenThread receiver
-///   - The OpenThread transmitter
-///   - The OpenThread runner
+///   - The OpenThread Ipv6 packets receiver
+///   - The OpenThread Ipv6 packets transmitter
+///   - The OpenThread stack runner
 pub fn new<'a>(
     rng: &'a mut dyn RngCore,
     resources: &'a mut OtResources,
 ) -> Result<(OtController<'a>, OtRx<'a>, OtTx<'a>, OtRunner<'a>), OtError> {
-    let state = &*resources.init(unsafe { core::mem::transmute(rng) })?;
+    // Needed so that we convert from the the actual `'a` lifetime of `rng` to the fake `'static` lifetime in `OtResources`
+    #[allow(clippy::missing_transmute_annotations)]
+    let state = { &*resources.init(unsafe { core::mem::transmute(rng) })? };
 
     Ok((
         OtController(state),
@@ -357,7 +359,10 @@ impl OtController<'_> {
 pub struct OtRunner<'a>(&'a OtState);
 
 impl OtRunner<'_> {
-    /// Run the OpenThread stack.
+    /// Run the OpenThread stack with the provided radio implementation.
+    ///
+    /// Arguments:
+    /// - `radio`: The radio to be used by the OpenThread stack.
     pub async fn run<R>(&mut self, radio: R) -> !
     where
         R: Radio,
@@ -456,6 +461,7 @@ pub struct OtResources {
 impl OtResources {
     // TODO: Not ideal, as its content is not all-zeroes so it won't end up in the BSS segment
     // Ideally we should initialize it piece by piece
+    #[allow(clippy::declare_interior_mutable_const)]
     const INIT: OtState = OtState::new();
 
     /// Create a new `OtResources` instance.
@@ -559,7 +565,7 @@ impl OtState {
 
     /// Activates the OpenThread stack.
     ///
-    /// IMPORTANT: The OpenThread native C API can ONLY be called when is method is called and
+    /// IMPORTANT: The OpenThread native C API can ONLY be called when this method is called and
     /// the returned `OpenThread` instance is in scope.
     ///
     /// IMPORTTANT: Do NOT hold on the `activate`d `OpenThread` instance accross `.await` points!
@@ -860,7 +866,19 @@ impl<'a> OpenThread<'a> {
     /// Activates the OpenThread C wrapper by (temporarily) putting the OpenThread state
     /// in the global `OT_ACTIVE_STATE` variable, which allows the OpenThread C library to call us back.
     ///
-    /// Activation is cheap therefore.
+    /// Activation is therefore a cheap operation which is expected to be done often, for a short duration
+    /// (ideally, just to call one or a few OpenThread C functions) and should not persist across await points
+    /// (see below).
+    ///
+    /// The reason to have the notion of activation in the first place is because there are mutiple async agents that
+    /// are willing to operate on the same data, i.e.:
+    /// - The radio async loop
+    /// - The alarm async loop
+    /// - The `OpenThread::process` method (the entry into the C OpenThread library)
+    /// - The controller futures (which might call into OpenThread C by activating it shortly first)
+    ///
+    /// All of the above tasks operate on the same data (OtData::data) by mutably borrowing it first, either
+    /// directly, or by activating (= creating an `OpenThread` type instance) and then calling an OpenThread C API.
     ///
     /// Activation is automacally finished when the `OpenThread` instance is dropped.
     ///
@@ -872,8 +890,12 @@ impl<'a> OpenThread<'a> {
     fn activate_for(ot: &'a OtState) -> Self {
         assert!(unsafe { OT_ACTIVE_STATE.0.get().as_mut() }.is_none());
 
-        *unsafe { OT_ACTIVE_STATE.0.get().as_mut() }.unwrap() =
-            Some(unsafe { core::mem::transmute(OtActiveState::new(ot)) });
+        // Needed so that we convert from the fake `'static` lifetime in `OT_ACTIVE_STATE` to the actual `'a` lifetime of `ot`
+        #[allow(clippy::missing_transmute_annotations)]
+        {
+            *unsafe { OT_ACTIVE_STATE.0.get().as_mut() }.unwrap() =
+                Some(unsafe { core::mem::transmute(OtActiveState::new(ot)) });
+        }
 
         Self {
             callback: false,
