@@ -40,12 +40,12 @@ mod radio;
 mod srp_client;
 
 use sys::{
-    c_void, otChangedFlags, otDatasetSetActive, otError, otError_OT_ERROR_NONE, otInstance,
-    otInstanceInitSingle, otIp6GetUnicastAddresses, otIp6NewMessageFromBuffer, otIp6Send,
-    otIp6SetEnabled, otIp6SetReceiveCallback, otMessage,
-    otMessagePriority_OT_MESSAGE_PRIORITY_NORMAL, otMessageSettings, otPlatRadioReceiveDone,
-    otPlatRadioTxDone, otPlatRadioTxStarted, otRadioFrame, otSetStateChangedCallback,
-    otThreadSetEnabled, OT_RADIO_FRAME_MAX_SIZE,
+    c_void, otChangedFlags, otDatasetSetActive, otError, otError_OT_ERROR_FAILED,
+    otError_OT_ERROR_NONE, otError_OT_ERROR_NO_BUFS, otInstance, otInstanceInitSingle,
+    otIp6GetUnicastAddresses, otIp6NewMessageFromBuffer, otIp6Send, otIp6SetEnabled,
+    otIp6SetReceiveCallback, otMessage, otMessagePriority_OT_MESSAGE_PRIORITY_NORMAL,
+    otMessageSettings, otPlatRadioReceiveDone, otPlatRadioTxDone, otPlatRadioTxStarted,
+    otRadioFrame, otSetStateChangedCallback, otThreadSetEnabled, OT_RADIO_FRAME_MAX_SIZE,
 };
 
 /// https://github.com/espressif/esp-idf/blob/release/v5.3/components/ieee802154/private_include/esp_ieee802154_frame.h#L20
@@ -671,20 +671,20 @@ impl OtState {
                                 let mut ot = self.activate();
                                 let state = ot.state();
 
+                                // Reporting send failure because we got interrupted
+                                // by a new command
                                 unsafe {
                                     otPlatRadioTxDone(
                                         state.data.instance,
                                         &mut state.data.radio_resources.snd_frame,
                                         &mut state.data.radio_resources.ack_frame,
-                                        otError_OT_ERROR_NONE, // TODO
+                                        otError_OT_ERROR_FAILED,
                                     );
                                 }
 
                                 cmd = new_cmd;
                             }
                             Either::Second(result) => {
-                                result.unwrap(); // TODO
-
                                 let mut ot = self.activate();
                                 let state = ot.state();
 
@@ -693,7 +693,11 @@ impl OtState {
                                         state.data.instance,
                                         &mut state.data.radio_resources.snd_frame,
                                         &mut state.data.radio_resources.ack_frame,
-                                        otError_OT_ERROR_NONE, // TODO
+                                        if result.is_ok() {
+                                            otError_OT_ERROR_NONE
+                                        } else {
+                                            otError_OT_ERROR_FAILED
+                                        },
                                     );
                                 }
 
@@ -714,21 +718,34 @@ impl OtState {
                                 let mut ot = self.activate();
                                 let state = ot.state();
 
+                                // Reporting receive failure because we got interrupted
+                                // by a new command
                                 unsafe {
                                     otPlatRadioReceiveDone(
                                         state.data.instance,
                                         &mut state.data.radio_resources.rcv_frame,
-                                        otError_OT_ERROR_NONE, // TODO
+                                        otError_OT_ERROR_FAILED,
                                     );
                                 }
 
                                 cmd = new_cmd;
                             }
                             Either::Second(result) => {
-                                let psdu_meta = result.unwrap(); // TODO
-
                                 let mut ot = self.activate();
                                 let state = ot.state();
+
+                                let Ok(psdu_meta) = result else {
+                                    // Reporting receive failure because we got a driver error
+                                    unsafe {
+                                        otPlatRadioReceiveDone(
+                                            state.data.instance,
+                                            &mut state.data.radio_resources.rcv_frame,
+                                            otError_OT_ERROR_NONE,
+                                        );
+                                    }
+
+                                    break;
+                                };
 
                                 state.data.radio_resources.rcv_psdu[..psdu_meta.len]
                                     .copy_from_slice(&psdu_buf[..psdu_meta.len]);
@@ -785,7 +802,7 @@ impl OtState {
                                             otPlatRadioReceiveDone(
                                                 state.data.instance,
                                                 &mut state.data.radio_resources.rcv_frame,
-                                                otError_OT_ERROR_NONE, // TODO
+                                                otError_OT_ERROR_NONE,
                                             );
                                         }
                                     }
@@ -937,9 +954,11 @@ impl<'a> OpenThread<'a> {
             )
         };
 
-        // TODO: Check if the message was allocated
-
-        ot!(unsafe { otIp6Send(state.data.instance, msg) })
+        if !msg.is_null() {
+            ot!(unsafe { otIp6Send(state.data.instance, msg) })
+        } else {
+            Err(OtError::new(otError_OT_ERROR_NO_BUFS))
+        }
     }
 
     /// Processes the OpenThread stack by:
