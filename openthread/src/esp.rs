@@ -1,16 +1,20 @@
+//! `Radio` trait implementation for the `esp-hal` ESP IEEE 802.15.4 radio.
+
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::signal::Signal;
 
 use esp_ieee802154::{Config as EspConfig, Error, Ieee802154};
 
-use crate::{Capabilities, Cca, Config, PsduMeta, Radio, RadioError};
+use crate::{Capabilities, Cca, Config, PsduMeta, Radio, RadioError, RadioErrorKind};
 
 impl RadioError for Error {
-    fn kind(&self) -> crate::RadioErrorKind {
-        todo!()
+    fn kind(&self) -> RadioErrorKind {
+        // TODO
+        RadioErrorKind::Other
     }
 }
 
+/// The `esp-hal` ESP IEEE 802.15.4 radio.
 pub struct EspRadio<'a> {
     driver: Ieee802154<'a>,
     config: Config,
@@ -19,6 +23,7 @@ pub struct EspRadio<'a> {
 impl<'a> EspRadio<'a> {
     const DEFAULT_CONFIG: Config = Config::new();
 
+    /// Create a new `EspRadio` instance.
     pub fn new(ieee802154: Ieee802154<'a>) -> Self {
         let mut this = Self {
             driver: ieee802154,

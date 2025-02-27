@@ -1,12 +1,18 @@
+//! An internal module that does the plumbing from the OpenThread C "Platform" API callbacks to Rust
+
 use core::cell::UnsafeCell;
 
 use crate::sys::{c_char, otError, otInstance, otLogLevel, otLogRegion, otRadioFrame};
 use crate::{IntoOtCode, OpenThread, OtActiveState};
 
+/// A hack so that we can store a mutable reference to the active state in a global static variable
+/// without any explicit synchronization
 pub(crate) struct SyncUnsafeCell<T>(pub UnsafeCell<T>);
 
 unsafe impl<T> Sync for SyncUnsafeCell<T> {}
 
+/// A static, mutable global state that allows OpenThnread to call us back via its `otPlat*` functions
+/// Look at `OtActiveState` and `OpenThread` for more information as to when this variable is set and unset
 pub(crate) static OT_ACTIVE_STATE: SyncUnsafeCell<Option<OtActiveState<'static>>> =
     SyncUnsafeCell(UnsafeCell::new(None));
 
@@ -173,43 +179,22 @@ pub unsafe extern "C" fn otPlatLog(
     todo!()
 }
 
-// other C functions
+// Other C functions which might generally not be supported by MCU ROM or by - say - `tinyrlibc`
 
 #[no_mangle]
-pub extern "C" fn iscntrl(v: u32) -> i32 {
+pub extern "C" fn iscntrl(v: u32) -> bool {
     log::info!("iscntrl {}", v as u8 as char);
-    0
+    false // TODO
 }
 
 #[no_mangle]
-pub extern "C" fn isprint() {
+pub extern "C" fn isprint() -> bool {
     log::error!("isprint not implemented");
+    true // TODO
 }
 
 #[no_mangle]
-pub extern "C" fn isupper() {
-    todo!()
-}
-
-#[no_mangle]
-pub extern "C" fn strcmp() {
-    todo!()
-}
-
-// copy pasta from https://github.com/esp-rs/esp-hal/blob/main/esp-wifi/src/compat/misc.rs#L101
-#[no_mangle]
-unsafe extern "C" fn strstr(str1: *const i8, str2: *const i8) -> *const i8 {
-    let s1 = core::ffi::CStr::from_ptr(str1 as *const _)
-        .to_str()
-        .unwrap();
-    let s2 = core::ffi::CStr::from_ptr(str2 as *const _)
-        .to_str()
-        .unwrap();
-
-    let idx = s1.find(s2);
-
-    match idx {
-        Some(offset) => str1.add(offset),
-        None => core::ptr::null(),
-    }
+pub extern "C" fn isupper() -> bool {
+    log::error!("isupper not implemented");
+    true // TODO
 }
