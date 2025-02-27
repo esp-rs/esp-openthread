@@ -1,3 +1,7 @@
+//! The module contains the `Dataset` type and its related types.
+//!
+//! Basically, a way to configure the Thread network settings.
+
 use crate::sys::{
     otExtendedPanId, otMeshLocalPrefix, otNetworkKey, otNetworkName, otOperationalDataset,
     otOperationalDatasetComponents, otPskc, otSecurityPolicy, otTimestamp,
@@ -33,6 +37,10 @@ pub struct OperationalDataset<'a> {
 }
 
 impl OperationalDataset<'_> {
+    /// Store the dataset in the format the `OpenThread` C library expects.
+    ///
+    /// Arguments:
+    /// - `raw_dataset`: A mutable reference to the `otOperationalDataset` struct where the dataset needs to be stored.
     pub(crate) fn store_raw(&self, raw_dataset: &mut otOperationalDataset) {
         let dataset_slice = unsafe {
             core::slice::from_raw_parts_mut(
@@ -209,6 +217,7 @@ pub struct SecurityPolicy {
 }
 
 /// Thread Dataset timestamp
+// TODO: Do we need both "seconds" and "ticks"? Revisit this later.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct ThreadTimestamp {
     pub seconds: u64,
