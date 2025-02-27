@@ -7,7 +7,7 @@ use core::net::Ipv6Addr;
 
 use embassy_executor::Spawner;
 use embassy_net::udp::{PacketMetadata, UdpMetadata, UdpSocket};
-use embassy_net::{Config, Runner, StackResources};
+use embassy_net::{Config, ConfigV6, Ipv6Cidr, Runner, StackResources, StaticConfigV6};
 
 use esp_backtrace as _;
 use esp_hal::rng::Rng;
@@ -17,6 +17,7 @@ use esp_openthread::enet::{self, EnetDriver, EnetRunner};
 use esp_openthread::esp::EspRadio;
 use esp_openthread::{OperationalDataset, OtResources, ThreadTimestamp};
 
+use heapless::Vec;
 use log::info;
 
 use rand_core::RngCore;
@@ -110,6 +111,15 @@ async fn main(spawner: Spawner) {
                 "Got IPv6 address(es) from OpenThread: {:?}",
                 &addrs[..addrs_len]
             );
+
+            // NOTE: Ideally, we should track any changes to the OpenThread Ipv6 conf with `ot_controller.wait_changed()`
+            // and re-initialize the embassy-net config with the new Ip and prefix.
+            stack.set_config_v6(ConfigV6::Static(StaticConfigV6 {
+                address: Ipv6Cidr::new(addrs[0], 64), // TODO: Need to have the prefix returned from OpenThread
+                gateway: None,                        // TODO
+                dns_servers: Vec::new(),              // TODO
+            }));
+
             break;
         }
     }
