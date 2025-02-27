@@ -1,4 +1,9 @@
-//! Most minimal example. See README.md for instructions.
+//! Basic example for esp32-c6 and esp32-h2, demonstrating the integration of `openthread` with `embassy-net`.
+//!
+//! The example provisions a MTD device with fixed Thread network settings, waits for the device to connect,
+//! and then sends and receives Ipv6 UDP packets over the `IEEE 802.15.4` radio.
+//!
+//! See README.md for instructions on how to configure the other Thread peer (a FTD), using another Esp device.
 
 #![no_std]
 #![no_main]
