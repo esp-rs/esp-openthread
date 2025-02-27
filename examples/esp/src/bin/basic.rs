@@ -16,6 +16,7 @@ use embassy_net::{Config, ConfigV6, Ipv6Cidr, Runner, StackResources, StaticConf
 
 use esp_backtrace as _;
 use esp_hal::rng::Rng;
+use esp_hal::timer::systimer::SystemTimer;
 use esp_ieee802154::Ieee802154;
 
 use heapless::Vec;
@@ -54,6 +55,8 @@ async fn main(spawner: Spawner) {
     info!("Starting...");
 
     let peripherals = esp_hal::init(esp_hal::Config::default());
+
+    esp_hal_embassy::init(SystemTimer::new(peripherals.SYSTIMER).alarm0);
 
     let rng = mk_static!(Rng, Rng::new(peripherals.RNG));
     let ot_resources = mk_static!(OtResources, OtResources::new());

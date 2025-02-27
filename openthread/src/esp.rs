@@ -4,6 +4,7 @@ use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::signal::Signal;
 
 use esp_ieee802154::{Config as EspConfig, Error, Ieee802154};
+use log::info;
 
 use crate::{Capabilities, Cca, Config, PsduMeta, Radio, RadioError, RadioErrorKind};
 
@@ -42,9 +43,9 @@ impl<'a> EspRadio<'a> {
         let config = &self.config;
 
         let esp_config = EspConfig {
-            auto_ack_tx: config.auto_ack,
-            auto_ack_rx: config.auto_ack,
-            enhance_ack_tx: config.auto_ack,
+            auto_ack_tx: true, //config.auto_ack, TODO
+            auto_ack_rx: true, //config.auto_ack, TODO
+            enhance_ack_tx: true, // config.auto_ack, TODO
             promiscuous: config.promiscuous,
             coordinator: false,
             rx_when_idle: config.rx_when_idle,
@@ -96,20 +97,29 @@ impl Radio for EspRadio<'_> {
     async fn transmit(&mut self, psdu: &[u8]) -> Result<(), Self::Error> {
         TX_SIGNAL.reset();
 
+        info!("ESP Radio, about to transmit: {psdu:02x?}");
+
         self.driver.transmit_raw(psdu)?;
 
         TX_SIGNAL.wait().await;
+
+        info!("ESP Radio, transmission done");
 
         Ok(())
     }
 
     async fn receive(&mut self, channel: u8, psdu_buf: &mut [u8]) -> Result<PsduMeta, Self::Error> {
         if channel != self.config.channel {
+            info!("ESP Radio, setting channel: {channel}");
+
             self.config.channel = channel;
             self.update_driver_config();
         }
 
         RX_SIGNAL.reset();
+
+        info!("ESP Radio, about to receive on channel {channel}");
+
         self.driver.start_receive();
 
         let raw = loop {
@@ -120,15 +130,17 @@ impl Radio for EspRadio<'_> {
             RX_SIGNAL.wait().await;
         };
 
-        let len = (raw.data[0] & 0x7f) as usize;
-        psdu_buf[..len].copy_from_slice(&raw.data[1..][..len]);
+        let psdu_len = (raw.data.len() - 1).min((raw.data[0] & 0x7f) as usize) - 1;
+        psdu_buf[..psdu_len].copy_from_slice(&raw.data[1..][..psdu_len]);
 
-        let rssi = (len + 1 < raw.data.len()).then(|| raw.data[len + 1] as i8);
+        info!("ESP Radio, received: {:02x?}", &psdu_buf[..psdu_len]);
+
+        let rssi = raw.data[1..][psdu_len] as i8;
 
         Ok(PsduMeta {
-            len,
+            len: psdu_len,
             channel: raw.channel,
-            rssi,
+            rssi: Some(rssi),
         })
     }
 }
