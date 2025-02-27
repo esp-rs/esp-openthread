@@ -108,7 +108,7 @@ async fn main(spawner: Spawner) {
     loop {
         info!("Waiting to get an IPv6 address from OpenThread...");
 
-        let mut addrs = [Ipv6Addr::UNSPECIFIED; 4];
+        let mut addrs = [(Ipv6Addr::UNSPECIFIED, 0); 4];
 
         let addrs_len = ot_controller.ipv6_addrs(&mut addrs).unwrap();
         if addrs_len > 0 {
@@ -120,9 +120,9 @@ async fn main(spawner: Spawner) {
             // NOTE: Ideally, we should track any changes to the OpenThread Ipv6 conf with `ot_controller.wait_changed()`
             // and re-initialize the embassy-net config with the new Ip and prefix.
             stack.set_config_v6(ConfigV6::Static(StaticConfigV6 {
-                address: Ipv6Cidr::new(addrs[0], 64), // TODO: Need to have the prefix returned from OpenThread
-                gateway: None,                        // TODO
-                dns_servers: Vec::new(),              // TODO
+                address: Ipv6Cidr::new(addrs[0].0, addrs[0].1),
+                gateway: None,           // TODO
+                dns_servers: Vec::new(), // TODO
             }));
 
             break;

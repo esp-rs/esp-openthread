@@ -185,7 +185,7 @@ impl OtController<'_> {
     /// Returns:
     /// - The total number of IPv6 addresses available. If this number is greater than
     ///   the length of the buffer, only the first `buf.len()` addresses will be stored in the buffer.
-    pub fn ipv6_addrs(&mut self, buf: &mut [Ipv6Addr]) -> Result<usize, OtError> {
+    pub fn ipv6_addrs(&mut self, buf: &mut [(Ipv6Addr, u8)]) -> Result<usize, OtError> {
         let mut ot = self.0.activate();
         let state = ot.state();
 
@@ -197,7 +197,10 @@ impl OtController<'_> {
             let addrs = unsafe { addrs.as_ref() }.unwrap();
 
             if offset < buf.len() {
-                buf[offset] = unsafe { addrs.mAddress.mFields.m16 }.into();
+                buf[offset] = (
+                    unsafe { addrs.mAddress.mFields.m16 }.into(),
+                    addrs.mPrefixLength,
+                );
             }
 
             offset += 1;
