@@ -1,9 +1,7 @@
-use std::{
-    env,
-    fs::{self, File},
-    io::Write,
-    path::PathBuf,
-};
+use std::env;
+use std::fs::{self, File};
+use std::io::Write;
+use std::path::PathBuf;
 
 use anyhow::Result;
 
@@ -11,24 +9,24 @@ fn main() -> Result<()> {
     // Put the linker script somewhere the linker can find it
     let out = PathBuf::from(env::var_os("OUT_DIR").unwrap());
 
-    copy_file(&out, "../libs/libeverest.a", "libeverest.a")?;
-    copy_file(&out, "../libs/libmbedcrypto.a", "libmbedcrypto.a")?;
-    copy_file(&out, "../libs/libmbedtls.a", "libmbedtls.a")?;
-    copy_file(&out, "../libs/libmbedx509.a", "libmbedx509.a")?;
-    copy_file(&out, "../libs/libopenthread-mtd.a", "libopenthread-mtd.a")?;
+    copy_file(&out, "libs/libeverest.a", "libeverest.a")?;
+    copy_file(&out, "libs/libmbedcrypto.a", "libmbedcrypto.a")?;
+    copy_file(&out, "libs/libmbedtls.a", "libmbedtls.a")?;
+    copy_file(&out, "libs/libmbedx509.a", "libmbedx509.a")?;
+    copy_file(&out, "libs/libopenthread-mtd.a", "libopenthread-mtd.a")?;
     copy_file(
         &out,
-        "../libs/libopenthread-platform-utils-static.a",
+        "libs/libopenthread-platform-utils-static.a",
         "libopenthread-platform-utils-static.a",
     )?;
     copy_file(
         &out,
-        "../libs/libopenthread-platform.a",
+        "libs/libopenthread-platform.a",
         "libopenthread-platform.a",
     )?;
-    copy_file(&out, "../libs/libp256m.a", "libp256m.a")?;
-    copy_file(&out, "../libs/libplatform.a", "libplatform.a")?;
-    copy_file(&out, "../libs/libtcplp-mtd.a", "libtcplp-mtd.a")?;
+    copy_file(&out, "libs/libp256m.a", "libp256m.a")?;
+    copy_file(&out, "libs/libplatform.a", "libplatform.a")?;
+    copy_file(&out, "libs/libtcplp-mtd.a", "libtcplp-mtd.a")?;
 
     println!("cargo:rustc-link-lib={}", "everest");
     println!("cargo:rustc-link-lib={}", "mbedcrypto");
