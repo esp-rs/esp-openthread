@@ -1,17 +1,20 @@
-# esp-openthread - WORK IN PROGRESS
+# [WIP] openthread
 
-This is using the [Rust open source IEEE-802.15.4 driver](https://github.com/esp-rs/esp-ieee802154) and [OpenThread](https://openthread.io/) to provide a Thread implementation for ESP32 bare-metal Rust.
+Platform-agnostic, async Rust bindings for the [`OpenThread`](https://openthread.io/) library.
 
-The OpenThread libraries are pre-compiled for convenience. Find the build script in `build_openthread`
+Tailored for Rust embedded baremetal, with out of the box support for [`embassy-net`](https://crates.io/crates/embassy-net).
+
+For certain MCUs, the OpenThread libraries are pre-compiled for convenience. 
+Find the build script in `build_openthread` (TBD)
 
 ## Goals
 
-- Provide MTD functionality.
+- MTD functionality
 
-## Maybe later goals
+## Later goals
 
-- Provide sleepy end-device support
-- Provide FTD functionality
+- Sleepy end-device
+- FTD functionality
 
 ## Non-Goals
 
@@ -19,9 +22,7 @@ The OpenThread libraries are pre-compiled for convenience. Find the build script
 
 ## Status
 
-Currently only basic functionality is tested.
-
-There are only few Rust-wrapper. Until everything is wrapped you need to use the raw bindings for more advanced functionality.
+The code ONLY type-checks, but is not tested yet (pending).
 
 ## Testing
 

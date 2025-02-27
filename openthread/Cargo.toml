@@ -1,0 +1,25 @@
+[package]
+name = "openthread"
+version = "0.5.0"
+edition = "2021"
+
+[lib]
+harness = false
+
+[features]
+default = ["esp32c6", "embassy-net-driver-channel"]
+esp32c6 = [ "esp-ieee802154/esp32c6"]
+esp32h2 = [ "esp-ieee802154/esp32h2"]
+srp-client = []
+
+[dependencies]
+openthread-sys = { path = "../openthread-sys" }
+log = { version = "0.4", default-features = false }
+rand_core = "0.6"
+embassy-sync = "0.6"
+embassy-time = "0.4"
+embassy-futures = "0.1"
+embassy-net-driver-channel = { version = "0.3", optional = true }
+bitflags = "2.5"
+#heapless = "0.8"
+esp-ieee802154 = { version = "0.5", optional = true }
