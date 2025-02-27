@@ -1,4 +1,4 @@
-use esp_openthread_sys::{
+use crate::sys::{
     otExtendedPanId, otMeshLocalPrefix, otNetworkKey, otNetworkName, otOperationalDataset,
     otOperationalDatasetComponents, otPskc, otSecurityPolicy, otTimestamp,
 };

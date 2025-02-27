@@ -474,28 +474,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "esp-openthread"
-version = "0.5.0"
-dependencies = [
- "bitflags",
- "embassy-futures",
- "embassy-net-driver-channel",
- "embassy-sync",
- "embassy-time",
- "esp-ieee802154",
- "esp-openthread-sys",
- "log",
- "rand_core",
-]
-
-[[package]]
-name = "esp-openthread-sys"
-version = "0.1.0"
-dependencies = [
- "anyhow",
-]
-
-[[package]]
 name = "esp-riscv-rt"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -756,6 +734,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "62948e14d923ea95ea2c7c86c71013138b66525b86bdc08d2dcc262bdb497b87"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "openthread"
+version = "0.5.0"
+dependencies = [
+ "bitflags",
+ "embassy-futures",
+ "embassy-net-driver-channel",
+ "embassy-sync",
+ "embassy-time",
+ "esp-ieee802154",
+ "log",
+ "openthread-sys",
+ "rand_core",
+]
+
+[[package]]
+name = "openthread-sys"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
 ]
 
 [[package]]

@@ -1,15 +1,15 @@
 use core::pin::pin;
 
 use embassy_futures::select::{select3, Either3};
-use embassy_net_driver_channel::{
-    driver::HardwareAddress, RxRunner, TxRunner,
-};
+use embassy_net_driver_channel::{driver::HardwareAddress, RxRunner, TxRunner};
 
 use rand_core::RngCore;
 
 use crate::{OtController, OtError, OtResources, OtRunner, OtRx, OtTx, Radio};
 
-pub use embassy_net_driver_channel::{Device as EnetDriver, State as EnetDriverState, StateRunner as EnetDriverStateRunner};
+pub use embassy_net_driver_channel::{
+    Device as EnetDriver, State as EnetDriverState, StateRunner as EnetDriverStateRunner,
+};
 
 pub fn new<'d, const MTU: usize, const N_RX: usize, const N_TX: usize>(
     rng: &'d mut dyn RngCore,
