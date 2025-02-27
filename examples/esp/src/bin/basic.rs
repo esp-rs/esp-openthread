@@ -18,12 +18,12 @@ use esp_backtrace as _;
 use esp_hal::rng::Rng;
 use esp_ieee802154::Ieee802154;
 
-use esp_openthread::enet::{self, EnetDriver, EnetRunner};
-use esp_openthread::esp::EspRadio;
-use esp_openthread::{OperationalDataset, OtResources, ThreadTimestamp};
-
 use heapless::Vec;
 use log::info;
+
+use openthread::enet::{self, EnetDriver, EnetRunner};
+use openthread::esp::EspRadio;
+use openthread::{OperationalDataset, OtResources, ThreadTimestamp};
 
 use rand_core::RngCore;
 

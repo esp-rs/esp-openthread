@@ -24,7 +24,7 @@ use sys::{
 };
 
 pub use dataset::*;
-pub use esp_openthread_sys as sys;
+pub use openthread_sys as sys;
 pub use radio::*;
 
 mod dataset;
