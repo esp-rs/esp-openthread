@@ -2,7 +2,6 @@
 
 #![no_std]
 #![allow(async_fn_in_trait)]
-#![feature(c_variadic)] // TODO: otPlatLog
 
 use core::cell::{RefCell, RefMut};
 use core::ffi::c_void;
@@ -47,17 +46,6 @@ use sys::{
     otPlatRadioTxDone, otPlatRadioTxStarted, otRadioFrame, otSetStateChangedCallback,
     otTaskletsProcess, otThreadSetEnabled, OT_RADIO_FRAME_MAX_SIZE,
 };
-
-/// https://github.com/espressif/esp-idf/blob/release/v5.3/components/ieee802154/private_include/esp_ieee802154_frame.h#L20
-const IEEE802154_FRAME_TYPE_OFFSET: usize = 0; // .. as we have removed the PHR and we are indexing the PSDU
-const IEEE802154_FRAME_TYPE_MASK: u8 = 0x07;
-const IEEE802154_FRAME_TYPE_BEACON: u8 = 0x00;
-const IEEE802154_FRAME_TYPE_DATA: u8 = 0x01;
-const IEEE802154_FRAME_TYPE_ACK: u8 = 0x02;
-const IEEE802154_FRAME_TYPE_COMMAND: u8 = 0x03;
-
-// ed_rss for H2 and C6 is the same
-const ENERGY_DETECT_RSS: i8 = 16;
 
 /// A newtype wrapper over the native OpenThread error type (`otError`).
 ///
@@ -781,6 +769,15 @@ impl OtState {
                                 cmd = new_cmd;
                             }
                             Either::Second(result) => {
+                                // https://github.com/espressif/esp-idf/blob/release/v5.3/components/ieee802154/private_include/esp_ieee802154_frame.h#L20
+                                // TODO: Not sure we actually need any of this...
+                                const IEEE802154_FRAME_TYPE_OFFSET: usize = 0; // .. as we have removed the PHR and we are indexing the PSDU
+                                const IEEE802154_FRAME_TYPE_MASK: u8 = 0x07;
+                                const IEEE802154_FRAME_TYPE_BEACON: u8 = 0x00;
+                                const IEEE802154_FRAME_TYPE_DATA: u8 = 0x01;
+                                const IEEE802154_FRAME_TYPE_ACK: u8 = 0x02;
+                                const IEEE802154_FRAME_TYPE_COMMAND: u8 = 0x03;
+
                                 let mut ot = self.activate();
                                 let state = ot.state();
 
@@ -862,6 +859,9 @@ impl OtState {
                                     IEEE802154_FRAME_TYPE_BEACON
                                     | IEEE802154_FRAME_TYPE_COMMAND => {
                                         warn!("Received beacon or MAC command frame, triggering scan done");
+
+                                        // ed_rss for H2 and C6 is the same
+                                        const ENERGY_DETECT_RSS: i8 = 16;
 
                                         unsafe {
                                             otPlatRadioEnergyScanDone(
