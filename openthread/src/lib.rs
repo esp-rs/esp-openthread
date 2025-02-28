@@ -2,7 +2,6 @@
 
 #![no_std]
 #![allow(async_fn_in_trait)]
-#![feature(c_variadic)] // TODO: otPlatLog
 
 use core::cell::{RefCell, RefMut};
 use core::ffi::c_void;
