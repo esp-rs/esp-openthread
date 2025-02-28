@@ -382,13 +382,13 @@ impl OtRx<'_> {
     /// Wait for an IPv6 packet to be available.
     pub async fn wait_available(&mut self) -> Result<(), OtError> {
         loop {
-            debug!("Waiting for IPv6 packet reception availability");
+            trace!("Waiting for IPv6 packet reception availability");
 
             {
                 let data = self.0.data.borrow_mut();
 
                 if !data.rcv_packet_ipv6.is_null() {
-                    debug!("IPv6 packet reception available");
+                    trace!("IPv6 packet reception available");
                     break;
                 }
             }
@@ -409,7 +409,7 @@ impl OtRx<'_> {
     /// - The length of the received packet.
     pub async fn rx(&mut self, buf: &mut [u8]) -> Result<usize, OtError> {
         loop {
-            debug!("Waiting for IPv6 packet reception");
+            trace!("Waiting for IPv6 packet reception");
 
             {
                 let mut ot = self.0.activate();
@@ -431,7 +431,7 @@ impl OtRx<'_> {
 
                     state.data.rcv_packet_ipv6 = core::ptr::null_mut();
 
-                    info!("Received IPv6 packet: {:02x?}", &buf[..len]);
+                    debug!("Received IPv6 packet: {:02x?}", &buf[..len]);
 
                     return Ok(len);
                 }
@@ -459,7 +459,7 @@ impl OtTx<'_> {
     pub async fn tx(&mut self, packet: &[u8]) -> Result<(), OtError> {
         self.0.activate().tx_ip6(packet)?;
 
-        info!("Transmitted IPv6 packet: {:02x?}", packet);
+        debug!("Transmitted IPv6 packet: {:02x?}", packet);
 
         Ok(())
     }
