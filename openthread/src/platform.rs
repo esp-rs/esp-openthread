@@ -1,6 +1,9 @@
 //! An internal module that does the plumbing from the OpenThread C "Platform" API callbacks to Rust
 
 use core::cell::UnsafeCell;
+use core::ffi::CStr;
+
+use openthread_sys::otError_OT_ERROR_NONE;
 
 use crate::sys::{c_char, otError, otInstance, otLogLevel, otLogRegion, otRadioFrame};
 use crate::{IntoOtCode, OpenThread, OtActiveState};
@@ -168,14 +171,40 @@ pub extern "C" fn otPlatRadioReceive(instance: *mut otInstance, channel: u8) -> 
         .into_ot_code()
 }
 
+// pub unsafe extern "C" fn otPlatLog(
+//     _level: otLogLevel,
+//     _region: otLogRegion,
+//     _format: *const c_char,
+//     _args: ...
+// ) -> otError {
+//     todo!()
+// }
 #[no_mangle]
 pub unsafe extern "C" fn otPlatLog(
-    _level: otLogLevel,
+    level: otLogLevel,
     _region: otLogRegion,
     _format: *const c_char,
-    _args: ...
+    str: *const c_char,
 ) -> otError {
-    todo!()
+    #[allow(clippy::snake_case)]
+    let level = match level {
+        otLogLevel_OT_LOG_LEVEL_NONE => None,
+        otLogLevel_OT_LOG_LEVEL_CRIT => Some(log::Level::Error),
+        otLogLevel_OT_LOG_LEVEL_WARN => Some(log::Level::Warn),
+        otLogLevel_OT_LOG_LEVEL_NOTE => Some(log::Level::Info),
+        otLogLevel_OT_LOG_LEVEL_INFO => Some(log::Level::Info),
+        otLogLevel_OT_LOG_LEVEL_DEBG => Some(log::Level::Debug),
+        otLogLevel_OT_LOG_LEVEL_DUMP => Some(log::Level::Trace),
+        _ => Some(log::Level::Error),
+    };
+
+    if let Some(level) = level {
+        if let Ok(str) = CStr::from_ptr(str).to_str() {
+            ::log::log!(level, "{}", str);
+        }
+    }
+
+    otError_OT_ERROR_NONE
 }
 
 // Other C functions which might generally not be supported by MCU ROM or by - say - `tinyrlibc`

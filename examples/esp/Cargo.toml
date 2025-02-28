@@ -20,12 +20,12 @@ embassy-sync = "0.6"
 embassy-futures = "0.1"
 embassy-time = "0.4"
 embassy-net = { version = "0.6", features = ["proto-ipv6", "medium-ip", "udp"] }
-esp-hal = "0.23.1"
+esp-hal = { version = "0.23.1", features = ["log"] }
 esp-hal-embassy = "0.6"
 esp-alloc = { version = "0.6", optional = true }
 esp-backtrace = { version = "0.15", features = ["panic-handler", "exception-handler", "println"] }
 esp-println = { version = "0.13", features = ["log"] }
-esp-ieee802154 = "0.5"
+esp-ieee802154 = { version= "0.5", features = ["log"] }
 log = "0.4"
 heapless = "0.8"
 critical-section = "1.1"
