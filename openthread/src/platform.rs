@@ -204,8 +204,8 @@ pub unsafe extern "C" fn otPlatLog(
         1 /*CRIT*/ => Some(log::Level::Error),
         2 /*WARN*/ => Some(log::Level::Warn),
         3 /*NOTE*/ => Some(log::Level::Info),
-        4 /*INFO*/ => Some(log::Level::Info),
-        5 /*DEBG*/ => Some(log::Level::Info),
+        4 /*INFO*/ => Some(log::Level::Debug),
+        5 /*DEBG*/ => Some(log::Level::Trace),
         _ => Some(log::Level::Trace),
     };
 

@@ -4,7 +4,8 @@ use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::signal::Signal;
 
 use esp_ieee802154::{Config as EspConfig, Error, Ieee802154};
-use log::info;
+
+use log::trace;
 
 use crate::{Capabilities, Cca, Config, PsduMeta, Radio, RadioError, RadioErrorKind};
 
@@ -97,20 +98,20 @@ impl Radio for EspRadio<'_> {
     async fn transmit(&mut self, psdu: &[u8]) -> Result<(), Self::Error> {
         TX_SIGNAL.reset();
 
-        info!("ESP Radio, about to transmit: {psdu:02x?}");
+        trace!("ESP Radio, about to transmit: {psdu:02x?}");
 
         self.driver.transmit_raw(psdu)?;
 
         TX_SIGNAL.wait().await;
 
-        info!("ESP Radio, transmission done");
+        trace!("ESP Radio, transmission done");
 
         Ok(())
     }
 
     async fn receive(&mut self, channel: u8, psdu_buf: &mut [u8]) -> Result<PsduMeta, Self::Error> {
         if channel != self.config.channel {
-            info!("ESP Radio, setting channel: {channel}");
+            trace!("ESP Radio, setting channel: {channel}");
 
             self.config.channel = channel;
             self.update_driver_config();
@@ -118,7 +119,7 @@ impl Radio for EspRadio<'_> {
 
         RX_SIGNAL.reset();
 
-        info!("ESP Radio, about to receive on channel {channel}");
+        trace!("ESP Radio, about to receive on channel {channel}");
 
         self.driver.start_receive();
 
@@ -130,10 +131,10 @@ impl Radio for EspRadio<'_> {
             RX_SIGNAL.wait().await;
         };
 
-        let psdu_len = (raw.data.len() - 1).min((raw.data[0] & 0x7f) as usize) - 1;
+        let psdu_len = (raw.data.len() - 1).min((raw.data[0] & 0x7f) as usize);
         psdu_buf[..psdu_len].copy_from_slice(&raw.data[1..][..psdu_len]);
 
-        info!("ESP Radio, received: {:02x?}", &psdu_buf[..psdu_len]);
+        trace!("ESP Radio, received: {:02x?}", &psdu_buf[..psdu_len]);
 
         let rssi = raw.data[1..][psdu_len] as i8;
 

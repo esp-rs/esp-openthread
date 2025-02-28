@@ -17,7 +17,8 @@ use embassy_sync::{blocking_mutex::raw::NoopRawMutex, signal::Signal};
 
 use embassy_time::Instant;
 
-use log::{info, trace, warn};
+use log::{debug, info, trace, warn};
+
 use platform::OT_ACTIVE_STATE;
 
 use rand_core::RngCore;
@@ -37,13 +38,14 @@ mod radio;
 mod srp_client;
 
 use sys::{
-    otChangedFlags, otDatasetSetActive, otError, otError_OT_ERROR_FAILED, otError_OT_ERROR_NONE,
-    otError_OT_ERROR_NO_BUFS, otInstance, otInstanceInitSingle, otIp6GetUnicastAddresses,
-    otIp6NewMessageFromBuffer, otIp6Send, otIp6SetEnabled, otIp6SetReceiveCallback, otMessage,
-    otMessageFree, otMessageGetLength, otMessagePriority_OT_MESSAGE_PRIORITY_NORMAL, otMessageRead,
-    otMessageSettings, otOperationalDataset, otPlatAlarmMilliFired, otPlatRadioEnergyScanDone,
-    otPlatRadioReceiveDone, otPlatRadioTxDone, otPlatRadioTxStarted, otRadioFrame,
-    otSetStateChangedCallback, otTaskletsProcess, otThreadSetEnabled, OT_RADIO_FRAME_MAX_SIZE,
+    otChangedFlags, otDatasetSetActive, otError, otError_OT_ERROR_DROP, otError_OT_ERROR_FAILED,
+    otError_OT_ERROR_NONE, otError_OT_ERROR_NO_BUFS, otInstance, otInstanceInitSingle,
+    otIp6GetUnicastAddresses, otIp6NewMessageFromBuffer, otIp6Send, otIp6SetEnabled,
+    otIp6SetReceiveCallback, otMessage, otMessageFree,
+    otMessagePriority_OT_MESSAGE_PRIORITY_NORMAL, otMessageRead, otMessageSettings,
+    otOperationalDataset, otPlatAlarmMilliFired, otPlatRadioEnergyScanDone, otPlatRadioReceiveDone,
+    otPlatRadioTxDone, otPlatRadioTxStarted, otRadioFrame, otSetStateChangedCallback,
+    otTaskletsProcess, otThreadSetEnabled, OT_RADIO_FRAME_MAX_SIZE,
 };
 
 /// https://github.com/espressif/esp-idf/blob/release/v5.3/components/ieee802154/private_include/esp_ieee802154_frame.h#L20
@@ -196,7 +198,7 @@ impl OtController<'_> {
 
             if offset < buf.len() {
                 buf[offset] = (
-                    unsafe { addrs.mAddress.mFields.m16 }.into(),
+                    unsafe { addrs.mAddress.mFields.m8 }.into(),
                     addrs.mPrefixLength,
                 );
             }
@@ -380,13 +382,13 @@ impl OtRx<'_> {
     /// Wait for an IPv6 packet to be available.
     pub async fn wait_available(&mut self) -> Result<(), OtError> {
         loop {
-            info!("Waiting for IPv6 packet reception availability");
+            debug!("Waiting for IPv6 packet reception availability");
 
             {
                 let data = self.0.data.borrow_mut();
 
                 if !data.rcv_packet_ipv6.is_null() {
-                    info!("IPv6 packet reception available");
+                    debug!("IPv6 packet reception available");
                     break;
                 }
             }
@@ -407,22 +409,23 @@ impl OtRx<'_> {
     /// - The length of the received packet.
     pub async fn rx(&mut self, buf: &mut [u8]) -> Result<usize, OtError> {
         loop {
-            info!("Waiting for IPv6 packet reception");
+            debug!("Waiting for IPv6 packet reception");
 
             {
                 let mut ot = self.0.activate();
                 let state = ot.state();
 
                 if !state.data.rcv_packet_ipv6.is_null() {
-                    let len = unsafe { otMessageGetLength(state.data.rcv_packet_ipv6) as usize };
-
-                    unsafe {
+                    let len = unsafe {
                         otMessageRead(
                             state.data.rcv_packet_ipv6,
                             0,
                             buf.as_mut_ptr() as *mut _,
-                            len.min(buf.len()) as _,
-                        );
+                            buf.len() as _,
+                        ) as _
+                    };
+
+                    unsafe {
                         otMessageFree(state.data.rcv_packet_ipv6);
                     }
 
@@ -618,11 +621,11 @@ impl OtState {
     /// Based on `embassy-time` for simplicity and for achieving platform-neutrality.
     async fn run_alarm(&self) -> ! {
         loop {
-            info!("Waiting for trigger alarm request");
+            trace!("Waiting for trigger alarm request");
 
             let mut when = self.signals.alarm.wait().await;
 
-            info!("Got trigger alarm request: {when}, waiting for it to trigger");
+            debug!("Got trigger alarm request: {when}, waiting for it to trigger");
 
             loop {
                 let result = embassy_futures::select::select(
@@ -633,12 +636,12 @@ impl OtState {
 
                 match result {
                     Either::First(new_when) => {
-                        info!("Alarm interrupted by new alarm: {new_when}");
+                        debug!("Alarm interrupted by new alarm: {new_when}");
                         when = new_when;
                     }
                     Either::Second(_) => {
                         // TODO: Rather than signalling the OT spin loop, notify OT directly?
-                        info!("Alarm triggered, notifying OT main loop");
+                        debug!("Alarm triggered, notifying OT main loop");
                         self.signals.ot.signal(());
                         break;
                     }
@@ -656,10 +659,10 @@ impl OtState {
         R: Radio,
     {
         loop {
-            info!("Waiting for radio command");
+            trace!("Waiting for radio command");
 
             let mut cmd = self.signals.radio.wait().await;
-            info!("Got radio command: {cmd:?}");
+            debug!("Got radio command: {cmd:?}");
 
             let config = {
                 let mut ot = self.activate();
@@ -669,7 +672,7 @@ impl OtState {
             };
 
             if let Some(config) = config {
-                info!("Setting radio config: {config:?}");
+                debug!("Setting radio config: {config:?}");
                 let _ = radio.set_config(&config).await;
             }
 
@@ -698,7 +701,7 @@ impl OtState {
                             psdu_len
                         };
 
-                        info!("About to Tx 802.15.4 frame {:02x?}", &psdu_buf[..psdu_len]);
+                        trace!("About to Tx 802.15.4 frame {:02x?}", &psdu_buf[..psdu_len]);
 
                         let mut new_cmd = pin!(self.signals.radio.wait());
                         let mut tx = pin!(radio.transmit(&psdu_buf[..psdu_len]));
@@ -721,7 +724,7 @@ impl OtState {
                                     );
                                 }
 
-                                info!("Tx interrupted by new command: {new_cmd:?}");
+                                debug!("Tx interrupted by new command: {new_cmd:?}");
 
                                 cmd = new_cmd;
                             }
@@ -742,14 +745,14 @@ impl OtState {
                                     );
                                 }
 
-                                info!("Tx done: {result:?}");
+                                debug!("Tx done: {result:?}");
 
                                 break;
                             }
                         }
                     }
                     RadioCommand::Rx(channel) => {
-                        info!("Waiting for Rx on channel {channel}");
+                        trace!("Waiting for Rx on channel {channel}");
 
                         let result = {
                             let mut new_cmd = pin!(self.signals.radio.wait());
@@ -773,7 +776,7 @@ impl OtState {
                                     );
                                 }
 
-                                info!("Rx interrupted by new command: {new_cmd:?}");
+                                debug!("Rx interrupted by new command: {new_cmd:?}");
 
                                 cmd = new_cmd;
                             }
@@ -782,7 +785,7 @@ impl OtState {
                                 let state = ot.state();
 
                                 let Ok(psdu_meta) = result else {
-                                    info!("Rx failed: {result:?}");
+                                    warn!("Rx failed: {result:?}");
 
                                     // Reporting receive failure because we got a driver error
                                     unsafe {
@@ -796,7 +799,7 @@ impl OtState {
                                     break;
                                 };
 
-                                info!(
+                                debug!(
                                     "Rx done, got frame: {psdu_meta:?}, {:02x?}",
                                     &psdu_buf[..psdu_meta.len]
                                 );
@@ -836,7 +839,7 @@ impl OtState {
 
                                 match frame_type(rcv_psdu) {
                                     IEEE802154_FRAME_TYPE_DATA => {
-                                        info!("Got data frame, reporting");
+                                        debug!("Got data frame, reporting");
 
                                         let rssi = psdu_meta.rssi.unwrap_or(0);
 
@@ -868,7 +871,7 @@ impl OtState {
                                         }
                                     }
                                     IEEE802154_FRAME_TYPE_ACK => {
-                                        info!("Received ack frame");
+                                        debug!("Received ack frame");
                                     }
                                     _ => {
                                         // Drop unsupported frames
@@ -889,7 +892,7 @@ impl OtState {
     /// or otherwise waiting until notified that there are either pending tasklets, or pending alarms.
     async fn run_openthread(&self) -> ! {
         loop {
-            info!("About to process Openthread tasklets and alarms");
+            trace!("About to process Openthread tasklets and alarms");
 
             // Activate OpenThread and process any tasklets and alarms
             self.activate().process();
@@ -1011,7 +1014,15 @@ impl<'a> OpenThread<'a> {
         };
 
         if !msg.is_null() {
-            ot!(unsafe { otIp6Send(state.data.instance, msg) })
+            let res = unsafe { otIp6Send(state.data.instance, msg) };
+            if res != otError_OT_ERROR_DROP {
+                ot!(res)
+            } else {
+                // OpenThread will intentionally drop some multicast and ICMPv6 packets
+                // which are not required for the Thread network.
+                trace!("Message dropped");
+                Ok(())
+            }
         } else {
             Err(OtError::new(otError_OT_ERROR_NO_BUFS))
         }
@@ -1038,7 +1049,7 @@ impl<'a> OpenThread<'a> {
         let state = self.state();
 
         if state.data.run_tasklets {
-            info!("Process tasklets");
+            debug!("Process tasklets");
 
             state.data.run_tasklets = false;
 
@@ -1060,7 +1071,7 @@ impl<'a> OpenThread<'a> {
             .map(|when| when <= embassy_time::Instant::now())
             .unwrap_or(false)
         {
-            info!("Alarm fired, notifying OpenThread C");
+            debug!("Alarm fired, notifying OpenThread C");
 
             state.data.alarm_status = None;
             unsafe { otPlatAlarmMilliFired(state.data.instance) };
@@ -1110,9 +1121,11 @@ impl<'a> OpenThread<'a> {
     }
 
     fn plat_ipv6_received(&mut self, msg: *mut otMessage) {
+        trace!("Got ipv6 packet");
+
         let state = self.state();
 
-        if !state.data.rcv_packet_ipv6.is_null() {
+        if state.data.rcv_packet_ipv6.is_null() {
             state.data.rcv_packet_ipv6 = msg;
             state.signals.rx_ipv6.signal(());
         } else {
@@ -1123,7 +1136,7 @@ impl<'a> OpenThread<'a> {
     }
 
     fn plat_changed(&mut self, _flags: u32) {
-        info!("Plat changed callback");
+        trace!("Plat changed callback");
         self.state().signals.controller.signal(());
     }
 
@@ -1133,7 +1146,7 @@ impl<'a> OpenThread<'a> {
     }
 
     fn plat_alarm_set(&mut self, at0_ms: u32, adt_ms: u32) -> Result<(), OtError> {
-        info!("Plat alarm set callback: {at0_ms}, {adt_ms}");
+        trace!("Plat alarm set callback: {at0_ms}, {adt_ms}");
 
         let state = self.state();
 
@@ -1147,7 +1160,7 @@ impl<'a> OpenThread<'a> {
     }
 
     fn plat_alarm_clear(&mut self) -> Result<(), OtError> {
-        info!("Plat alarm clear callback");
+        trace!("Plat alarm clear callback");
         self.state().data.alarm_status = None;
 
         Ok(())
@@ -1155,26 +1168,26 @@ impl<'a> OpenThread<'a> {
 
     fn plat_radio_ieee_eui64(&mut self, mac: &mut [u8; 8]) {
         mac.fill(0);
-        info!("Plat radio IEEE EUI64 callback, MAC: {:02x?}", mac);
+        trace!("Plat radio IEEE EUI64 callback, MAC: {:02x?}", mac);
     }
 
     fn plat_radio_caps(&mut self) -> u8 {
         let caps = 0; // TODO
-        info!("Plat radio caps callback, caps: {caps}");
+        trace!("Plat radio caps callback, caps: {caps}");
 
         caps
     }
 
     fn plat_radio_is_enabled(&mut self) -> bool {
         let enabled = true; // TODO
-        info!("Plat radio is enabled callback, enabled: {enabled}");
+        trace!("Plat radio is enabled callback, enabled: {enabled}");
 
         enabled
     }
 
     fn plat_radio_get_rssi(&mut self) -> i8 {
         let rssi = -128; // TODO
-        info!("Plat radio get RSSI callback, RSSI: {rssi}");
+        trace!("Plat radio get RSSI callback, RSSI: {rssi}");
 
         rssi
     }
@@ -1182,14 +1195,14 @@ impl<'a> OpenThread<'a> {
     // from https://github.com/espressif/esp-idf/blob/release/v5.3/components/openthread/src/port/esp_openthread_radio.c#L35
     fn plat_radio_receive_sensititivy(&mut self) -> i8 {
         let sens = 0; // TODO
-        info!("Plat radio receive sensitivity callback, sensitivity: {sens}");
+        trace!("Plat radio receive sensitivity callback, sensitivity: {sens}");
 
         sens
     }
 
     fn plat_radio_get_promiscuous(&mut self) -> bool {
         let promiscuous = false; // TODO
-        info!("Plat radio get promiscuous callback, promiscuous: {promiscuous}");
+        trace!("Plat radio get promiscuous callback, promiscuous: {promiscuous}");
 
         promiscuous
     }
@@ -1263,15 +1276,16 @@ impl<'a> OpenThread<'a> {
     }
 
     fn plat_radio_transmit_buffer(&mut self) -> *mut otRadioFrame {
-        info!("Plat radio transmit buffer callback");
+        trace!("Plat radio transmit buffer callback");
         // TODO: This frame is private to us, perhaps don't store it in a RefCell?
         &mut self.state().data.radio_resources.tns_frame
     }
 
     fn plat_radio_transmit(&mut self, frame: &otRadioFrame) -> Result<(), OtError> {
-        info!(
+        trace!(
             "Plat radio transmit callback: {}, {:02x?}",
-            frame.mLength, frame.mPsdu
+            frame.mLength,
+            frame.mPsdu
         );
 
         let state = self.state();
@@ -1289,7 +1303,7 @@ impl<'a> OpenThread<'a> {
     }
 
     fn plat_radio_receive(&mut self, channel: u8) -> Result<(), OtError> {
-        info!("Plat radio receive callback, channel: {channel}");
+        trace!("Plat radio receive callback, channel: {channel}");
         self.state().signals.radio.signal(RadioCommand::Rx(channel));
 
         Ok(())
