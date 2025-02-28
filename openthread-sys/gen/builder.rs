@@ -167,7 +167,7 @@ impl OpenThreadBuilder {
 
         config
             .define("OT_LOG_LEVEL", "DEBG")
-            .define("OT_LOG_OUTPUT", "APP")
+            .define("OT_LOG_OUTPUT", "PLATFORM_DEFINED")
             .define("OT_FTD", "OFF")
             .define("OT_MTD", "ON")
             .define("OT_RCP", "OFF")
