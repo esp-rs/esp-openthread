@@ -5,6 +5,7 @@
 #![feature(c_variadic)] // TODO: otPlatLog
 
 use core::cell::{RefCell, RefMut};
+use core::ffi::c_void;
 use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 use core::net::Ipv6Addr;
@@ -21,11 +22,6 @@ use platform::OT_ACTIVE_STATE;
 
 use rand_core::RngCore;
 
-use sys::{
-    otMessageFree, otMessageGetLength, otMessageRead, otOperationalDataset, otPlatAlarmMilliFired,
-    otPlatRadioEnergyScanDone, otTaskletsProcess,
-};
-
 pub use dataset::*;
 pub use openthread_sys as sys;
 pub use radio::*;
@@ -41,12 +37,13 @@ mod radio;
 mod srp_client;
 
 use sys::{
-    c_void, otChangedFlags, otDatasetSetActive, otError, otError_OT_ERROR_FAILED,
-    otError_OT_ERROR_NONE, otError_OT_ERROR_NO_BUFS, otInstance, otInstanceInitSingle,
-    otIp6GetUnicastAddresses, otIp6NewMessageFromBuffer, otIp6Send, otIp6SetEnabled,
-    otIp6SetReceiveCallback, otMessage, otMessagePriority_OT_MESSAGE_PRIORITY_NORMAL,
-    otMessageSettings, otPlatRadioReceiveDone, otPlatRadioTxDone, otPlatRadioTxStarted,
-    otRadioFrame, otSetStateChangedCallback, otThreadSetEnabled, OT_RADIO_FRAME_MAX_SIZE,
+    otChangedFlags, otDatasetSetActive, otError, otError_OT_ERROR_FAILED, otError_OT_ERROR_NONE,
+    otError_OT_ERROR_NO_BUFS, otInstance, otInstanceInitSingle, otIp6GetUnicastAddresses,
+    otIp6NewMessageFromBuffer, otIp6Send, otIp6SetEnabled, otIp6SetReceiveCallback, otMessage,
+    otMessageFree, otMessageGetLength, otMessagePriority_OT_MESSAGE_PRIORITY_NORMAL, otMessageRead,
+    otMessageSettings, otOperationalDataset, otPlatAlarmMilliFired, otPlatRadioEnergyScanDone,
+    otPlatRadioReceiveDone, otPlatRadioTxDone, otPlatRadioTxStarted, otRadioFrame,
+    otSetStateChangedCallback, otTaskletsProcess, otThreadSetEnabled, OT_RADIO_FRAME_MAX_SIZE,
 };
 
 /// https://github.com/espressif/esp-idf/blob/release/v5.3/components/ieee802154/private_include/esp_ieee802154_frame.h#L20
@@ -848,7 +845,8 @@ impl OtState {
                                         rcv_frame.mChannel = channel;
                                         rcv_frame.mInfo.mRxInfo.mRssi = rssi;
                                         rcv_frame.mInfo.mRxInfo.mLqi = rssi_to_lqi(rssi);
-                                        rcv_frame.mInfo.mRxInfo.mTimestamp = Instant::now().as_micros();
+                                        rcv_frame.mInfo.mRxInfo.mTimestamp =
+                                            Instant::now().as_micros();
 
                                         unsafe {
                                             otPlatRadioReceiveDone(

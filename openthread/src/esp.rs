@@ -43,8 +43,8 @@ impl<'a> EspRadio<'a> {
         let config = &self.config;
 
         let esp_config = EspConfig {
-            auto_ack_tx: true, //config.auto_ack, TODO
-            auto_ack_rx: true, //config.auto_ack, TODO
+            auto_ack_tx: true,    //config.auto_ack, TODO
+            auto_ack_rx: true,    //config.auto_ack, TODO
             enhance_ack_tx: true, // config.auto_ack, TODO
             promiscuous: config.promiscuous,
             coordinator: false,

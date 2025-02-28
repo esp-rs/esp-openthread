@@ -1,11 +1,11 @@
 //! An internal module that does the plumbing from the OpenThread C "Platform" API callbacks to Rust
 
 use core::cell::UnsafeCell;
-use core::ffi::CStr;
+use core::ffi::{c_char, CStr};
 
 use openthread_sys::otError_OT_ERROR_NONE;
 
-use crate::sys::{c_char, otError, otInstance, otLogLevel, otLogRegion, otRadioFrame};
+use crate::sys::{otError, otInstance, otLogLevel, otLogRegion, otRadioFrame};
 use crate::{IntoOtCode, OpenThread, OtActiveState};
 
 /// A hack so that we can store a mutable reference to the active state in a global static variable
@@ -171,14 +171,25 @@ pub extern "C" fn otPlatRadioReceive(instance: *mut otInstance, channel: u8) -> 
         .into_ot_code()
 }
 
-// pub unsafe extern "C" fn otPlatLog(
-//     _level: otLogLevel,
-//     _region: otLogRegion,
-//     _format: *const c_char,
-//     _args: ...
-// ) -> otError {
-//     todo!()
-// }
+/// NOTE:
+/// While the correct signature should be something like:
+/// ```ignore
+/// pub unsafe extern "C" fn otPlatLog(
+///     _level: otLogLevel,
+///     _region: otLogRegion,
+///     _format: *const c_char,
+///     _args: ...
+/// ) -> otError {
+///     todo!()
+/// }
+/// ```
+///
+/// ... varargs are not yet stable in Rust, so we cannot express this.
+///
+/// Fortunately, looking here: https://github.com/openthread/openthread/blob/31f2897951c9dfd89364121f0581622416e77a7b/src/core/common/log.cpp#L131
+/// ... it seems (at least for now) that the "varargs" aspect of `otPlatLog` is not used on the OpenThread C++ side.
+///
+/// So - while risky - until the above OpenThread C++ code stays unchanged - we can get away with the function signature below.
 #[no_mangle]
 pub unsafe extern "C" fn otPlatLog(
     level: otLogLevel,
@@ -189,26 +200,25 @@ pub unsafe extern "C" fn otPlatLog(
     #[allow(non_snake_case)]
     #[allow(unused)]
     let level = match level {
-        otLogLevel_OT_LOG_LEVEL_NONE => None,
-        otLogLevel_OT_LOG_LEVEL_CRIT => Some(log::Level::Error),
-        otLogLevel_OT_LOG_LEVEL_WARN => Some(log::Level::Warn),
-        otLogLevel_OT_LOG_LEVEL_NOTE => Some(log::Level::Info),
-        otLogLevel_OT_LOG_LEVEL_INFO => Some(log::Level::Info),
-        otLogLevel_OT_LOG_LEVEL_DEBG => Some(log::Level::Debug),
-        otLogLevel_OT_LOG_LEVEL_DUMP => Some(log::Level::Trace),
-        _ => Some(log::Level::Error),
+        0 => None,
+        1 /*CRIT*/ => Some(log::Level::Error),
+        2 /*WARN*/ => Some(log::Level::Warn),
+        3 /*NOTE*/ => Some(log::Level::Info),
+        4 /*INFO*/ => Some(log::Level::Info),
+        5 /*DEBG*/ => Some(log::Level::Info),
+        _ => Some(log::Level::Trace),
     };
 
     if let Some(level) = level {
         if let Ok(str) = CStr::from_ptr(str).to_str() {
-            ::log::log!(level, "{}", str);
+            ::log::log!(level, "[OpenThread] {}", str);
         }
     }
 
     otError_OT_ERROR_NONE
 }
 
-// Other C functions which might generally not be supported by MCU ROM or by - say - `tinyrlibc`
+// Other C functions which might generally not be supported by MCU ROMs or by - say - `tinyrlibc`
 
 #[no_mangle]
 pub extern "C" fn iscntrl(v: u32) -> bool {
