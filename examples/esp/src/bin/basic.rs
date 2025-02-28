@@ -115,15 +115,21 @@ async fn main(spawner: Spawner) {
 
         let addrs_len = ot_controller.ipv6_addrs(&mut addrs).unwrap();
         if addrs_len > 0 {
-            info!(
-                "Got IPv6 address(es) from OpenThread: {:?}",
-                &addrs[..addrs_len]
-            );
+            let addrs = &addrs[..addrs_len];
+
+            info!("Got IPv6 address(es) from OpenThread: {addrs:?}");
 
             // NOTE: Ideally, we should track any changes to the OpenThread Ipv6 conf with `ot_controller.wait_changed()`
             // and re-initialize the embassy-net config with the new Ip and prefix.
+            let (linklocal_addr, linklocal_prefix) = addrs
+                .iter()
+                .find(|(addr, _)| addr.is_unicast_link_local())
+                .expect("No link-local address found");
+
+            info!("Will bind to link-local {linklocal_addr} Ipv6 addr");
+
             stack.set_config_v6(ConfigV6::Static(StaticConfigV6 {
-                address: Ipv6Cidr::new(addrs[0].0, addrs[0].1),
+                address: Ipv6Cidr::new(*linklocal_addr, *linklocal_prefix),
                 gateway: None,           // TODO
                 dns_servers: Vec::new(), // TODO
             }));
@@ -139,6 +145,8 @@ async fn main(spawner: Spawner) {
     let mut socket = UdpSocket::new(stack, &mut rx_meta, rx_buf, &mut tx_meta, tx_buf);
 
     socket.bind(BOUND_PORT).unwrap();
+
+    info!("Opened socket on port {BOUND_PORT} and waiting for packets...");
 
     let buf: &mut [u8] = unsafe { mk_static!([u8; IPV6_PACKET_SIZE]).assume_init_mut() };
 
