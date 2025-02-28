@@ -186,7 +186,8 @@ pub unsafe extern "C" fn otPlatLog(
     _format: *const c_char,
     str: *const c_char,
 ) -> otError {
-    #[allow(clippy::snake_case)]
+    #[allow(non_snake_case)]
+    #[allow(unused)]
     let level = match level {
         otLogLevel_OT_LOG_LEVEL_NONE => None,
         otLogLevel_OT_LOG_LEVEL_CRIT => Some(log::Level::Error),
