@@ -50,15 +50,6 @@ impl OperationalDataset<'_> {
         };
         dataset_slice.fill(0);
 
-        // TODO: What the...? Confirm and remove this later.
-        // raw_dataset.mComponents.mIsActiveTimestampPresent = true;
-        // raw_dataset.mComponents.mIsPendingTimestampPresent = true;
-        // raw_dataset.mComponents.mIsNetworkKeyPresent = true;
-        // raw_dataset.mComponents.mIsNetworkNamePresent = true;
-        // raw_dataset.mComponents.mIsExtendedPanIdPresent = true;
-        // raw_dataset.mComponents.mIsPanIdPresent = true;
-        // raw_dataset.mComponents.mIsChannelPresent = true;
-
         let mut active_timestamp_present = false;
         let mut pending_timestamp_present = false;
         let mut network_key_present = false;
@@ -126,20 +117,11 @@ impl OperationalDataset<'_> {
         if let Some(pan_id) = dataset.pan_id {
             raw_dataset.mPanId = pan_id;
             pan_id_present = true;
-            // TODO: What the...? Confirm and remove this later.
-            // let settings: NetworkSettings = get_settings();
-            // set_settings(NetworkSettings { pan_id, ..settings });
         }
 
         if let Some(channel) = dataset.channel {
             raw_dataset.mChannel = channel;
             channel_present = true;
-            // TODO: What the...? Confirm and remove this later.
-            // let settings: NetworkSettings = get_settings();
-            // set_settings(NetworkSettings {
-            //     channel: channel as u8,
-            //     ..settings
-            // });
         }
 
         if let Some(pskc) = dataset.pskc {
