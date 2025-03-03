@@ -7,7 +7,7 @@ use embassy_net_driver_channel::{driver::HardwareAddress, RxRunner, TxRunner};
 
 use rand_core::RngCore;
 
-use crate::{OtController, OtError, OtResources, OtRunner, OtRx, OtTx, Radio};
+use crate::{OpenThread, OtController, OtError, OtResources, OtRunner, OtRx, OtTx, Radio};
 
 pub use embassy_net_driver_channel::{
     Device as EnetDriver, State as EnetDriverState, StateRunner as EnetDriverStateRunner,
@@ -33,10 +33,10 @@ pub use embassy_net_driver_channel::{
 ///   - The `embassy-net-driver-channel` state runner (note: this is not really a "runner" per se, but more of a controller to switch on/off the Driver)
 ///   - A runner that runs both the `openthread` stack as well as the `embassy-net` driver stack
 ///   - The `embassy-net` Driver for OpenThread
-pub fn new<'d, const MTU: usize, const N_RX: usize, const N_TX: usize>(
+pub fn new<'d, const MTU: usize, const N_RX: usize, const N_TX: usize, const UDP_SOCKS: usize>(
     rng: &'d mut dyn RngCore,
     state: &'d mut EnetDriverState<MTU, N_RX, N_TX>,
-    resources: &'d mut OtResources,
+    resources: &'d mut OtResources<UDP_SOCKS>,
 ) -> Result<
     (
         OtController<'d>,
@@ -46,7 +46,7 @@ pub fn new<'d, const MTU: usize, const N_RX: usize, const N_TX: usize>(
     ),
     OtError,
 > {
-    let (ot_controller, ot_rx, ot_tx, ot_runner) = crate::new(rng, resources)?;
+    let (ot_controller, ot_rx, ot_tx, ot_runner) = OpenThread::new(rng, resources)?.split();
 
     let (runner, device) = embassy_net_driver_channel::new(state, HardwareAddress::Ip);
 
