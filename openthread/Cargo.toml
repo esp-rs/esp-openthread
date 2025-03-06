@@ -7,7 +7,8 @@ edition = "2021"
 harness = false
 
 [features]
-default = ["esp32c6", "embassy-net-driver-channel"]
+default = ["esp32c6", "udp", "embassy-net-driver-channel"]
+udp = []
 esp32c6 = ["openthread-sys/esp32c6", "esp-ieee802154/esp32c6"]
 esp32h2 = ["esp-ieee802154/esp32h2"]
 srp-client = []

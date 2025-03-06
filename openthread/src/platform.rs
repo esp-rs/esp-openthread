@@ -6,7 +6,7 @@ use core::ffi::{c_char, CStr};
 use openthread_sys::otError_OT_ERROR_NONE;
 
 use crate::sys::{otError, otInstance, otLogLevel, otLogRegion, otRadioFrame};
-use crate::{IntoOtCode, OtContext, OtActiveState};
+use crate::{IntoOtCode, OtActiveState, OtContext};
 
 /// A hack so that we can store a mutable reference to the active state in a global static variable
 /// without any explicit synchronization
