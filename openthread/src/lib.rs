@@ -18,7 +18,6 @@ use embassy_time::Instant;
 
 use log::{debug, info, trace, warn};
 
-use openthread_sys::{otIp6Address, otSockAddr};
 use platform::OT_ACTIVE_STATE;
 
 use signal::Signal;
@@ -51,14 +50,15 @@ mod srp;
 mod udp;
 
 use sys::{
-    otChangedFlags, otDatasetSetActive, otError, otError_OT_ERROR_DROP, otError_OT_ERROR_FAILED,
-    otError_OT_ERROR_NONE, otError_OT_ERROR_NO_BUFS, otInstance, otInstanceInitSingle,
+    otChangedFlags, otError, otError_OT_ERROR_DROP, otError_OT_ERROR_FAILED, otError_OT_ERROR_NONE,
+    otError_OT_ERROR_NO_BUFS, otInstance, otInstanceInitSingle, otIp6Address,
     otIp6GetUnicastAddresses, otIp6NewMessageFromBuffer, otIp6Send, otIp6SetEnabled,
     otIp6SetReceiveCallback, otMessage, otMessageFree,
     otMessagePriority_OT_MESSAGE_PRIORITY_NORMAL, otMessageRead, otMessageSettings,
-    otOperationalDataset, otPlatAlarmMilliFired, otPlatRadioEnergyScanDone, otPlatRadioReceiveDone,
-    otPlatRadioTxDone, otPlatRadioTxStarted, otRadioFrame, otSetStateChangedCallback,
-    otTaskletsProcess, otThreadSetEnabled, OT_RADIO_FRAME_MAX_SIZE,
+    otOperationalDataset, otOperationalDatasetTlvs, otPlatAlarmMilliFired,
+    otPlatRadioEnergyScanDone, otPlatRadioReceiveDone, otPlatRadioTxDone, otPlatRadioTxStarted,
+    otRadioFrame, otSetStateChangedCallback, otSockAddr, otTaskletsProcess, otThreadSetEnabled,
+    OT_RADIO_FRAME_MAX_SIZE,
 };
 
 /// A newtype wrapper over the native OpenThread error type (`otError`).
@@ -236,19 +236,6 @@ impl<'a> OpenThread<'a> {
         this.init()?;
 
         Ok(this)
-    }
-
-    /// Set a new active dataset in the OpenThread stack.
-    ///
-    /// Arguments:
-    /// - `dataset`: A reference to the new dataset to be set.
-    pub fn set_dataset(&self, dataset: &OperationalDataset<'_>) -> Result<(), OtError> {
-        let mut ot = self.activate();
-        let state = ot.state();
-
-        dataset.store_raw(&mut state.ot.dataset_resources.dataset);
-
-        ot!(unsafe { otDatasetSetActive(state.ot.instance, &state.ot.dataset_resources.dataset) })
     }
 
     /// Brings the OpenThread IPv6 interface up or down.
@@ -1374,6 +1361,7 @@ impl RadioResources {
 struct DatasetResources {
     /// The operational dataset
     dataset: otOperationalDataset,
+    dataset_tlv: otOperationalDatasetTlvs,
 }
 
 impl DatasetResources {
@@ -1383,6 +1371,7 @@ impl DatasetResources {
         unsafe {
             Self {
                 dataset: MaybeUninit::zeroed().assume_init(),
+                dataset_tlv: MaybeUninit::zeroed().assume_init(),
             }
         }
     }

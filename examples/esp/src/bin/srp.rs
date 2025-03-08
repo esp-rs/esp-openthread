@@ -103,7 +103,7 @@ async fn main(spawner: Spawner) {
     };
     info!("Dataset: {:?}", dataset);
 
-    ot.set_dataset(&dataset).unwrap();
+    ot.set_active_dataset(&dataset).unwrap();
     ot.enable_ipv6(true).unwrap();
     ot.enable_thread(true).unwrap();
 
@@ -145,12 +145,18 @@ async fn run_ot_info(ot: OpenThread<'static>) -> ! {
     let mut cur_state = None;
     let mut cur_server_addr = None;
 
-    let mut cur_addrs = [(Ipv6Addr::UNSPECIFIED, 0); 4];
-    let mut cur_addrs_len = 0;
+    let mut cur_addrs = heapless::Vec::<(Ipv6Addr, u8), 4>::new();
 
     loop {
-        let mut addrs = [(Ipv6Addr::UNSPECIFIED, 0); 4];
-        let addrs_len = ot.ipv6_addrs(&mut addrs).unwrap();
+        let mut addrs = heapless::Vec::<(Ipv6Addr, u8), 4>::new();
+        ot.ipv6_addrs(|addr| {
+            if let Some(addr) = addr {
+                let _ = addrs.push(addr);
+            }
+
+            Ok(())
+        })
+        .unwrap();
 
         let mut state = cur_state;
         let server_addr = ot.srp_server_addr().unwrap();
@@ -161,14 +167,10 @@ async fn run_ot_info(ot: OpenThread<'static>) -> ! {
         })
         .unwrap();
 
-        if cur_addrs[..cur_addrs_len] != addrs[..addrs_len]
-            || cur_state != state
-            || cur_server_addr != server_addr
-        {
-            info!("Got new IPv6 address(es) and/or SRP state from OpenThread:\nIP addrs: {:?}\nSRP state: {state:?}\nSRP server addr: {server_addr:?}", &addrs[..addrs_len]);
+        if cur_addrs != addrs || cur_state != state || cur_server_addr != server_addr {
+            info!("Got new IPv6 address(es) and/or SRP state from OpenThread:\nIP addrs: {addrs:?}\nSRP state: {state:?}\nSRP server addr: {server_addr:?}");
 
             cur_addrs = addrs;
-            cur_addrs_len = addrs_len;
             cur_state = state;
             cur_server_addr = server_addr;
 
