@@ -24,7 +24,7 @@ use log::info;
 
 use openthread::enet::{self, EnetDriver, EnetRunner};
 use openthread::esp::EspRadio;
-use openthread::{OperationalDataset, OtResources, ThreadTimestamp};
+use openthread::{OpenThread, OperationalDataset, OtResources, ThreadTimestamp};
 
 use rand_core::RngCore;
 
@@ -59,14 +59,15 @@ async fn main(spawner: Spawner) {
     esp_hal_embassy::init(SystemTimer::new(peripherals.SYSTIMER).alarm0);
 
     let rng = mk_static!(Rng, Rng::new(peripherals.RNG));
+    let enet_seed = rng.next_u64();
+
     let ot_resources = mk_static!(OtResources, OtResources::new());
     let enet_driver_state =
         mk_static!(enet::EnetDriverState<IPV6_PACKET_SIZE, 1, 1>, enet::EnetDriverState::new());
 
-    let enet_seed = rng.next_u64();
+    let ot = OpenThread::new(rng, ot_resources).unwrap();
 
-    let (mut ot_controller, _enet_controller, enet_driver_runner, enet_driver) =
-        enet::new(rng, enet_driver_state, ot_resources).unwrap();
+    let (_enet_controller, enet_driver_runner, enet_driver) = enet::new(ot, enet_driver_state);
 
     spawner
         .spawn(run_enet_driver(
@@ -104,16 +105,16 @@ async fn main(spawner: Spawner) {
     };
     info!("Dataset: {:?}", dataset);
 
-    ot_controller.set_dataset(&dataset).unwrap();
-    ot_controller.enable_ipv6(true).unwrap();
-    ot_controller.enable_thread(true).unwrap();
+    ot.set_dataset(&dataset).unwrap();
+    ot.enable_ipv6(true).unwrap();
+    ot.enable_thread(true).unwrap();
 
     loop {
         info!("Waiting to get an IPv6 address from OpenThread...");
 
         let mut addrs = [(Ipv6Addr::UNSPECIFIED, 0); 4];
 
-        let addrs_len = ot_controller.ipv6_addrs(&mut addrs).unwrap();
+        let addrs_len = ot.ipv6_addrs(&mut addrs).unwrap();
         if addrs_len > 0 {
             let addrs = &addrs[..addrs_len];
 

@@ -5,7 +5,7 @@ use embassy_sync::signal::Signal;
 
 use esp_ieee802154::{Config as EspConfig, Error, Ieee802154};
 
-use log::trace;
+use log::{debug, trace};
 
 use crate::{Capabilities, Cca, Config, PsduMeta, Radio, RadioError, RadioErrorKind};
 
@@ -89,8 +89,12 @@ impl Radio for EspRadio<'_> {
     }
 
     async fn set_config(&mut self, config: &Config) -> Result<(), Self::Error> {
-        self.config = config.clone();
-        self.update_driver_config();
+        if self.config != *config {
+            debug!("Setting radio config: {config:?}");
+
+            self.config = config.clone();
+            self.update_driver_config();
+        }
 
         Ok(())
     }
@@ -98,7 +102,7 @@ impl Radio for EspRadio<'_> {
     async fn transmit(&mut self, psdu: &[u8]) -> Result<(), Self::Error> {
         TX_SIGNAL.reset();
 
-        trace!("ESP Radio, about to transmit: {psdu:02x?}");
+        debug!("ESP Radio, about to transmit: {psdu:02x?}");
 
         self.driver.transmit_raw(psdu)?;
 
@@ -109,17 +113,10 @@ impl Radio for EspRadio<'_> {
         Ok(())
     }
 
-    async fn receive(&mut self, channel: u8, psdu_buf: &mut [u8]) -> Result<PsduMeta, Self::Error> {
-        if channel != self.config.channel {
-            trace!("ESP Radio, setting channel: {channel}");
-
-            self.config.channel = channel;
-            self.update_driver_config();
-        }
-
+    async fn receive(&mut self, psdu_buf: &mut [u8]) -> Result<PsduMeta, Self::Error> {
         RX_SIGNAL.reset();
 
-        trace!("ESP Radio, about to receive on channel {channel}");
+        trace!("ESP Radio, about to receive");
 
         self.driver.start_receive();
 
@@ -134,7 +131,7 @@ impl Radio for EspRadio<'_> {
         let psdu_len = (raw.data.len() - 1).min((raw.data[0] & 0x7f) as usize);
         psdu_buf[..psdu_len].copy_from_slice(&raw.data[1..][..psdu_len]);
 
-        trace!("ESP Radio, received: {:02x?}", &psdu_buf[..psdu_len]);
+        debug!("ESP Radio, received: {:02x?}", &psdu_buf[..psdu_len]);
 
         let rssi = raw.data[1..][psdu_len] as i8;
 

@@ -167,13 +167,11 @@ pub trait Radio {
     /// Receive a radio frame.
     ///
     /// Arguments:
-    /// - `channel`: The channel on which to receive the frame. If the radio is currently configured for
-    ///   a different channel, it will be reconfigured.
     /// - `psdu_buf`: The buffer to store the received PSDU.
     ///
     /// Returns:
     /// - The meta-data associated with the received frame.
-    async fn receive(&mut self, channel: u8, psdu_buf: &mut [u8]) -> Result<PsduMeta, Self::Error>;
+    async fn receive(&mut self, psdu_buf: &mut [u8]) -> Result<PsduMeta, Self::Error>;
 }
 
 impl<T> Radio for &mut T
@@ -194,7 +192,7 @@ where
         T::transmit(self, psdu).await
     }
 
-    async fn receive(&mut self, channel: u8, psdu_buf: &mut [u8]) -> Result<PsduMeta, Self::Error> {
-        T::receive(self, channel, psdu_buf).await
+    async fn receive(&mut self, psdu_buf: &mut [u8]) -> Result<PsduMeta, Self::Error> {
+        T::receive(self, psdu_buf).await
     }
 }
