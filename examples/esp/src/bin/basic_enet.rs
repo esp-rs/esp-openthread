@@ -105,19 +105,24 @@ async fn main(spawner: Spawner) {
     };
     info!("Dataset: {:?}", dataset);
 
-    ot.set_dataset(&dataset).unwrap();
+    ot.set_active_dataset(&dataset).unwrap();
     ot.enable_ipv6(true).unwrap();
     ot.enable_thread(true).unwrap();
 
     loop {
         info!("Waiting to get an IPv6 address from OpenThread...");
 
-        let mut addrs = [(Ipv6Addr::UNSPECIFIED, 0); 4];
+        let mut addrs = heapless::Vec::<(Ipv6Addr, u8), 4>::new();
+        ot.ipv6_addrs(|addr| {
+            if let Some(addr) = addr {
+                let _ = addrs.push(addr);
+            }
 
-        let addrs_len = ot.ipv6_addrs(&mut addrs).unwrap();
-        if addrs_len > 0 {
-            let addrs = &addrs[..addrs_len];
+            Ok(())
+        })
+        .unwrap();
 
+        if !addrs.is_empty() {
             info!("Got IPv6 address(es) from OpenThread: {addrs:?}");
 
             // NOTE: Ideally, we should track any changes to the OpenThread Ipv6 conf with `ot_controller.wait_changed()`

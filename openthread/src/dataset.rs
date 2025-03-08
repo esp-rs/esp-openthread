@@ -3,9 +3,11 @@
 //! Basically, a way to configure the Thread network settings.
 
 use crate::sys::{
-    otExtendedPanId, otMeshLocalPrefix, otNetworkKey, otNetworkName, otOperationalDataset,
-    otOperationalDatasetComponents, otPskc, otSecurityPolicy, otTimestamp,
+    otDatasetSetActive, otDatasetSetActiveTlvs, otDatasetSetPending, otDatasetSetPendingTlvs,
+    otError_OT_ERROR_NO_BUFS, otExtendedPanId, otMeshLocalPrefix, otNetworkKey, otNetworkName,
+    otOperationalDataset, otOperationalDatasetComponents, otPskc, otSecurityPolicy, otTimestamp,
 };
+use crate::{ot, OpenThread, OtError};
 
 /// Active or Pending Operational Dataset
 #[derive(Debug, Clone, Default, Eq, PartialEq, Hash)]
@@ -206,4 +208,76 @@ pub struct ThreadTimestamp {
     pub seconds: u64,
     pub ticks: u16,
     pub authoritative: bool,
+}
+
+impl OpenThread<'_> {
+    /// Set a new active dataset in the OpenThread stack.
+    ///
+    /// Arguments:
+    /// - `dataset`: A reference to the new dataset to be set.
+    pub fn set_active_dataset(&self, dataset: &OperationalDataset<'_>) -> Result<(), OtError> {
+        let mut ot = self.activate();
+        let state = ot.state();
+
+        dataset.store_raw(&mut state.ot.dataset_resources.dataset);
+
+        ot!(unsafe { otDatasetSetActive(state.ot.instance, &state.ot.dataset_resources.dataset) })
+    }
+
+    /// Set a new active dataset in the OpenThread stack.
+    ///
+    /// The dataset should be in Thread TLV format.
+    ///
+    /// Arguments:
+    /// - `dataset`: A reference to the new dataset to be set.
+    pub fn set_active_dataset_tlv(&self, dataset: &[u8]) -> Result<(), OtError> {
+        let mut ot = self.activate();
+        let state = ot.state();
+
+        if state.ot.dataset_resources.dataset_tlv.mTlvs.len() < dataset.len() {
+            Err(OtError::new(otError_OT_ERROR_NO_BUFS))?;
+        }
+
+        state.ot.dataset_resources.dataset_tlv.mTlvs[..dataset.len()].copy_from_slice(dataset);
+        state.ot.dataset_resources.dataset_tlv.mLength = dataset.len() as _;
+
+        ot!(unsafe {
+            otDatasetSetActiveTlvs(state.ot.instance, &state.ot.dataset_resources.dataset_tlv)
+        })
+    }
+
+    /// Set a new pending dataset in the OpenThread stack.
+    ///
+    /// Arguments:
+    /// - `dataset`: A reference to the new dataset to be set.
+    pub fn set_pending_dataset(&self, dataset: &OperationalDataset<'_>) -> Result<(), OtError> {
+        let mut ot = self.activate();
+        let state = ot.state();
+
+        dataset.store_raw(&mut state.ot.dataset_resources.dataset);
+
+        ot!(unsafe { otDatasetSetPending(state.ot.instance, &state.ot.dataset_resources.dataset) })
+    }
+
+    /// Set a new pending dataset in the OpenThread stack.
+    ///
+    /// The dataset should be in Thread TLV format.
+    ///
+    /// Arguments:
+    /// - `dataset`: A reference to the new dataset to be set.
+    pub fn set_pending_dataset_tlv(&self, dataset: &[u8]) -> Result<(), OtError> {
+        let mut ot = self.activate();
+        let state = ot.state();
+
+        if state.ot.dataset_resources.dataset_tlv.mTlvs.len() < dataset.len() {
+            Err(OtError::new(otError_OT_ERROR_NO_BUFS))?;
+        }
+
+        state.ot.dataset_resources.dataset_tlv.mTlvs[..dataset.len()].copy_from_slice(dataset);
+        state.ot.dataset_resources.dataset_tlv.mLength = dataset.len() as _;
+
+        ot!(unsafe {
+            otDatasetSetPendingTlvs(state.ot.instance, &state.ot.dataset_resources.dataset_tlv)
+        })
+    }
 }

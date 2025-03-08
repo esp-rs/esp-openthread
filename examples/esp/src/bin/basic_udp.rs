@@ -93,7 +93,7 @@ async fn main(spawner: Spawner) {
     };
     info!("Dataset: {:?}", dataset);
 
-    ot.set_dataset(&dataset).unwrap();
+    ot.set_active_dataset(&dataset).unwrap();
     ot.enable_ipv6(true).unwrap();
     ot.enable_thread(true).unwrap();
 
@@ -124,19 +124,23 @@ async fn run_ot(ot: OpenThread<'static>, radio: EspRadio<'static>) -> ! {
 
 #[embassy_executor::task]
 async fn run_ot_ip_info(ot: OpenThread<'static>) -> ! {
-    let mut cur_addrs = [(Ipv6Addr::UNSPECIFIED, 0); 4];
-    let mut cur_addrs_len = 0;
+    let mut cur_addrs = heapless::Vec::<(Ipv6Addr, u8), 4>::new();
 
     loop {
-        let mut addrs = [(Ipv6Addr::UNSPECIFIED, 0); 4];
+        let mut addrs = heapless::Vec::<(Ipv6Addr, u8), 4>::new();
+        ot.ipv6_addrs(|addr| {
+            if let Some(addr) = addr {
+                let _ = addrs.push(addr);
+            }
 
-        let addrs_len = ot.ipv6_addrs(&mut addrs).unwrap();
+            Ok(())
+        })
+        .unwrap();
 
-        if cur_addrs[..cur_addrs_len] != addrs[..addrs_len] {
+        if cur_addrs != addrs {
             info!("Got new IPv6 address(es) from OpenThread: {addrs:?}");
 
             cur_addrs = addrs;
-            cur_addrs_len = addrs_len;
 
             info!("Waiting for OpenThread changes signal...");
         }
