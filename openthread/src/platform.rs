@@ -6,7 +6,7 @@ use core::ffi::{c_char, CStr};
 use openthread_sys::otError_OT_ERROR_NONE;
 
 use crate::sys::{otError, otInstance, otLogLevel, otLogRegion, otRadioFrame};
-use crate::{IntoOtCode, OpenThread, OtActiveState};
+use crate::{IntoOtCode, OtActiveState, OtContext};
 
 /// A hack so that we can store a mutable reference to the active state in a global static variable
 /// without any explicit synchronization
@@ -21,26 +21,26 @@ pub(crate) static OT_ACTIVE_STATE: SyncUnsafeCell<Option<OtActiveState<'static>>
 
 #[no_mangle]
 pub extern "C" fn otPlatReset(instance: *const u8) -> otError {
-    OpenThread::callback(instance as *const _)
+    OtContext::callback(instance as *const _)
         .plat_reset()
         .into_ot_code()
 }
 
 #[no_mangle]
 pub extern "C" fn otPlatEntropyGet(output: *mut u8, len: u16) -> otError {
-    OpenThread::callback(core::ptr::null_mut())
+    OtContext::callback(core::ptr::null_mut())
         .plat_entropy_get(unsafe { core::slice::from_raw_parts_mut(output, len as usize) })
         .into_ot_code()
 }
 
 #[no_mangle]
 pub extern "C" fn otTaskletsSignalPending(instance: *mut otInstance) {
-    OpenThread::callback(instance).plat_tasklets_signal_pending();
+    OtContext::callback(instance).plat_tasklets_signal_pending();
 }
 
 #[no_mangle]
 pub extern "C" fn otPlatAlarmMilliGetNow(instance: *const otInstance) -> u32 {
-    OpenThread::callback(instance).plat_now()
+    OtContext::callback(instance).plat_now()
 }
 
 #[no_mangle]
@@ -49,14 +49,14 @@ pub extern "C" fn otPlatAlarmMilliStartAt(
     at0: u32,
     adt: u32,
 ) -> otError {
-    OpenThread::callback(instance)
+    OtContext::callback(instance)
         .plat_alarm_set(at0, adt)
         .into_ot_code()
 }
 
 #[no_mangle]
 pub extern "C" fn otPlatAlarmMilliStop(instance: *const otInstance) -> otError {
-    OpenThread::callback(instance)
+    OtContext::callback(instance)
         .plat_alarm_clear()
         .into_ot_code()
 }
@@ -65,58 +65,58 @@ pub extern "C" fn otPlatAlarmMilliStop(instance: *const otInstance) -> otError {
 pub extern "C" fn otPlatRadioGetIeeeEui64(instance: *const otInstance, mac: *mut u8) {
     let mac = unsafe { core::ptr::slice_from_raw_parts_mut(mac, 8).as_mut() }.unwrap();
 
-    OpenThread::callback(instance).plat_radio_ieee_eui64(mac.try_into().unwrap());
+    OtContext::callback(instance).plat_radio_ieee_eui64(mac.try_into().unwrap());
 }
 
 #[no_mangle]
 pub extern "C" fn otPlatRadioGetCaps(instance: *const otInstance) -> u8 {
-    OpenThread::callback(instance).plat_radio_caps()
+    OtContext::callback(instance).plat_radio_caps()
 }
 
 #[no_mangle]
 pub extern "C" fn otPlatRadioGetTransmitBuffer(instance: *const otInstance) -> *mut otRadioFrame {
-    OpenThread::callback(instance).plat_radio_transmit_buffer()
+    OtContext::callback(instance).plat_radio_transmit_buffer()
 }
 
 #[no_mangle]
 pub extern "C" fn otPlatRadioEnable(instance: *const otInstance) -> otError {
-    OpenThread::callback(instance)
+    OtContext::callback(instance)
         .plat_radio_enable()
         .into_ot_code()
 }
 
 #[no_mangle]
 pub extern "C" fn otPlatRadioSleep(instance: *const otInstance) -> otError {
-    OpenThread::callback(instance)
+    OtContext::callback(instance)
         .plat_radio_sleep()
         .into_ot_code()
 }
 
 #[no_mangle]
 pub extern "C" fn otPlatRadioDisable(instance: *const otInstance) -> otError {
-    OpenThread::callback(instance)
+    OtContext::callback(instance)
         .plat_radio_disable()
         .into_ot_code()
 }
 
 #[no_mangle]
 pub extern "C" fn otPlatRadioSetPromiscuous(instance: *const otInstance, enable: bool) {
-    OpenThread::callback(instance).plat_radio_set_promiscuous(enable)
+    OtContext::callback(instance).plat_radio_set_promiscuous(enable)
 }
 
 #[no_mangle]
 pub extern "C" fn otPlatRadioGetRssi(instance: *const otInstance) -> i8 {
-    OpenThread::callback(instance).plat_radio_get_rssi()
+    OtContext::callback(instance).plat_radio_get_rssi()
 }
 
 #[no_mangle]
 pub extern "C" fn otPlatRadioGetReceiveSensitivity(instance: *const otInstance) -> i8 {
-    OpenThread::callback(instance).plat_radio_receive_sensititivy()
+    OtContext::callback(instance).plat_radio_receive_sensititivy()
 }
 
 #[no_mangle]
 pub extern "C" fn otPlatRadioIsEnabled(instance: *mut otInstance) -> bool {
-    OpenThread::callback(instance).plat_radio_is_enabled()
+    OtContext::callback(instance).plat_radio_is_enabled()
 }
 
 #[no_mangle]
@@ -125,19 +125,19 @@ pub extern "C" fn otPlatRadioEnergyScan(
     channel: u8,
     duration: u16,
 ) -> otError {
-    OpenThread::callback(instance)
+    OtContext::callback(instance)
         .plat_radio_energy_scan(channel, duration)
         .into_ot_code()
 }
 
 #[no_mangle]
 pub extern "C" fn otPlatRadioGetPromiscuous(instance: *const otInstance) -> bool {
-    OpenThread::callback(instance).plat_radio_get_promiscuous()
+    OtContext::callback(instance).plat_radio_get_promiscuous()
 }
 
 #[no_mangle]
 pub extern "C" fn otPlatRadioSetExtendedAddress(instance: *const otInstance, address: *const u8) {
-    OpenThread::callback(instance).plat_radio_set_extended_address(u64::from_be_bytes(
+    OtContext::callback(instance).plat_radio_set_extended_address(u64::from_be_bytes(
         unsafe { core::slice::from_raw_parts(address, 8) }
             .try_into()
             .unwrap(),
@@ -146,12 +146,12 @@ pub extern "C" fn otPlatRadioSetExtendedAddress(instance: *const otInstance, add
 
 #[no_mangle]
 pub extern "C" fn otPlatRadioSetShortAddress(instance: *const otInstance, address: u16) {
-    OpenThread::callback(instance).plat_radio_set_short_address(address);
+    OtContext::callback(instance).plat_radio_set_short_address(address);
 }
 
 #[no_mangle]
 pub extern "C" fn otPlatRadioSetPanId(instance: *const otInstance, pan_id: u16) {
-    OpenThread::callback(instance).plat_radio_set_pan_id(pan_id);
+    OtContext::callback(instance).plat_radio_set_pan_id(pan_id);
 }
 
 #[no_mangle]
@@ -159,14 +159,14 @@ pub extern "C" fn otPlatRadioTransmit(
     instance: *const otInstance,
     frame: *const otRadioFrame,
 ) -> otError {
-    OpenThread::callback(instance)
+    OtContext::callback(instance)
         .plat_radio_transmit(unsafe { &*frame })
         .into_ot_code()
 }
 
 #[no_mangle]
 pub extern "C" fn otPlatRadioReceive(instance: *mut otInstance, channel: u8) -> otError {
-    OpenThread::callback(instance)
+    OtContext::callback(instance)
         .plat_radio_receive(channel)
         .into_ot_code()
 }

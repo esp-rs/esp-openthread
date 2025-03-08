@@ -9,10 +9,12 @@ license = "MIT OR Apache-2.0"
 debug = true
 
 [features]
-default = ["esp32c6"]
+default = ["esp32c6", "udp", "srp", "embassy-net-driver-channel"]
 esp32c6 = [ "esp-hal-embassy/esp32c6", "esp-ieee802154/esp32c6", "openthread/esp32c6", "esp-backtrace/esp32c6", "esp-println/esp32c6", "openthread/esp32c6" ]
 esp32h2 = [ "esp-hal-embassy/esp32h2", "esp-ieee802154/esp32h2", "openthread/esp32h2", "esp-backtrace/esp32h2", "esp-println/esp32h2", "openthread/esp32c6" ]
-#srp-client = ["openthread/srp-client", "dep:esp-alloc"]
+embassy-net-driver-channel = ["openthread/embassy-net-driver-channel"]
+udp = ["openthread/udp"]
+srp = ["openthread/srp"]
 
 [dependencies]
 embassy-executor = { version = "0.7", features = ["task-arena-size-32768"] }
@@ -32,15 +34,22 @@ critical-section = "1.1"
 rand_core = "0.6"
 static_cell = "2.1"
 
-openthread = { path = "../../openthread", features = ["embassy-net-driver-channel"] }
+openthread = { path = "../../openthread" }
 
 [[bin]]
-path = "./src/bin/basic.rs"
-name = "basic"
+path = "./src/bin/basic_enet.rs"
+name = "basic_enet"
+required-features = ["embassy-net-driver-channel"]
 harness = false
 
-#[[bin]]
-#path = "./src/bin/srp_client.rs"
-#name = "srp-client"
-#required-features=["srp-client"]
-#harness = false
+[[bin]]
+path = "./src/bin/basic_udp.rs"
+name = "basic_udp"
+required-features = ["udp"]
+harness = false
+
+[[bin]]
+path = "./src/bin/srp.rs"
+name = "srp"
+required-features=["srp"]
+harness = false
