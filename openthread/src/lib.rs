@@ -21,9 +21,9 @@ use log::{debug, info, trace, warn};
 use openthread_sys::{otIp6Address, otSockAddr};
 use platform::OT_ACTIVE_STATE;
 
-use rand_core::RngCore;
-
 use signal::Signal;
+
+pub use rand_core::{Error as OtRngCoreError, RngCore as OtRngCore};
 
 pub use dataset::*;
 pub use openthread_sys as sys;
@@ -131,7 +131,10 @@ impl<'a> OpenThread<'a> {
     ///
     /// Returns:
     /// - In case there were no errors related to initializing the OpenThread library, the OpenThread instance.
-    pub fn new(rng: &'a mut dyn RngCore, resources: &'a mut OtResources) -> Result<Self, OtError> {
+    pub fn new(
+        rng: &'a mut dyn OtRngCore,
+        resources: &'a mut OtResources,
+    ) -> Result<Self, OtError> {
         // Needed so that we convert from the the actual `'a` lifetime of `rng` to the fake `'static` lifetime in `OtResources`
         #[allow(clippy::missing_transmute_annotations)]
         let state = resources.init(unsafe { core::mem::transmute(rng) });
@@ -160,7 +163,7 @@ impl<'a> OpenThread<'a> {
     /// - In case there were no errors related to initializing the OpenThread library, the OpenThread instance.
     #[cfg(feature = "udp")]
     pub fn new_with_udp<const UDP_SOCKETS: usize, const UDP_RX_SZ: usize>(
-        rng: &'a mut dyn RngCore,
+        rng: &'a mut dyn OtRngCore,
         resources: &'a mut OtResources,
         udp_resources: &'a mut OtUdpResources<UDP_SOCKETS, UDP_RX_SZ>,
     ) -> Result<Self, OtError> {
@@ -183,7 +186,7 @@ impl<'a> OpenThread<'a> {
 
     #[cfg(feature = "srp")]
     pub fn new_with_srp<const SRP_SVCS: usize, const SRP_BUF_SZ: usize>(
-        rng: &'a mut dyn RngCore,
+        rng: &'a mut dyn OtRngCore,
         resources: &'a mut OtResources,
         srp_resources: &'a mut OtSrpResources<SRP_SVCS, SRP_BUF_SZ>,
     ) -> Result<Self, OtError> {
@@ -211,7 +214,7 @@ impl<'a> OpenThread<'a> {
         const SRP_SVCS: usize,
         const SRP_BUF_SZ: usize,
     >(
-        rng: &'a mut dyn RngCore,
+        rng: &'a mut dyn OtRngCore,
         resources: &'a mut OtResources,
         udp_resources: &'a mut OtUdpResources<UDP_SOCKETS, UDP_RX_SZ>,
         srp_resources: &'a mut OtSrpResources<SRP_SVCS, SRP_BUF_SZ>,
@@ -267,34 +270,29 @@ impl<'a> OpenThread<'a> {
     /// Gets the list of IPv6 addresses currently assigned to the Thread interface
     ///
     /// Arguments:
-    /// - `buf`: A mutable reference to a buffer where the IPv6 addresses will be stored.
-    ///
-    /// Returns:
-    /// - The total number of IPv6 addresses available. If this number is greater than
-    ///   the length of the buffer, only the first `buf.len()` addresses will be stored in the buffer.
-    pub fn ipv6_addrs(&self, buf: &mut [(Ipv6Addr, u8)]) -> Result<usize, OtError> {
+    /// - `f`: A closure that will be called for each IPv6 address available.
+    ///   Once called for all addresses, the closure will be called with `None`.
+    pub fn ipv6_addrs<F>(&self, mut f: F) -> Result<(), OtError>
+    where
+        F: FnMut(Option<(Ipv6Addr, u8)>) -> Result<(), OtError>,
+    {
         let mut ot = self.activate();
         let state = ot.state();
 
         let mut addrs_ptr = unsafe { otIp6GetUnicastAddresses(state.ot.instance) };
 
-        let mut offset = 0;
-
         while !addrs_ptr.is_null() {
             let addrs = unsafe { addrs_ptr.as_ref() }.unwrap();
 
-            if offset < buf.len() {
-                buf[offset] = (
-                    unsafe { addrs.mAddress.mFields.m8 }.into(),
-                    addrs.mPrefixLength,
-                );
-            }
+            f(Some((
+                unsafe { addrs.mAddress.mFields.m8 }.into(),
+                addrs.mPrefixLength,
+            )))?;
 
-            offset += 1;
             addrs_ptr = addrs.mNext;
         }
 
-        Ok(offset)
+        f(None)
     }
 
     /// Wait for the OpenThread stack to change its state.
@@ -790,7 +788,7 @@ impl OtResources {
     ///
     /// Returns:
     /// - A reference to a `RefCell<OtState>` value that represents the initialized OpenThread state.
-    fn init(&mut self, rng: &'static mut dyn RngCore) -> &RefCell<OtState<'static>> {
+    fn init(&mut self, rng: &'static mut dyn OtRngCore) -> &RefCell<OtState<'static>> {
         let radio_resources = unsafe { self.radio_resources.assume_init_mut() };
         let dataset_resources = unsafe { self.dataset_resources.assume_init_mut() };
 
@@ -1255,7 +1253,7 @@ struct OtState<'a> {
     /// The OpenThread instance associated with the `OtData` instance.
     instance: *mut otInstance,
     /// The random number generator associated with the `OtData` instance.
-    rng: Option<&'static mut dyn RngCore>,
+    rng: Option<&'static mut dyn OtRngCore>,
     /// An Ipv6 packet egressed from OpenThread and waiting to be ingressed somewhere else
     rx_ipv6: Signal<*mut otMessage>,
     /// `Some` in case there is a pending OpenThread awarm which is not due yet

@@ -8,6 +8,7 @@ harness = false
 
 [features]
 default = ["esp32c6", "udp", "srp", "embassy-net-driver-channel", "edge-nal"]
+edge-nal = ["udp", "dep:edge-nal"]
 udp = []
 srp = ["udp"]
 esp32c6 = ["openthread-sys/esp32c6", "esp-ieee802154/esp32c6"]
