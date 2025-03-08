@@ -28,6 +28,7 @@ pub use rand_core::{Error as OtRngCoreError, RngCore as OtRngCore};
 pub use dataset::*;
 pub use openthread_sys as sys;
 pub use radio::*;
+pub use scan::*;
 #[cfg(feature = "srp")]
 pub use srp::*;
 #[cfg(feature = "udp")]
@@ -42,6 +43,7 @@ pub mod enet;
 pub mod esp;
 mod platform;
 mod radio;
+mod scan;
 mod signal;
 #[cfg(feature = "srp")]
 mod srp;
@@ -798,6 +800,8 @@ impl OtResources {
         self.state.write(RefCell::new(unsafe {
             core::mem::transmute(OtState {
                 rng: Some(rng),
+                scan_callback: RefCell::new(None),
+                scan_done: Signal::new(),
                 radio_resources,
                 dataset_resources,
                 instance: core::ptr::null_mut(),
@@ -1254,6 +1258,11 @@ struct OtState<'a> {
     instance: *mut otInstance,
     /// The random number generator associated with the `OtData` instance.
     rng: Option<&'static mut dyn OtRngCore>,
+    /// The callback to invoke when network scanning is in progress
+    #[allow(clippy::type_complexity)]
+    scan_callback: RefCell<Option<&'static mut dyn FnMut(Option<&ScanResult>)>>,
+    /// Indicate that scanning has completed
+    scan_done: Signal<()>,
     /// An Ipv6 packet egressed from OpenThread and waiting to be ingressed somewhere else
     rx_ipv6: Signal<*mut otMessage>,
     /// `Some` in case there is a pending OpenThread awarm which is not due yet
