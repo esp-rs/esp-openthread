@@ -1,11 +1,53 @@
 use core::ffi::{c_void, CStr};
 use core::future::poll_fn;
 
+use bitflags::bitflags;
+
 use crate::sys::{
     otActiveScanResult, otError_OT_ERROR_BUSY, otInstance, otLinkActiveScan,
-    otLinkIsActiveScanInProgress,
+    otLinkIsActiveScanInProgress, OT_CHANNEL_10_MASK, OT_CHANNEL_11_MASK, OT_CHANNEL_12_MASK,
+    OT_CHANNEL_13_MASK, OT_CHANNEL_14_MASK, OT_CHANNEL_15_MASK, OT_CHANNEL_16_MASK,
+    OT_CHANNEL_17_MASK, OT_CHANNEL_18_MASK, OT_CHANNEL_19_MASK, OT_CHANNEL_1_MASK,
+    OT_CHANNEL_20_MASK, OT_CHANNEL_21_MASK, OT_CHANNEL_22_MASK, OT_CHANNEL_23_MASK,
+    OT_CHANNEL_24_MASK, OT_CHANNEL_25_MASK, OT_CHANNEL_26_MASK, OT_CHANNEL_2_MASK,
+    OT_CHANNEL_3_MASK, OT_CHANNEL_4_MASK, OT_CHANNEL_5_MASK, OT_CHANNEL_6_MASK, OT_CHANNEL_7_MASK,
+    OT_CHANNEL_8_MASK, OT_CHANNEL_9_MASK,
 };
 use crate::{ot, OpenThread, OtContext, OtError};
+
+bitflags! {
+    /// Radio channels set.
+    #[repr(transparent)]
+    #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub struct Channels: u32 {
+        const CH_1 = OT_CHANNEL_1_MASK;
+        const CH_2 = OT_CHANNEL_2_MASK;
+        const CH_3 = OT_CHANNEL_3_MASK;
+        const CH_4 = OT_CHANNEL_4_MASK;
+        const CH_5 = OT_CHANNEL_5_MASK;
+        const CH_6 = OT_CHANNEL_6_MASK;
+        const CH_7 = OT_CHANNEL_7_MASK;
+        const CH_8 = OT_CHANNEL_8_MASK;
+        const CH_9 = OT_CHANNEL_9_MASK;
+        const CH_10 = OT_CHANNEL_10_MASK;
+        const CH_11 = OT_CHANNEL_11_MASK;
+        const CH_12 = OT_CHANNEL_12_MASK;
+        const CH_13 = OT_CHANNEL_13_MASK;
+        const CH_14 = OT_CHANNEL_14_MASK;
+        const CH_15 = OT_CHANNEL_15_MASK;
+        const CH_16 = OT_CHANNEL_16_MASK;
+        const CH_17 = OT_CHANNEL_17_MASK;
+        const CH_18 = OT_CHANNEL_18_MASK;
+        const CH_19 = OT_CHANNEL_19_MASK;
+        const CH_20 = OT_CHANNEL_20_MASK;
+        const CH_21 = OT_CHANNEL_21_MASK;
+        const CH_22 = OT_CHANNEL_22_MASK;
+        const CH_23 = OT_CHANNEL_23_MASK;
+        const CH_24 = OT_CHANNEL_24_MASK;
+        const CH_25 = OT_CHANNEL_25_MASK;
+        const CH_26 = OT_CHANNEL_26_MASK;
+    }
+}
 
 /// An active scan result
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -69,7 +111,7 @@ impl OpenThread<'_> {
     /// - `f`: A closure that will be called for each scan result, and finally - with `None` - when the scan is complete.
     pub async fn scan<F>(
         &self,
-        channels: u32,
+        channels: Channels,
         duration_millis: u16,
         mut f: F,
     ) -> Result<(), OtError>
@@ -101,7 +143,7 @@ impl OpenThread<'_> {
             ot!(unsafe {
                 otLinkActiveScan(
                     state.ot.instance,
-                    channels,
+                    channels.bits(),
                     duration_millis,
                     Some(Self::plat_c_scan_callback),
                     state.ot.instance as *mut _ as *mut _,
