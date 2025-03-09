@@ -50,15 +50,17 @@ mod srp;
 mod udp;
 
 use sys::{
-    otChangedFlags, otError, otError_OT_ERROR_DROP, otError_OT_ERROR_FAILED, otError_OT_ERROR_NONE,
-    otError_OT_ERROR_NO_BUFS, otInstance, otInstanceInitSingle, otIp6Address,
-    otIp6GetUnicastAddresses, otIp6NewMessageFromBuffer, otIp6Send, otIp6SetEnabled,
+    otChangedFlags, otDeviceRole_OT_DEVICE_ROLE_CHILD, otDeviceRole_OT_DEVICE_ROLE_DETACHED,
+    otDeviceRole_OT_DEVICE_ROLE_DISABLED, otDeviceRole_OT_DEVICE_ROLE_LEADER,
+    otDeviceRole_OT_DEVICE_ROLE_ROUTER, otError, otError_OT_ERROR_DROP, otError_OT_ERROR_FAILED,
+    otError_OT_ERROR_NONE, otError_OT_ERROR_NO_BUFS, otInstance, otInstanceInitSingle,
+    otIp6Address, otIp6GetUnicastAddresses, otIp6NewMessageFromBuffer, otIp6Send, otIp6SetEnabled,
     otIp6SetReceiveCallback, otMessage, otMessageFree,
     otMessagePriority_OT_MESSAGE_PRIORITY_NORMAL, otMessageRead, otMessageSettings,
     otOperationalDataset, otOperationalDatasetTlvs, otPlatAlarmMilliFired,
     otPlatRadioEnergyScanDone, otPlatRadioReceiveDone, otPlatRadioTxDone, otPlatRadioTxStarted,
-    otRadioFrame, otSetStateChangedCallback, otSockAddr, otTaskletsProcess, otThreadSetEnabled,
-    OT_RADIO_FRAME_MAX_SIZE,
+    otRadioFrame, otSetStateChangedCallback, otSockAddr, otTaskletsProcess, otThreadGetDeviceRole,
+    otThreadGetExtendedPanId, otThreadSetEnabled, OT_RADIO_FRAME_MAX_SIZE,
 };
 
 /// A newtype wrapper over the native OpenThread error type (`otError`).
@@ -236,6 +238,20 @@ impl<'a> OpenThread<'a> {
         this.init()?;
 
         Ok(this)
+    }
+
+    /// Return the Thread network status.
+    pub fn net_status(&self) -> NetStatus {
+        let mut ot = self.activate();
+        let state = ot.state();
+
+        let device_role = unsafe { otThreadGetDeviceRole(state.ot.instance) }.into();
+        let ext_pan_id = unsafe { otThreadGetExtendedPanId(state.ot.instance).as_ref() };
+
+        NetStatus {
+            role: device_role,
+            ext_pan_id: ext_pan_id.map(|id| u64::from_be_bytes(id.m8)),
+        }
     }
 
     /// Brings the OpenThread IPv6 interface up or down.
@@ -810,6 +826,53 @@ impl OtResources {
 impl Default for OtResources {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Thread network status.
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub struct NetStatus {
+    /// The device role in the OpenThread network.
+    pub role: DeviceRole,
+    /// The extended PAN ID of the network, if the device is connected to a network.
+    pub ext_pan_id: Option<u64>,
+}
+
+/// The device role in the OpenThread network.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub enum DeviceRole {
+    /// The device is disabled.
+    Disabled,
+    /// The device is detached.
+    Detached,
+    /// The device is a child.
+    Child,
+    /// The device is a router.
+    Router,
+    /// The device is a leader.
+    Leader,
+    /// The device is in some other role.
+    Other(u32),
+}
+
+impl DeviceRole {
+    /// Return `true` if the device is connected to the network.
+    pub const fn is_connected(&self) -> bool {
+        matches!(self, Self::Child | Self::Router | Self::Leader)
+    }
+}
+
+impl From<u32> for DeviceRole {
+    #[allow(non_upper_case_globals)]
+    fn from(value: u32) -> Self {
+        match value {
+            otDeviceRole_OT_DEVICE_ROLE_DISABLED => Self::Disabled,
+            otDeviceRole_OT_DEVICE_ROLE_DETACHED => Self::Detached,
+            otDeviceRole_OT_DEVICE_ROLE_CHILD => Self::Child,
+            otDeviceRole_OT_DEVICE_ROLE_ROUTER => Self::Router,
+            otDeviceRole_OT_DEVICE_ROLE_LEADER => Self::Leader,
+            other => Self::Other(other),
+        }
     }
 }
 

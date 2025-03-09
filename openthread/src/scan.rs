@@ -11,11 +11,11 @@ use crate::{ot, OpenThread, OtContext, OtError};
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ScanResult<'a> {
     /// IEEE 802.15.4 Extended Address
-    pub ext_address: &'a [u8; 8],
+    pub ext_address: u64,
     /// Thread Network Name
     pub network_name: &'a str,
     /// Thread Extended PAN ID
-    pub extended_pan_id: &'a [u8; 8],
+    pub extended_pan_id: u64,
     /// Steering Data
     pub steering_data: &'a [u8],
     /// IEEE 802.15.4 PAN ID
@@ -39,12 +39,12 @@ pub struct ScanResult<'a> {
 impl<'a> From<&'a otActiveScanResult> for ScanResult<'a> {
     fn from(result: &'a otActiveScanResult) -> Self {
         Self {
-            ext_address: &result.mExtAddress.m8,
+            ext_address: u64::from_be_bytes(result.mExtAddress.m8),
             network_name: CStr::from_bytes_until_nul(&result.mNetworkName.m8)
                 .unwrap()
                 .to_str()
                 .unwrap(),
-            extended_pan_id: &result.mExtendedPanId.m8,
+            extended_pan_id: u64::from_be_bytes(result.mExtendedPanId.m8),
             steering_data: &result.mSteeringData.m8[..result.mSteeringData.mLength as _],
             pan_id: result.mPanId,
             joiner_udp_port: result.mJoinerUdpPort,
