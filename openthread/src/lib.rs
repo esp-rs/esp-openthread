@@ -59,7 +59,7 @@ use sys::{
     otMessagePriority_OT_MESSAGE_PRIORITY_NORMAL, otMessageRead, otMessageSettings,
     otOperationalDataset, otOperationalDatasetTlvs, otPlatAlarmMilliFired,
     otPlatRadioEnergyScanDone, otPlatRadioReceiveDone, otPlatRadioTxDone, otPlatRadioTxStarted,
-    otRadioFrame, otSetStateChangedCallback, otSockAddr, otTaskletsProcess, otThreadGetDeviceRole,
+    otRadioFrame, otSetStateChangedCallback, otTaskletsProcess, otThreadGetDeviceRole,
     otThreadGetExtendedPanId, otThreadSetEnabled, OT_RADIO_FRAME_MAX_SIZE,
 };
 
@@ -864,6 +864,7 @@ impl DeviceRole {
 
 impl From<u32> for DeviceRole {
     #[allow(non_upper_case_globals)]
+    #[allow(non_snake_case)]
     fn from(value: u32) -> Self {
         match value {
             otDeviceRole_OT_DEVICE_ROLE_DISABLED => Self::Disabled,
@@ -1448,8 +1449,8 @@ fn to_sock_addr(addr: &otIp6Address, port: u16, netif: u32) -> SocketAddrV6 {
 
 /// Convert a `SocketAddrV6` to an `otSockAddr`.
 #[cfg(any(feature = "udp", feature = "srp"))]
-fn to_ot_addr(addr: &SocketAddrV6) -> otSockAddr {
-    otSockAddr {
+fn to_ot_addr(addr: &SocketAddrV6) -> crate::sys::otSockAddr {
+    crate::sys::otSockAddr {
         mAddress: otIp6Address {
             mFields: sys::otIp6Address__bindgen_ty_1 {
                 m8: addr.ip().octets(),
