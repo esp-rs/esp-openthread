@@ -12,8 +12,8 @@ env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
-  rust-checks:
-    name: Rust Checks
+  compile:
+    name: Compile
     runs-on: ubuntu-latest
     strategy:
       matrix:
