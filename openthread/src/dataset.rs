@@ -4,7 +4,7 @@
 
 use crate::sys::{
     otDatasetSetActive, otDatasetSetActiveTlvs, otDatasetSetPending, otDatasetSetPendingTlvs,
-    otError_OT_ERROR_NO_BUFS, otExtendedPanId, otMeshLocalPrefix, otNetworkKey, otNetworkName,
+    otError_OT_ERROR_NO_BUFS, otExtendedPanId, otMeshLocalPrefix, otNetworkKey,
     otOperationalDataset, otOperationalDatasetComponents, otPskc, otSecurityPolicy, otTimestamp,
 };
 use crate::{ot, OpenThread, OtError};
@@ -91,10 +91,16 @@ impl OperationalDataset<'_> {
         }
 
         if let Some(network_name) = dataset.network_name {
-            let mut raw = [0u8; 17];
-            raw[..network_name.len()].copy_from_slice(network_name.as_bytes());
-            raw_dataset.mNetworkName = otNetworkName { m8: raw };
-            network_name_present = true;
+            let src = network_name.as_bytes();
+            let dst = &mut raw_dataset.mNetworkName.m8;
+
+            if src.len() < dst.len() {
+                dst.fill(0);
+                dst[..src.len()].copy_from_slice(unsafe {
+                    core::slice::from_raw_parts(src.as_ptr() as *const _, src.len())
+                });
+                network_name_present = true;
+            }
         }
 
         if let Some(extended_pan_id) = dataset.extended_pan_id {

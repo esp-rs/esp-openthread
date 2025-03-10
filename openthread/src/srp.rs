@@ -194,7 +194,7 @@ pub struct SrpConf<'a> {
     pub default_key_lease_secs: u32,
 }
 
-impl<'a> SrpConf<'a> {
+impl SrpConf<'_> {
     /// Create a new `SrpConf` instance, wuth a host named "ot-device",
     /// no explicit host addresses, a TTL of 60 seconds, and default lease times.
     pub const fn new() -> Self {

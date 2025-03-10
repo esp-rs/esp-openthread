@@ -80,9 +80,16 @@ pub struct ScanResult<'a> {
 
 impl<'a> From<&'a otActiveScanResult> for ScanResult<'a> {
     fn from(result: &'a otActiveScanResult) -> Self {
+        let network_name = unsafe {
+            core::slice::from_raw_parts(
+                result.mNetworkName.m8.as_ptr() as *const _,
+                result.mNetworkName.m8.len(),
+            )
+        };
+
         Self {
             ext_address: u64::from_be_bytes(result.mExtAddress.m8),
-            network_name: CStr::from_bytes_until_nul(&result.mNetworkName.m8)
+            network_name: CStr::from_bytes_until_nul(network_name)
                 .unwrap()
                 .to_str()
                 .unwrap(),
