@@ -2,6 +2,14 @@
 name = "openthread-sys"
 version = "0.1.0"
 edition = "2021"
+resolver = "2"
+categories = ["embedded", "hardware-support"]
+keywords = ["thread", "openthread", "embedded", "embassy"]
+description = "Platform-agnostic, async Rust bindings for OpenThread"
+repository = "https://github.com/ivmarkov/esp-openthread"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+rust-version = "1.84"
 
 [features]
 default = []

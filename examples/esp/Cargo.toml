@@ -2,8 +2,14 @@
 name = "esp-openthread-examples"
 version = "0.1.0"
 authors = ["bjoernQ <bjoern.quentin@mobile-j.de>"]
-edition = "2021"
+resolver = "2"
+categories = ["embedded", "hardware-support"]
+keywords = ["thread", "openthread", "embedded", "embassy"]
+description = "openthread examples for Espressif chips"
+repository = "https://github.com/ivmarkov/esp-openthread"
 license = "MIT OR Apache-2.0"
+readme = "README.md"
+rust-version = "1.84"
 
 [profile.release]
 debug = true
