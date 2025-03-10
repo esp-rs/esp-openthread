@@ -1,8 +1,8 @@
 # openthread
 
-[![CI](https://github.com/ivmarkov/rs-matter-embassy/actions/workflows/ci.yml/badge.svg)](https://github.com/ivmarkov/rs-matter-embassy/actions/workflows/ci.yml)
-[![crates.io](https://img.shields.io/crates/v/rs-matter-embassy.svg)](https://crates.io/crates/rs-matter-embassy)
-[![Documentation](https://img.shields.io/badge/docs-esp--rs-brightgreen)](https://ivmarkov.github.io/rs-matter-embassy/esp_idf_matter/index.html)
+[![CI](https://github.com/ivmarkov/esp-openthread/actions/workflows/ci.yml/badge.svg)](https://github.com/ivmarkov/esp-openthread/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/esp-openthread.svg)](https://crates.io/crates/esp-openthread)
+[![Documentation](https://img.shields.io/badge/docs-esp--rs-brightgreen)](https://ivmarkov.github.io/ivmarkov/esp-openthread/index.html)
 [![Matrix](https://img.shields.io/matrix/ivmarkov:matrix.org?label=join%20matrix&color=BEC5C9&logo=matrix)](https://matrix.to/#/#esp-rs:matrix.org)
 
 Platform-agnostic, async Rust bindings for the [`OpenThread`](https://openthread.io/) library.
