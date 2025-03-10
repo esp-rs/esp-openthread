@@ -31,6 +31,8 @@ jobs:
 
       - name: Setup | Checkout
         uses: actions/checkout@v3
+        with:
+          submodules: recursive
 
       - name: Build | Fmt Check
         run: cd openthread; cargo fmt -- --check
