@@ -1,18 +1,35 @@
-# [WIP] openthread
+# openthread
+
+[![CI](https://github.com/ivmarkov/rs-matter-embassy/actions/workflows/ci.yml/badge.svg)](https://github.com/ivmarkov/rs-matter-embassy/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/rs-matter-embassy.svg)](https://crates.io/crates/rs-matter-embassy)
+[![Documentation](https://img.shields.io/badge/docs-esp--rs-brightgreen)](https://ivmarkov.github.io/rs-matter-embassy/esp_idf_matter/index.html)
+[![Matrix](https://img.shields.io/matrix/ivmarkov:matrix.org?label=join%20matrix&color=BEC5C9&logo=matrix)](https://matrix.to/#/#esp-rs:matrix.org)
 
 Platform-agnostic, async Rust bindings for the [`OpenThread`](https://openthread.io/) library.
 
-Tailored for Rust embedded baremetal, with out of the box support for [`embassy-net`](https://crates.io/crates/embassy-net).
+Tailored for Rust embedded baremetal.
 
-For certain MCUs, the OpenThread libraries are pre-compiled for convenience.
-Look at the `openthread-sys` crate for more information (TBD)
+For certain MCUs / Rust targets, the OpenThread libraries are pre-compiled for convenience.
+Current list:
+- `riscv32imac-unknown-none-elf` (ESP32C6 and ESP32H2)
+- `riscv32imc-unknown-none-elf`
+- `thumbv6m-none-eabi` - WIP - for NRF52
 
-## Goals
+For targets where pre-compiled libs are not available yet (including for the Host itself), a standard `build.rs` build is also supported.
+For the on-the-fly OpenThread CMake build to work, you'll need to install and set in your `$PATH`:
+- The GCC toolchain correspponding to your Rust target, with working `foo-bar-gcc -print-sysroot` command
+- Recent Clang
+- cmake amd ninja
+
+## Features
 
 - MTD functionality
+- Integration with `embassy-net` and `edge-nal`
+- Out of the box support for ESP32C6 and ESP32H2, with pre-compiled binaries and the IEEE 802.15.4 radio provided by the `esp-hal` project
 
-## Later goals
+## Next
 
+- Out of the box support for NRF52, with pre-compiled binaries and the IEEE 802.15.4 radio provided by the `embassy-nrf` project
 - Sleepy end-device
 - FTD functionality
 
@@ -22,11 +39,12 @@ Look at the `openthread-sys` crate for more information (TBD)
 
 ## Status
 
-The code ONLY type-checks, but is not tested yet (pending).
+The examples (native OpenThread UDP sockets; `embassy-net` integration; SRP) build and run on Espressif MCUs.
+The code is not completely tested yet though.
 
 ## Testing
 
-Build and flash the [OT-CLI](https://github.com/espressif/esp-idf/tree/master/examples/openthread/ot_cli) on ESP32-C6 or ESP32-H2.
+Build and flash the [OT-CLI](https://github.com/espressif/esp-idf/tree/master/examples/openthread/ot_cli) on ESP32C6 or ESP32H2.
 
 ```
 > dataset set active 0e080000000000010000000300000b35060004001fffe002083a90e3a319a904940708fd1fa298dbd1e3290510fe0458f7db96354eaa6041b880ea9c0f030f4f70656e5468726561642d35386431010258d10410888f813c61972446ab616ee3c556a5910c0402a0f7f8
