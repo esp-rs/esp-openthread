@@ -38,7 +38,7 @@ mod dataset;
 pub mod enal;
 #[cfg(feature = "embassy-net-driver-channel")]
 pub mod enet;
-#[cfg(any(feature = "esp32h2", feature = "esp32c6"))]
+#[cfg(feature = "esp-ieee802154")]
 pub mod esp;
 mod platform;
 mod radio;

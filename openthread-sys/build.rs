@@ -11,47 +11,24 @@ fn main() -> Result<()> {
     builder::OpenThreadBuilder::track(&crate_root_path.join("gen"));
     builder::OpenThreadBuilder::track(&crate_root_path.join("openthread"));
 
-    // If any one of these features is selected, we don't build anything
-    // and just use the pre-generated baremetal ESP bindings and libraries
-    let esp32 = env::var("CARGO_FEATURE_ESP32").is_ok();
-    let esp32s2 = env::var("CARGO_FEATURE_ESP32S2").is_ok();
-    let esp32s3 = env::var("CARGO_FEATURE_ESP32S3").is_ok();
-    let esp32c3 = env::var("CARGO_FEATURE_ESP32C3").is_ok();
-    let esp32c6 = env::var("CARGO_FEATURE_ESP32C6").is_ok();
+    // If `custom` is enabled, we need to re-build the bindings on-the-fly even if there are
+    // pre-generated bindings for the target triple
 
     let host = env::var("HOST").unwrap();
     let target = env::var("TARGET").unwrap();
 
-    // If we're building for ESP32* baremetal, we don't need to do anything
-    // Just link against the pre-built libraries and use the pre-generated bindings
-    let bindings_dir = crate_root_path.join("src").join("include");
-    let libs_dir = crate_root_path.join("libs");
+    let force_esp_riscv_toolchain = env::var("CARGO_FEATURE_FORCE_ESP_RISCV_TOOLCHAIN").is_ok();
 
-    let dirs = if esp32 {
-        Some((
-            bindings_dir.join("esp32.rs"),
-            libs_dir.join("xtensa-esp32-none-elf"),
-        ))
-    } else if esp32s2 {
-        Some((
-            bindings_dir.join("esp32s2.rs"),
-            libs_dir.join("xtensa-esp32s2-none-elf"),
-        ))
-    } else if esp32s3 {
-        Some((
-            bindings_dir.join("esp32s3.rs"),
-            libs_dir.join("xtensa-esp32s3-none-elf"),
-        ))
-    } else if esp32c3 {
-        Some((
-            bindings_dir.join("esp32c3.rs"),
-            libs_dir.join("riscv32imc-unknown-none-elf"),
-        ))
-    } else if esp32c6 {
-        Some((
-            bindings_dir.join("esp32c6.rs"),
-            libs_dir.join("riscv32imac-unknown-none-elf"),
-        ))
+    let pregen_bindings = env::var("CARGO_FEATURE_FORCE_GENERATE_BINDINGS").is_err();
+    let pregen_bindings_rs_file = crate_root_path
+        .join("src")
+        .join("include")
+        .join(format!("{target}.rs"));
+    let pregen_libs_dir = crate_root_path.join("libs").join(&target);
+
+    let dirs = if pregen_bindings && pregen_bindings_rs_file.exists() {
+        // Use the pre-generated bindings
+        Some((pregen_bindings_rs_file, pregen_libs_dir))
     } else if target.ends_with("-espidf") {
         // Nothing to do for ESP-IDF, `esp-idf-sys` will do everything for us
         None
@@ -61,12 +38,12 @@ fn main() -> Result<()> {
 
         let builder = builder::OpenThreadBuilder::new(
             crate_root_path.clone(),
-            "generic".to_string(),
-            None,
-            None,
-            None,
             Some(target),
             Some(host),
+            None,
+            None,
+            None,
+            force_esp_riscv_toolchain,
         );
 
         let libs_dir = builder.compile(&out, None)?;
@@ -77,7 +54,7 @@ fn main() -> Result<()> {
 
     if let Some((bindings, libs_dir)) = dirs {
         println!(
-            "cargo::rustc-env=OPENTHREAD_SYS_GENERATED_BINDINGS_FILE={}",
+            "cargo::rustc-env=OPENTHREAD_SYS_BINDINGS_FILE={}",
             bindings.display()
         );
 
@@ -86,9 +63,7 @@ fn main() -> Result<()> {
         println!("cargo:rustc-link-lib=mbedtls");
         println!("cargo:rustc-link-lib=mbedx509");
         println!("cargo:rustc-link-lib=openthread-mtd");
-        println!(
-            "cargo:rustc-link-lib=openthread-platform-utils-static"
-        );
+        println!("cargo:rustc-link-lib=openthread-platform-utils-static");
         println!("cargo:rustc-link-lib=openthread-platform");
         println!("cargo:rustc-link-lib=p256m");
         println!("cargo:rustc-link-lib=platform");
