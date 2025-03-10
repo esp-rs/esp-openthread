@@ -13,7 +13,8 @@ For certain MCUs / Rust targets, the OpenThread libraries are pre-compiled for c
 Current list:
 - `riscv32imac-unknown-none-elf` (ESP32C6 and ESP32H2)
 - `riscv32imc-unknown-none-elf`
-- `thumbv6m-none-eabi` - WIP - for NRF52
+- `thumbv6m-none-eabi`
+- `thumbv7em-none-eabi` - WIP - for NRF52
 
 For targets where pre-compiled libs are not available yet (including for the Host itself), a standard `build.rs` build is also supported.
 For the on-the-fly OpenThread CMake build to work, you'll need to install and set in your `$PATH`:
