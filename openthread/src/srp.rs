@@ -158,6 +158,7 @@ pub enum SrpState {
 }
 
 #[allow(non_upper_case_globals)]
+#[allow(non_snake_case)]
 impl From<otSrpClientItemState> for SrpState {
     fn from(value: otSrpClientItemState) -> Self {
         match value {
@@ -209,9 +210,9 @@ impl<'a> SrpConf<'a> {
     fn store(&self, ot_srp: &mut otSrpClientHostInfo, buf: &mut [u8]) -> Result<(), OtError> {
         let mut offset = 0;
 
-        let (addrs, buf) = SrpService::align_min::<otIp6Address>(buf, self.host_addrs.len())?;
+        let (addrs, buf) = align_min::<otIp6Address>(buf, self.host_addrs.len())?;
 
-        ot_srp.mName = SrpService::store_str(self.host_name, buf, &mut offset)?.as_ptr();
+        ot_srp.mName = store_str(self.host_name, buf, &mut offset)?.as_ptr();
 
         for ip in self.host_addrs {
             let addr = &mut addrs[offset];
@@ -234,15 +235,15 @@ impl Default for SrpConf<'_> {
 
 /// An SRP service that can be registered with the OpenThread stack.
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct SrpService<'a> {
+pub struct SrpService<'a, SI, TI> {
     /// The service name.
     pub name: &'a str,
     /// The instance name.
     pub instance_name: &'a str,
     /// The subtype labels.
-    pub subtype_labels: &'a [&'a str],
+    pub subtype_labels: SI,
     /// The TXT entries.
-    pub txt_entries: &'a [(&'a str, &'a [u8])],
+    pub txt_entries: TI,
     /// The service port.
     pub port: u16,
     /// The service priority.
@@ -257,21 +258,27 @@ pub struct SrpService<'a> {
     pub key_lease_secs: u32,
 }
 
-impl<'a> SrpService<'a> {
+impl<'a, SI, TI> SrpService<'a, SI, TI>
+where
+    SI: IntoIterator<Item = &'a str> + Clone + 'a,
+    TI: IntoIterator<Item = (&'a str, &'a [u8])> + Clone + 'a,
+{
     fn store(&self, ot_srp: &mut otSrpClientService, buf: &mut [u8]) -> Result<(), OtError> {
-        let (txt_entries, buf) = Self::align_min::<otDnsTxtEntry>(buf, self.txt_entries.len())?;
-        let (subtype_labels, strs) =
-            Self::align_min::<*const char>(buf, self.subtype_labels.len() + 1)?;
+        let subtype_labels_len = self.subtype_labels.clone().into_iter().count();
+        let txt_entries_len = self.txt_entries.clone().into_iter().count();
+
+        let (txt_entries, buf) = align_min::<otDnsTxtEntry>(buf, txt_entries_len)?;
+        let (subtype_labels, strs) = align_min::<*const char>(buf, subtype_labels_len + 1)?;
 
         let mut offset = 0;
 
-        ot_srp.mName = Self::store_str(self.name, strs, &mut offset)?.as_ptr();
-        ot_srp.mInstanceName = Self::store_str(self.instance_name, strs, &mut offset)?.as_ptr();
+        ot_srp.mName = store_str(self.name, strs, &mut offset)?.as_ptr();
+        ot_srp.mInstanceName = store_str(self.instance_name, strs, &mut offset)?.as_ptr();
 
         let mut index = 0;
 
-        for subtype_label in self.subtype_labels {
-            let subtype_label = Self::store_str(subtype_label, strs, &mut offset)?;
+        for subtype_label in self.subtype_labels.clone() {
+            let subtype_label = store_str(subtype_label, strs, &mut offset)?;
             subtype_labels[index] = subtype_label.as_ptr() as *const _;
 
             index += 1;
@@ -279,11 +286,13 @@ impl<'a> SrpService<'a> {
 
         subtype_labels[index] = core::ptr::null();
 
-        for (key, value) in self.txt_entries {
+        index = 0;
+
+        for (key, value) in self.txt_entries.clone() {
             let txt_entry = &mut txt_entries[index];
 
-            txt_entry.mKey = Self::store_str(key, strs, &mut offset)?.as_ptr();
-            txt_entry.mValue = Self::store_data(value, strs, &mut offset)?.as_ptr();
+            txt_entry.mKey = store_str(key, strs, &mut offset)?.as_ptr();
+            txt_entry.mValue = store_data(value, strs, &mut offset)?.as_ptr();
             txt_entry.mValueLength = value.len() as _;
 
             index += 1;
@@ -291,7 +300,7 @@ impl<'a> SrpService<'a> {
 
         ot_srp.mSubTypeLabels = subtype_labels.as_ptr() as *const _;
         ot_srp.mTxtEntries = txt_entries.as_ptr();
-        ot_srp.mNumTxtEntries = self.txt_entries.len() as _;
+        ot_srp.mNumTxtEntries = txt_entries_len as _;
         ot_srp.mPort = self.port;
         ot_srp.mPriority = self.priority;
         ot_srp.mWeight = self.weight;
@@ -300,77 +309,14 @@ impl<'a> SrpService<'a> {
 
         Ok(())
     }
-
-    fn align_min<T>(buf: &mut [u8], count: usize) -> Result<(&mut [T], &mut [u8]), OtError> {
-        if count == 0 {
-            return Ok((&mut [], buf));
-        }
-
-        let size = Self::est_size::<T>(count);
-
-        if size >= buf.len() {
-            Err(OtError::new(otError_OT_ERROR_NO_BUFS))?;
-        }
-
-        let (t_buf, buf) = buf.split_at_mut(size);
-
-        let (_, t_buf, _) = unsafe { t_buf.align_to_mut::<T>() };
-
-        assert!(count == t_buf.len() || count == t_buf.len() + 1);
-
-        Ok((t_buf, buf))
-    }
-
-    fn est_size<T>(count: usize) -> usize {
-        let align = core::mem::align_of::<T>();
-        let mut size = core::mem::size_of::<T>();
-        if size % align != 0 {
-            size += align - (size % align);
-        }
-
-        count * size + align
-    }
-
-    fn store_str<'t>(
-        str: &str,
-        buf: &'t mut [u8],
-        offset: &mut usize,
-    ) -> Result<&'t CStr, OtError> {
-        let buf = &mut buf[*offset..];
-
-        if str.len() + 1 >= buf.len() {
-            Err(OtError::new(otError_OT_ERROR_NO_BUFS))?;
-        }
-
-        buf[..str.len()].copy_from_slice(str.as_bytes());
-        buf[str.len()] = 0;
-
-        *offset += str.len() + 1;
-
-        Ok(unsafe { CStr::from_bytes_with_nul_unchecked(&buf[..str.len() + 1]) })
-    }
-
-    fn store_data<'t>(
-        data: &[u8],
-        buf: &'t mut [u8],
-        offset: &mut usize,
-    ) -> Result<&'t [u8], OtError> {
-        let buf = &mut buf[*offset..];
-
-        if data.len() >= buf.len() {
-            Err(OtError::new(otError_OT_ERROR_NO_BUFS))?;
-        }
-
-        buf[..data.len()].copy_from_slice(data);
-
-        *offset += data.len();
-
-        Ok(&buf[..data.len()])
-    }
 }
 
-impl From<&otSrpClientService> for SrpService<'_> {
-    fn from(ot_srp: &otSrpClientService) -> Self {
+pub type OutSrpService<'a> = SrpService<'a, SubtypeLabelsIter<'a>, TxtEntriesIter<'a>>;
+pub type SubtypeLabelsIter<'a> = [&'a str; 0];
+pub type TxtEntriesIter<'a> = [(&'a str, &'a [u8]); 0];
+
+impl<'a> From<&'a otSrpClientService> for OutSrpService<'a> {
+    fn from(ot_srp: &'a otSrpClientService) -> Self {
         Self {
             name: if !ot_srp.mName.is_null() {
                 unsafe { CStr::from_ptr(ot_srp.mName).to_str().unwrap() }
@@ -382,8 +328,8 @@ impl From<&otSrpClientService> for SrpService<'_> {
             } else {
                 ""
             },
-            subtype_labels: &[], // TODO subtype_labels.as_slice(),
-            txt_entries: &[],    // TODO txt_entries.as_slice(),
+            subtype_labels: [], // TODO subtype_labels.as_slice(),
+            txt_entries: [],    // TODO txt_entries.as_slice(),
             port: ot_srp.mPort,
             priority: ot_srp.mPriority,
             weight: ot_srp.mWeight,
@@ -554,7 +500,14 @@ impl OpenThread<'_> {
     ///
     /// Arguments:
     /// - `service`: The SRP service to add.
-    pub fn srp_add_service(&self, service: &SrpService) -> Result<SrpServiceId, OtError> {
+    pub fn srp_add_service<'a, SI, TI>(
+        &self,
+        service: &'a SrpService<SI, TI>,
+    ) -> Result<SrpServiceId, OtError>
+    where
+        SI: IntoIterator<Item = &'a str> + Clone + 'a,
+        TI: IntoIterator<Item = (&'a str, &'a [u8])> + Clone + 'a,
+    {
         let mut ot = self.activate();
         let instance = ot.state().ot.instance;
         let srp = ot.state().srp()?;
@@ -644,7 +597,7 @@ impl OpenThread<'_> {
     ///   If there are no more SRP services, the closure will receive `None`.
     pub fn srp_services<F>(&self, mut f: F) -> Result<(), OtError>
     where
-        F: FnMut(Option<(&SrpService, SrpState, SrpServiceId)>),
+        F: FnMut(Option<(&OutSrpService<'_>, SrpState, SrpServiceId)>),
     {
         let mut ot = self.activate();
         let instance = ot.state().ot.instance;
@@ -672,4 +625,63 @@ impl OpenThread<'_> {
 
         Ok(())
     }
+}
+
+fn align_min<T>(buf: &mut [u8], count: usize) -> Result<(&mut [T], &mut [u8]), OtError> {
+    if count == 0 {
+        return Ok((&mut [], buf));
+    }
+
+    let size = est_size::<T>(count);
+
+    if size >= buf.len() {
+        Err(OtError::new(otError_OT_ERROR_NO_BUFS))?;
+    }
+
+    let (t_buf, buf) = buf.split_at_mut(size);
+
+    let (_, t_buf, _) = unsafe { t_buf.align_to_mut::<T>() };
+
+    assert!(count == t_buf.len() || count == t_buf.len() + 1);
+
+    Ok((t_buf, buf))
+}
+
+fn est_size<T>(count: usize) -> usize {
+    let align = core::mem::align_of::<T>();
+    let mut size = core::mem::size_of::<T>();
+    if size % align != 0 {
+        size += align - (size % align);
+    }
+
+    count * size + align
+}
+
+fn store_str<'t>(str: &str, buf: &'t mut [u8], offset: &mut usize) -> Result<&'t CStr, OtError> {
+    let buf = &mut buf[*offset..];
+
+    if str.len() + 1 >= buf.len() {
+        Err(OtError::new(otError_OT_ERROR_NO_BUFS))?;
+    }
+
+    buf[..str.len()].copy_from_slice(str.as_bytes());
+    buf[str.len()] = 0;
+
+    *offset += str.len() + 1;
+
+    Ok(unsafe { CStr::from_bytes_with_nul_unchecked(&buf[..str.len() + 1]) })
+}
+
+fn store_data<'t>(data: &[u8], buf: &'t mut [u8], offset: &mut usize) -> Result<&'t [u8], OtError> {
+    let buf = &mut buf[*offset..];
+
+    if data.len() >= buf.len() {
+        Err(OtError::new(otError_OT_ERROR_NO_BUFS))?;
+    }
+
+    buf[..data.len()].copy_from_slice(data);
+
+    *offset += data.len();
+
+    Ok(&buf[..data.len()])
 }
