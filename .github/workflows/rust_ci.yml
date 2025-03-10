@@ -15,16 +15,6 @@ jobs:
   rust-checks:
     name: Rust Checks
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        action:
-          - command: build
-            args: --release
-          - command: fmt
-            args: --all -- --check --color always
-          - command: clippy
-            args: --all-targets --all-features --workspace -- -D warnings
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -36,5 +26,9 @@ jobs:
           target: riscv32imac-unknown-none-elf
           toolchain: nightly
           components: rust-src
-      - name: Run command
-        run: cargo ${{ matrix.action.command }} ${{ matrix.action.args }}
+      - name: Fmt
+        run: cd openthread; cargo fmt --all -- --check --color always
+      - name: Clippy
+        run: cd openthread; cargo clippy --all-targets --all-features --workspace -- -D warnings
+      - name: Build
+        run: cd openthread; cargo build
