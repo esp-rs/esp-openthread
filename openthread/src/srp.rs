@@ -260,12 +260,12 @@ pub struct SrpService<'a, SI, TI> {
 
 impl<'a, SI, TI> SrpService<'a, SI, TI>
 where
-    SI: IntoIterator<Item = &'a str> + Clone + 'a,
-    TI: IntoIterator<Item = (&'a str, &'a [u8])> + Clone + 'a,
+    SI: Iterator<Item = &'a str> + Clone + 'a,
+    TI: Iterator<Item = (&'a str, &'a [u8])> + Clone + 'a,
 {
     fn store(&self, ot_srp: &mut otSrpClientService, buf: &mut [u8]) -> Result<(), OtError> {
-        let subtype_labels_len = self.subtype_labels.clone().into_iter().count();
-        let txt_entries_len = self.txt_entries.clone().into_iter().count();
+        let subtype_labels_len = self.subtype_labels.clone().count();
+        let txt_entries_len = self.txt_entries.clone().count();
 
         let (txt_entries, buf) = align_min::<otDnsTxtEntry>(buf, txt_entries_len)?;
         let (subtype_labels, strs) = align_min::<*const char>(buf, subtype_labels_len + 1)?;
@@ -312,8 +312,8 @@ where
 }
 
 pub type OutSrpService<'a> = SrpService<'a, SubtypeLabelsIter<'a>, TxtEntriesIter<'a>>;
-pub type SubtypeLabelsIter<'a> = [&'a str; 0];
-pub type TxtEntriesIter<'a> = [(&'a str, &'a [u8]); 0];
+pub type SubtypeLabelsIter<'a> = core::iter::Empty<&'a str>;
+pub type TxtEntriesIter<'a> = core::iter::Empty<(&'a str, &'a [u8])>;
 
 impl<'a> From<&'a otSrpClientService> for OutSrpService<'a> {
     fn from(ot_srp: &'a otSrpClientService) -> Self {
@@ -328,8 +328,8 @@ impl<'a> From<&'a otSrpClientService> for OutSrpService<'a> {
             } else {
                 ""
             },
-            subtype_labels: [], // TODO subtype_labels.as_slice(),
-            txt_entries: [],    // TODO txt_entries.as_slice(),
+            subtype_labels: core::iter::empty(), // TODO subtype_labels.as_slice(),
+            txt_entries: core::iter::empty(),    // TODO txt_entries.as_slice(),
             port: ot_srp.mPort,
             priority: ot_srp.mPriority,
             weight: ot_srp.mWeight,
@@ -502,11 +502,11 @@ impl OpenThread<'_> {
     /// - `service`: The SRP service to add.
     pub fn srp_add_service<'a, SI, TI>(
         &self,
-        service: &'a SrpService<SI, TI>,
+        service: &'a SrpService<'a, SI, TI>,
     ) -> Result<SrpServiceId, OtError>
     where
-        SI: IntoIterator<Item = &'a str> + Clone + 'a,
-        TI: IntoIterator<Item = (&'a str, &'a [u8])> + Clone + 'a,
+        SI: Iterator<Item = &'a str> + Clone + 'a,
+        TI: Iterator<Item = (&'a str, &'a [u8])> + Clone + 'a,
     {
         let mut ot = self.activate();
         let instance = ot.state().ot.instance;
