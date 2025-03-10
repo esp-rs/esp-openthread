@@ -9,12 +9,10 @@ use cmake::Config;
 
 pub struct OpenThreadBuilder {
     crate_root_path: PathBuf,
-    soc_config: String,
+    cmake_configurer: CMakeConfigurer,
     clang_path: Option<PathBuf>,
-    sysroot_path: Option<PathBuf>,
-    cmake_target: Option<String>,
+    clang_sysroot_path: Option<PathBuf>,
     clang_target: Option<String>,
-    host: Option<String>,
 }
 
 impl OpenThreadBuilder {
@@ -22,30 +20,36 @@ impl OpenThreadBuilder {
     ///
     /// Arguments:
     /// - `crate_root_path`: Path to the root of the crate
-    /// - `soc_config`: The name of the SoC configuration in the `headers/` directory. Use `generic` for a generic, software-only build
+    /// - `cmake_rust_target`: Optional target for CMake when building Openthread, with Rust target-triple syntax. If not specified, the "TARGET" env variable will be used
+    /// - `cmake_host_rust_target`: Optional host target for the build
     /// - `clang_path`: Optional path to the Clang compiler. If not specified, the system Clang will be used for generating bindings,
     ///   and the system compiler (likely GCC) would be used for building the OpenThread C/C++ code itself
-    /// - `sysroot_path`: Optional path to the compiler sysroot directory. If not specified, the host sysroot will be used
-    /// - `cmake_target`: Optional target for CMake when building Openthread, with Rust target-triple syntax. If not specified, the "TARGET" env variable will be used
-    /// - `clang_target`: Optional target for Clang when generating bindings. If not specified, the host target will be used
-    /// - `host`: Optional host target for the build
-    pub const fn new(
+    /// - `clang_sysroot_path`: Optional path to the compiler sysroot directory. If not specified, the host sysroot will be used
+    /// - `clang_target`: Optional target for Clang when generating bindings. If not specified, the "TARGET" env variable target will be used
+    /// - `force_esp_riscv_toolchain`: If true, and if the target is a riscv32 target, force the use of the Espressif RISCV GCC toolchain
+    ///   (`riscv32-esp-elf-gcc`) rather than the derived `riscv32-unknown-elf-gcc` toolchain which is the "official" RISC-V one
+    ///   (https://github.com/riscv-collab/riscv-gnu-toolchain)
+    pub fn new(
         crate_root_path: PathBuf,
-        soc_config: String,
+        cmake_rust_target: Option<String>,
+        cmake_host_rust_target: Option<String>,
         clang_path: Option<PathBuf>,
-        sysroot_path: Option<PathBuf>,
-        cmake_target: Option<String>,
+        clang_sysroot_path: Option<PathBuf>,
         clang_target: Option<String>,
-        host: Option<String>,
+        force_esp_riscv_toolchain: bool,
     ) -> Self {
         Self {
+            cmake_configurer: CMakeConfigurer::new(
+                crate_root_path.join("openthread"),
+                cmake_rust_target,
+                cmake_host_rust_target,
+                force_esp_riscv_toolchain,
+                crate_root_path.join("gen").join("toolchain.cmake"),
+            ),
             crate_root_path,
-            soc_config,
             clang_path,
-            sysroot_path,
-            cmake_target,
+            clang_sysroot_path,
             clang_target,
-            host,
         }
     }
 
@@ -58,8 +62,17 @@ impl OpenThreadBuilder {
         out_path: &Path,
         copy_file_path: Option<&Path>,
     ) -> Result<PathBuf> {
+        log::info!("Generating OpenThread bindings");
+
         if let Some(clang_path) = &self.clang_path {
+            // For bindgen
             std::env::set_var("CLANG_PATH", clang_path);
+        }
+
+        if let Some(cmake_rust_target) = &self.cmake_configurer.cmake_rust_target {
+            // Necessary for bindgen. See this:
+            // https://github.com/rust-lang/rust-bindgen/blob/af7fd38d5e80514406fb6a8bba2d407d252c30b9/bindgen/lib.rs#L711
+            std::env::set_var("TARGET", cmake_rust_target);
         }
 
         let canon = |path: &Path| {
@@ -83,6 +96,8 @@ impl OpenThreadBuilder {
             .blocklist_function("v.*scanf")
             .blocklist_function("_v.*printf_r")
             .blocklist_function("_v.*scanf_r")
+            .blocklist_function("q.*cvt")
+            .blocklist_function("q.*cvt_r")
             .header(
                 self.crate_root_path
                     .join("gen")
@@ -90,28 +105,19 @@ impl OpenThreadBuilder {
                     .join("include.h")
                     .to_string_lossy(),
             )
-            .clang_args([
-                &format!(
-                    "-I{}",
-                    canon(&self.crate_root_path.join("openthread").join("include"))
-                ),
-                &format!(
-                    "-I{}",
-                    canon(
-                        &self
-                            .crate_root_path
-                            .join("gen")
-                            .join("include")
-                            .join("soc")
-                            .join(&self.soc_config)
-                    )
-                ),
-            ]);
+            .clang_args([&format!(
+                "-I{}",
+                canon(&self.crate_root_path.join("openthread").join("include"))
+            )]);
 
-        if let Some(sysroot_path) = &self.sysroot_path {
+        if let Some(sysroot_path) = self
+            .clang_sysroot_path
+            .clone()
+            .or_else(|| self.cmake_configurer.derive_sysroot())
+        {
             builder = builder.clang_args([
                 &format!("-I{}", canon(&sysroot_path.join("include"))),
-                &format!("--sysroot={}", canon(sysroot_path)),
+                &format!("--sysroot={}", canon(&sysroot_path)),
             ]);
         }
 
@@ -148,22 +154,21 @@ impl OpenThreadBuilder {
     /// Compile OpenThread
     ///
     /// Arguments:
-    /// - `out_path`: Path to write the compiled libraries to
+    /// - `out_path`: Path to use as a build space
+    /// - `copy_path`: Optional path to copy the generated libraries to
     pub fn compile(&self, out_path: &Path, copy_path: Option<&Path>) -> Result<PathBuf> {
-        if let Some(clang_path) = &self.clang_path {
-            std::env::set_var("CLANG_PATH", clang_path);
-        }
-
-        log::info!("Compiling for {} SOC", self.soc_config);
-        let ot_path = self.crate_root_path.clone(); //.join("openthread");
-
         let target_dir = out_path.join("openthread").join("build");
-
         std::fs::create_dir_all(&target_dir)?;
+
+        let target_lib_dir = out_path.join("openthread").join("lib");
+
+        let lib_dir = copy_path.unwrap_or(&target_lib_dir);
+        std::fs::create_dir_all(lib_dir)?;
 
         // Compile OpenThread and generate libraries to link against
         log::info!("Compiling OpenThread");
-        let mut config = Config::new(&ot_path);
+
+        let mut config = self.cmake_configurer.configure(Some(lib_dir));
 
         config
             .define("OT_LOG_LEVEL", "DEBG")
@@ -181,74 +186,195 @@ impl OpenThreadBuilder {
             .define("OT_ECDSA", "ON")
             .define("OT_PING_SENDER", "ON")
             //.define("OT_COMPILE_WARNING_AS_ERROR", "ON "$@" "${OT_SRCDIR}"")
-            .define("ENABLE_PROGRAMS", "OFF")
-            .define("ENABLE_TESTING", "OFF")
-            .define("CMAKE_EXPORT_COMPILE_COMMANDS", "ON")
-            .define("CMAKE_BUILD_TYPE", "MinSizeRel")
-            .define(
-                "CMAKE_TOOLCHAIN_FILE",
-                self
-                    .crate_root_path
-                    .join("gen")
-                    .join("toolchains")
-                    .join(format!("toolchain-clang-{}.cmake", self.soc_config)),
-            )
-            // .cflag(&format!(
-            //     "-I{}",
-            //     self.crate_root_path
-            //         .join("gen")
-            //         .join("include")
-            //         .join("soc")
-            //         .join(&self.soc_config)
-            //         .display()
-            // ))
-            // .cflag(&format!("-DMBEDTLS_CONFIG_FILE='<config.h>'"))
-            // .cxxflag(&format!("-DMBEDTLS_CONFIG_FILE='<config.h>'"))
+            // ... or else the build would fail with `arm-none-eabi-gcc` during the linking phase
+            // with "undefined symbol `__exit`" error
+            .define("BUILD_TESTING", "OFF")
             .profile("Release")
             .out_dir(&target_dir);
 
-        if let Some(target) = &self.cmake_target {
-            config.target(target);
-        }
-
-        if let Some(host) = &self.host {
-            config.host(host);
-        }
-
         config.build();
 
-        let lib_dir = target_dir.join("build").join("lib");
-
-        if let Some(copy_path) = copy_path {
-            log::info!(
-                "Copying OpenThread libraries from {} to {}",
-                lib_dir.display(),
-                copy_path.display()
-            );
-            std::fs::create_dir_all(copy_path)?;
-
-            for file in [
-                "libeverest.a",
-                "libmbedcrypto.a",
-                "libmbedx509.a",
-                "libmbedtls.a",
-                "libopenthread-mtd.a",
-                "libopenthread-platform-utils-static.a",
-                "libopenthread-platform.a",
-                "libp256m.a",
-                "libplatform.a",
-                "libtcplp-mtd.a",
-            ] {
-                std::fs::copy(lib_dir.join(file), copy_path.join(file))?;
-            }
-        }
-
-        Ok(lib_dir)
+        Ok(lib_dir.to_path_buf())
     }
 
     /// Re-run the build script if the file or directory has changed.
     #[allow(unused)]
     pub fn track(file_or_dir: &Path) {
         println!("cargo:rerun-if-changed={}", file_or_dir.display())
+    }
+}
+
+// TODO: Move to `embuild`
+pub struct CMakeConfigurer {
+    pub project_path: PathBuf,
+    pub cmake_rust_target: Option<String>,
+    pub cmake_host_rust_target: Option<String>,
+    pub force_esp_riscv_toolchain: bool,
+    pub empty_toolchain_file: PathBuf,
+}
+
+impl CMakeConfigurer {
+    /// Create a new OpenThreadBuilder
+    ///
+    /// Arguments:
+    /// - `project_path`: Path to the root of the CMake project
+    /// - `cmake_rust_target`: Optional target for CMake when building Openthread, with Rust target-triple syntax. If not specified, the "TARGET" env variable will be used
+    /// - `cmake_host_rust_target`: Optional host target for the build
+    /// - `force_esp_riscv_toolchain`: If true, and if the target is a riscv32 target, force the use of the Espressif RISCV GCC toolchain
+    ///   (`riscv32-esp-elf-gcc`) rather than the derived `riscv32-unknown-elf-gcc` toolchain which is the "official" RISC-V one
+    ///   (https://github.com/riscv-collab/riscv-gnu-toolchain)
+    pub const fn new(
+        project_path: PathBuf,
+        cmake_rust_target: Option<String>,
+        cmake_host_rust_target: Option<String>,
+        force_esp_riscv_toolchain: bool,
+        empty_toolchain_file: PathBuf,
+    ) -> Self {
+        Self {
+            project_path,
+            cmake_rust_target,
+            cmake_host_rust_target,
+            force_esp_riscv_toolchain,
+            empty_toolchain_file,
+        }
+    }
+
+    pub fn configure(&self, target_dir: Option<&Path>) -> Config {
+        if let Some(cmake_rust_target) = &self.cmake_rust_target {
+            // For `cc-rs`
+            std::env::set_var("TARGET", cmake_rust_target);
+        }
+
+        let mut config = Config::new(&self.project_path);
+
+        config
+            // ... or else the build would fail with `arm-none-eabi-gcc` when testing the compiler
+            .define("CMAKE_TRY_COMPILE_TARGET_TYPE", "STATIC_LIBRARY")
+            .define("CMAKE_EXPORT_COMPILE_COMMANDS", "ON")
+            .define("CMAKE_BUILD_TYPE", "MinSizeRel");
+
+        if let Some(target_dir) = target_dir {
+            config
+                .define("CMAKE_ARCHIVE_OUTPUT_DIRECTORY", target_dir)
+                .define("CMAKE_LIBRARY_OUTPUT_DIRECTORY", target_dir)
+                .define("CMAKE_RUNTIME_OUTPUT_DIRECTORY", target_dir);
+        }
+
+        if let Some((compiler, _)) = self.derive_forced_c_compiler() {
+            let mut cfg = cc::Build::new();
+            cfg.compiler(&compiler);
+
+            config
+                .init_c_cfg(cfg.clone())
+                .init_cxx_cfg(cfg)
+                .define("CMAKE_C_COMPILER", &compiler)
+                .define("CMAKE_CXX_COMPILER", compiler)
+                .define("CMAKE_TOOLCHAIN_FILE", &self.empty_toolchain_file);
+        } else if let Some(target) = &self.cmake_rust_target {
+            let mut split = target.split('-');
+            let target_arch = split.next().unwrap();
+            let target_os = split.next().unwrap();
+
+            std::env::set_var("CARGO_CFG_TARGET_ARCH", target_arch);
+            std::env::set_var("CARGO_CFG_TARGET_OS", target_os);
+        }
+
+        for arg in self.derive_c_args() {
+            config.cflag(arg).cxxflag(arg);
+        }
+
+        if let Some(target) = &self.cmake_rust_target {
+            config.target(target);
+        }
+
+        if let Some(host) = &self.cmake_host_rust_target {
+            config.host(host);
+        }
+
+        config
+    }
+
+    pub fn derive_sysroot(&self) -> Option<PathBuf> {
+        let (compiler, gnu) = self.derive_c_compiler();
+
+        if gnu {
+            let output = Command::new(compiler).arg("-print-sysroot").output().ok()?;
+
+            if output.status.success() {
+                let sysroot = String::from_utf8(output.stdout).ok()?.trim().to_string();
+
+                (!sysroot.is_empty()).then_some(PathBuf::from(sysroot))
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    fn derive_c_compiler(&self) -> (PathBuf, bool) {
+        if let Some((compiler, gnu)) = self.derive_forced_c_compiler() {
+            return (compiler, gnu);
+        }
+
+        let mut build = cc::Build::new();
+        build.opt_level(0);
+
+        if let Some(target) = self.cmake_rust_target.as_ref() {
+            build.target(target);
+        }
+
+        if let Some(host) = self.cmake_host_rust_target.as_ref() {
+            build.host(host);
+        }
+
+        let compiler = build.get_compiler();
+
+        (compiler.path().to_path_buf(), compiler.is_like_gnu())
+    }
+
+    fn derive_forced_c_compiler(&self) -> Option<(PathBuf, bool)> {
+        match self.target().as_str() {
+            "xtensa-esp32-none-elf"
+            | "xtensa-esp32-espidf"
+            | "xtensa-esp32s2-none-elf"
+            | "xtensa-esp32s2-espidf"
+            | "xtensa-esp32s3-none-elf"
+            | "xtensa-esp32s3-espidf" => Some((PathBuf::from("xtensa-esp-elf-gcc"), true)),
+            "riscv32imc-unknown-none-elf"
+            | "riscv32imc-esp-espidf"
+            | "riscv32imac-unknown-none-elf"
+            | "riscv32imac-esp-espidf"
+            | "riscv32imafc-unknown-none-elf"
+            | "riscv32imafc-esp-espidf" => {
+                if self.force_esp_riscv_toolchain {
+                    Some((PathBuf::from("riscv32-esp-elf-gcc"), true))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    fn derive_c_args(&self) -> &[&str] {
+        match self.target().as_str() {
+            "xtensa-esp32-none-elf" | "xtensa-esp32-espidf" => {
+                &["target=xtensa-esp-elf", "-mcpu=esp32"]
+            }
+            "xtensa-esp32s2-none-elf" | "xtensa-esp32s2-espidf" => {
+                &["target=xtensa-esp-elf", "-mcpu=esp32s2"]
+            }
+            "xtensa-esp32s3-none-elf" | "xtensa-esp32s3-espidf" => {
+                &["target=xtensa-esp-elf", "-mcpu=esp32s3"]
+            }
+            _ => &[],
+        }
+    }
+
+    fn target(&self) -> String {
+        self.cmake_rust_target
+            .clone()
+            .unwrap_or_else(|| std::env::var("TARGET").unwrap().to_string())
     }
 }

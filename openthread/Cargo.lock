@@ -526,8 +526,6 @@ dependencies = [
  "esp-hal-procmacros",
  "esp-metadata",
  "esp-riscv-rt",
- "esp32c6",
- "esp32h2",
  "fugit",
  "instability",
  "nb 1.1.0",
@@ -552,7 +550,6 @@ dependencies = [
  "darling",
  "document-features",
  "litrs",
- "object",
  "proc-macro-crate",
  "proc-macro-error2",
  "proc-macro2",
@@ -607,26 +604,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c6b5438361891c431970194a733415006fb3d00b6eb70b3dcb66fd58f04d9b39"
 dependencies = [
  "anyhow",
-]
-
-[[package]]
-name = "esp32c6"
-version = "0.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd38a7771b65cb640cc4a79324a6301ba4ac3bf2987caca5d3aa34492238fdb9"
-dependencies = [
- "critical-section",
- "vcell",
-]
-
-[[package]]
-name = "esp32h2"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a05aafc25d8c68ce504d8025750fc37915a2fc7d2605be3d3b51f8886a43411a"
-dependencies = [
- "critical-section",
- "vcell",
 ]
 
 [[package]]
@@ -943,15 +920,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "object"
-version = "0.36.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "62948e14d923ea95ea2c7c86c71013138b66525b86bdc08d2dcc262bdb497b87"
-dependencies = [
- "memchr",
-]
-
-[[package]]
 name = "openthread"
 version = "0.1.0"
 dependencies = [
@@ -975,6 +943,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bindgen",
+ "cc",
  "cmake",
  "embuild",
  "env_logger",
@@ -1351,12 +1320,6 @@ name = "unicode-ident"
 version = "1.0.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e91b56cd4cadaeb79bbf1a5645f6b4f8dc5bde8834ad5894a8db35fda9efa1fe"
-
-[[package]]
-name = "vcell"
-version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77439c1b53d2303b20d9459b1ade71a83c716e3f9c34f3228c00e6f185d6c002"
 
 [[package]]
 name = "version_check"

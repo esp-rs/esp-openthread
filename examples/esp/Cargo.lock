@@ -242,16 +242,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "edge-nal"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac19c3edcdad839c71cb919cd09a632d9915d630760b37f0b74290188c08f248"
-dependencies = [
- "embassy-time",
- "embedded-io-async",
-]
-
-[[package]]
 name = "either"
 version = "1.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1120,7 +1110,6 @@ name = "openthread"
 version = "0.1.0"
 dependencies = [
  "bitflags 2.8.0",
- "edge-nal",
  "embassy-futures",
  "embassy-net-driver-channel",
  "embassy-sync",
@@ -1139,6 +1128,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bindgen",
+ "cc",
  "cmake",
  "embuild",
  "env_logger",

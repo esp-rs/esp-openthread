@@ -5,15 +5,12 @@ edition = "2021"
 
 [features]
 default = []
-
-# Exactly *one* chip MUST be selected via its feature:
-esp32 = []
-esp32s2 = []
-esp32s3 = []
-esp32c3 = []
-esp32c6 = []
-
-[dependencies]
+# Always generate the bindings during build, even if pre-built bindings for the build target are available
+force-generate-bindings = []
+# Force the use of the Espressif Riscv GCC toolchain, if the target is a `riscv32*-` target
+# If this feature is not enabled, the build will assume and use the "official" RiscV GCC toolchain:
+# https://github.com/riscv-collab/riscv-gnu-toolchain
+force-esp-riscv-toolchain = []
 
 [build-dependencies]
 anyhow = "1"
@@ -21,5 +18,6 @@ bindgen = "0.71"
 env_logger = "0.10"
 log = "0.4"
 cmake = "0.1.52"
+cc = "1.1"
 fs_extra = "1.3"
 embuild = "0.33"
