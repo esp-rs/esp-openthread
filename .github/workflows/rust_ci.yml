@@ -15,20 +15,43 @@ jobs:
   rust-checks:
     name: Rust Checks
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - default
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-      - name: Enable caching
-        uses: Swatinem/rust-cache@v2
-      - name: Setup Rust
+      - name: Setup | Rust
         uses: dtolnay/rust-toolchain@v1
         with:
-          target: riscv32imac-unknown-none-elf
-          toolchain: nightly
-          components: rust-src
-      - name: Fmt
-        run: cd openthread; cargo fmt --all -- --check --color always
-      - name: Clippy
-        run: cd openthread; cargo clippy --all-targets --all-features --workspace -- -D warnings
-      - name: Build
+          toolchain: ${{ env.rust_toolchain }}
+          components: rustfmt, clippy, rust-src
+
+      - name: Setup | Rust thumbv6m-none-eabi
+        run: rustup target add thumbv6m-none-eabi
+
+      - name: Setup | Checkout
+        uses: actions/checkout@v3
+
+      - name: Build | Fmt Check
+        run: cd openthread; cargo fmt -- --check
+
+      - name: Build | Clippy
+        run: cd openthread; cargo clippy --no-deps -- -Dwarnings
+
+      - name: Build | Compile
         run: cd openthread; cargo build
+
+      - name: Examples-ESP-Build | Fmt Check
+        run: cd examples/esp; cargo fmt -- --check
+
+      - name: Examples-ESP-Build | Clippy
+        env:
+          WIFI_SSID: "ssid"
+          WIFI_PASS: "pass"
+        run: cd examples/esp; cargo clippy --no-deps -- -Dwarnings
+
+      - name: Examples-ESP-Build | Compile
+        env:
+          WIFI_SSID: "ssid"
+          WIFI_PASS: "pass"
+        run: cd examples/esp; cargo build
