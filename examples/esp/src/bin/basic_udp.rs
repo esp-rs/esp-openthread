@@ -1,6 +1,6 @@
 //! Basic example for esp32-c6 and esp32-h2, demonstrating the usage of OpenThread native UDP sockets.
 //!
-//! The example provisions a MTD device with fixed Thread network settings, waits for the device to connect,
+//! The example provisions an MTD device with fixed Thread network settings, waits for the device to connect,
 //! and then sends and receives Ipv6 UDP packets over the `IEEE 802.15.4` radio.
 //!
 //! See README.md for instructions on how to configure the other Thread peer (a FTD), using another Esp device.
@@ -23,6 +23,8 @@ use openthread::esp::EspRadio;
 use openthread::{
     OpenThread, OperationalDataset, OtResources, OtUdpResources, ThreadTimestamp, UdpSocket,
 };
+
+use tinyrlibc as _;
 
 macro_rules! mk_static {
     ($t:ty) => {{

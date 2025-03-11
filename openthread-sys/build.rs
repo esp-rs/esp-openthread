@@ -58,17 +58,23 @@ fn main() -> Result<()> {
             bindings.display()
         );
 
-        println!("cargo:rustc-link-lib=everest");
-        println!("cargo:rustc-link-lib=mbedcrypto");
-        println!("cargo:rustc-link-lib=mbedtls");
-        println!("cargo:rustc-link-lib=mbedx509");
-        println!("cargo:rustc-link-lib=openthread-mtd");
-        println!("cargo:rustc-link-lib=openthread-platform-utils-static");
-        println!("cargo:rustc-link-lib=openthread-platform");
-        println!("cargo:rustc-link-lib=p256m");
-        println!("cargo:rustc-link-lib=platform");
-        println!("cargo:rustc-link-lib=tcplp-mtd");
         println!("cargo:rustc-link-search={}", libs_dir.display());
+
+        for entry in std::fs::read_dir(libs_dir)? {
+            let entry = entry?;
+            
+            let file_name = entry.file_name();
+            let file_name = file_name.to_str().unwrap();
+            if file_name.ends_with(".a") || file_name.to_ascii_lowercase().ends_with(".lib") {
+                let lib_name = if file_name.ends_with(".a") {
+                    file_name.trim_start_matches("lib").trim_end_matches(".a")
+                } else {
+                    file_name.trim_end_matches(".lib")
+                };
+
+                println!("cargo:rustc-link-lib=static={lib_name}");
+            }
+        }
     }
 
     Ok(())

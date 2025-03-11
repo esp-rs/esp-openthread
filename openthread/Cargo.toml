@@ -21,6 +21,7 @@ udp = []
 srp = ["udp"]
 force-generate-bindings = ["openthread-sys/force-generate-bindings"]
 force-esp-riscv-toolchain = ["openthread-sys/force-esp-riscv-toolchain"]
+isupper = [] # Provide internal implementation of the `isupper` C fn
 
 [dependencies]
 openthread-sys = { path = "../openthread-sys" }
@@ -35,3 +36,4 @@ bitflags = "2.5"
 embassy-net-driver-channel = { version = "0.3", optional = true }
 edge-nal = { version = "0.5", optional = true }
 esp-ieee802154 = { version = "0.5", optional = true }
+embassy-nrf = { version = "0.3", optional = true }
