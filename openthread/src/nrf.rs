@@ -16,7 +16,7 @@ impl RadioError for Error {
     }
 }
 
-/// The `esp-hal` ESP IEEE 802.15.4 radio.
+/// The `embassy-nrf` ESP IEEE 802.15.4 radio.
 pub struct NrfRadio<'a, T>
 where
     T: Ieee802154Peripheral,
@@ -82,7 +82,8 @@ where
         debug!("NRF Radio, about to transmit: {psdu:02x?}");
 
         let mut packet = Packet::new();
-        packet.copy_from_slice(psdu);
+        // TODO: CRC mismatch between what OT gives and what NRF expects
+        packet.copy_from_slice(&psdu[..psdu.len() - 2]);
 
         self.driver.try_send(&mut packet).await?;
 
@@ -91,15 +92,18 @@ where
         Ok(())
     }
 
+    // TODO: For NRF, need to implement software ACK for received frames
+    // as this is not supported in hardware.
     async fn receive(&mut self, psdu_buf: &mut [u8]) -> Result<PsduMeta, Self::Error> {
         trace!("NRF Radio, about to receive");
 
         let channel = self.config.channel;
 
         let mut packet = Packet::new();
-        let len = packet.len() as _;
 
         self.driver.receive(&mut packet).await?;
+
+        let len = (packet.len()) as _;
         psdu_buf[..len].copy_from_slice(&packet);
 
         debug!("NRF Radio, received: {:02x?}", &psdu_buf[..len]);
@@ -108,7 +112,8 @@ where
         let rssi = lqi as _; // TODO: Convert LQI to RSSI
 
         Ok(PsduMeta {
-            len,
+            // TODO: CRC mismatch between what NRF gives and what OT expects
+            len: len + 2,
             channel,
             rssi: Some(rssi),
         })

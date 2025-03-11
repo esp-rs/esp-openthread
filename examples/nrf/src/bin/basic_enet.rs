@@ -30,6 +30,8 @@ use openthread::{OpenThread, OperationalDataset, OtResources, ThreadTimestamp};
 
 use rand_core::RngCore;
 
+use rtt_target::rtt_init_log;
+
 use tinyrlibc as _;
 
 macro_rules! mk_static {
@@ -57,9 +59,20 @@ const BOUND_PORT: u16 = 1212;
 const IPV6_PACKET_SIZE: usize = 1280;
 const ENET_MAX_SOCKETS: usize = 2;
 
+const LOG_RINGBUF_SIZE: usize = 4096;
+
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
-    let p = embassy_nrf::init(Default::default());
+    let mut config = embassy_nrf::config::Config::default();
+    config.hfclk_source = embassy_nrf::config::HfclkSource::ExternalXtal;
+
+    let p = embassy_nrf::init(config);
+
+    rtt_init_log!(
+        log::LevelFilter::Info,
+        rtt_target::ChannelMode::NoBlockSkip,
+        LOG_RINGBUF_SIZE
+    );
 
     info!("Starting...");
 
