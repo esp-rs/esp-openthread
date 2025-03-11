@@ -1,12 +1,9 @@
-//! An example for esp32-c6 and esp32-h2, demonstrating the usage of OpenThread native UDP sockets as well as the SRP API.
+//! Basic example for NRF, demonstrating the usage of OpenThread native UDP sockets.
 //!
 //! The example provisions an MTD device with fixed Thread network settings, waits for the device to connect,
 //! and then sends and receives Ipv6 UDP packets over the `IEEE 802.15.4` radio.
 //!
-//! The example also registers the MTD device under the hostname `srp-example` and should thus be pingable as `srp-example.local`
-//! from your Wifi/Ethernet network, as long as you are running the other thread peer as a Thread Border Router (see below).
-//!
-//! See README.md for instructions on how to configure the other Thread peer (a FTD), using another Esp device.
+//! See README.md for instructions on how to configure the other Thread peer (a FTD), using an Esp device.
 
 #![no_std]
 #![no_main]
@@ -15,17 +12,17 @@ use core::net::{Ipv6Addr, SocketAddrV6};
 
 use embassy_executor::Spawner;
 
-use esp_backtrace as _;
-use esp_hal::rng::Rng;
-use esp_hal::timer::systimer::SystemTimer;
-use esp_ieee802154::Ieee802154;
+use embassy_nrf::peripherals::{RADIO, RNG};
+use embassy_nrf::rng::{self, Rng};
+use embassy_nrf::{bind_interrupts, peripherals, radio};
 
 use log::info;
 
-use openthread::esp::EspRadio;
+use {panic_probe as _, rtt_target as _};
+
+use openthread::nrf::{Ieee802154, NrfRadio};
 use openthread::{
-    OpenThread, OperationalDataset, OtResources, OtSrpResources, OtUdpResources, SrpConf,
-    ThreadTimestamp, UdpSocket,
+    OpenThread, OperationalDataset, OtResources, OtUdpResources, ThreadTimestamp, UdpSocket,
 };
 
 use tinyrlibc as _;
@@ -45,46 +42,35 @@ macro_rules! mk_static {
     }};
 }
 
+bind_interrupts!(struct Irqs {
+    RADIO => radio::InterruptHandler<peripherals::RADIO>;
+    RNG => rng::InterruptHandler<peripherals::RNG>;
+});
+
 const BOUND_PORT: u16 = 1212;
 
 const UDP_SOCKETS_BUF: usize = 1280;
 const UDP_MAX_SOCKETS: usize = 2;
 
-const SRP_SERVICE_BUF: usize = 300;
-const SRP_MAX_SERVICES: usize = 2;
-
-#[esp_hal_embassy::main]
+#[embassy_executor::main]
 async fn main(spawner: Spawner) {
-    esp_println::logger::init_logger(log::LevelFilter::Info);
+    let p = embassy_nrf::init(Default::default());
 
     info!("Starting...");
 
-    let peripherals = esp_hal::init(esp_hal::Config::default());
-
-    esp_hal_embassy::init(SystemTimer::new(peripherals.SYSTIMER).alarm0);
-
-    let rng = mk_static!(Rng, Rng::new(peripherals.RNG));
+    let rng = mk_static!(Rng<RNG>, Rng::new(p.RNG, Irqs));
 
     let ot_resources = mk_static!(OtResources, OtResources::new());
     let ot_udp_resources =
         mk_static!(OtUdpResources<UDP_MAX_SOCKETS, UDP_SOCKETS_BUF>, OtUdpResources::new());
-    let ot_srp_resources =
-        mk_static!(OtSrpResources<SRP_MAX_SERVICES, SRP_SERVICE_BUF>, OtSrpResources::new());
 
-    let ot = OpenThread::new_with_udp_srp(rng, ot_resources, ot_udp_resources, ot_srp_resources)
-        .unwrap();
+    let ot = OpenThread::new_with_udp(rng, ot_resources, ot_udp_resources).unwrap();
 
     spawner
-        .spawn(run_ot(
-            ot,
-            EspRadio::new(Ieee802154::new(
-                peripherals.IEEE802154,
-                peripherals.RADIO_CLK,
-            )),
-        ))
+        .spawn(run_ot(ot, NrfRadio::new(Ieee802154::new(p.RADIO, Irqs))))
         .unwrap();
 
-    spawner.spawn(run_ot_info(ot)).unwrap();
+    spawner.spawn(run_ot_ip_info(ot)).unwrap();
 
     let dataset = OperationalDataset {
         active_timestamp: Some(ThreadTimestamp {
@@ -109,14 +95,6 @@ async fn main(spawner: Spawner) {
     ot.enable_ipv6(true).unwrap();
     ot.enable_thread(true).unwrap();
 
-    ot.srp_set_conf(&SrpConf {
-        host_name: "srp-example",
-        ..SrpConf::new()
-    })
-    .unwrap();
-
-    ot.srp_autostart().unwrap();
-
     let socket = UdpSocket::bind(
         ot,
         &SocketAddrV6::new(Ipv6Addr::UNSPECIFIED, BOUND_PORT, 0, 0),
@@ -138,15 +116,12 @@ async fn main(spawner: Spawner) {
 }
 
 #[embassy_executor::task]
-async fn run_ot(ot: OpenThread<'static>, radio: EspRadio<'static>) -> ! {
+async fn run_ot(ot: OpenThread<'static>, radio: NrfRadio<'static, RADIO>) -> ! {
     ot.run(radio).await
 }
 
 #[embassy_executor::task]
-async fn run_ot_info(ot: OpenThread<'static>) -> ! {
-    let mut cur_state = None;
-    let mut cur_server_addr = None;
-
+async fn run_ot_ip_info(ot: OpenThread<'static>) -> ! {
     let mut cur_addrs = heapless::Vec::<(Ipv6Addr, u8), 4>::new();
 
     loop {
@@ -160,21 +135,10 @@ async fn run_ot_info(ot: OpenThread<'static>) -> ! {
         })
         .unwrap();
 
-        let mut state = cur_state;
-        let server_addr = ot.srp_server_addr().unwrap();
-
-        ot.srp_conf(|_, new_state| {
-            state = Some(new_state);
-            Ok(())
-        })
-        .unwrap();
-
-        if cur_addrs != addrs || cur_state != state || cur_server_addr != server_addr {
-            info!("Got new IPv6 address(es) and/or SRP state from OpenThread:\nIP addrs: {addrs:?}\nSRP state: {state:?}\nSRP server addr: {server_addr:?}");
+        if cur_addrs != addrs {
+            info!("Got new IPv6 address(es) from OpenThread: {addrs:?}");
 
             cur_addrs = addrs;
-            cur_state = state;
-            cur_server_addr = server_addr;
 
             info!("Waiting for OpenThread changes signal...");
         }

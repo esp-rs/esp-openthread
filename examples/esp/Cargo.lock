@@ -716,6 +716,7 @@ dependencies = [
  "openthread",
  "rand_core",
  "static_cell",
+ "tinyrlibc",
 ]
 
 [[package]]
@@ -1474,6 +1475,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.98",
+]
+
+[[package]]
+name = "tinyrlibc"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5d07d242693682e46801cb0186c583858bce022f698401b3f04bbd729c9a87e7"
+dependencies = [
+ "cc",
 ]
 
 [[package]]

@@ -230,6 +230,7 @@ pub extern "C" fn isprint(v: u32) -> bool {
     v >= ' ' as u32 && v <= 127
 }
 
+#[cfg(feature = "isupper")]
 #[no_mangle]
 pub extern "C" fn isupper(v: u32) -> bool {
     v >= 'A' as u32 && v <= 'Z' as u32

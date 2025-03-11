@@ -26,8 +26,8 @@ jobs:
           toolchain: ${{ env.rust_toolchain }}
           components: rustfmt, clippy, rust-src
 
-      - name: Setup | Rust thumbv6m-none-eabi
-        run: rustup target add thumbv6m-none-eabi
+      - name: Setup | Rust thumbv7em-none-eabi
+        run: rustup target add thumbv7em-none-eabi
 
       - name: Setup | Checkout
         uses: actions/checkout@v3
@@ -51,3 +51,12 @@ jobs:
 
       - name: Examples-ESP-Build | Compile
         run: cd examples/esp; cargo build
+
+      - name: Examples-NRF-Build | Fmt Check
+        run: cd examples/nrf; cargo fmt -- --check
+
+      - name: Examples-NRF-Build | Clippy
+        run: cd examples/nrf; cargo clippy --no-deps -- -Dwarnings
+
+      - name: Examples-NRF-Build | Compile
+        run: cd examples/nrf; cargo build

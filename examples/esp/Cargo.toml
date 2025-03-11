@@ -38,7 +38,8 @@ critical-section = "1.1"
 rand_core = "0.6"
 static_cell = "2.1"
 
-openthread = { path = "../../openthread", features = ["udp", "srp", "embassy-net-driver-channel", "esp-ieee802154"] }
+openthread = { path = "../../openthread", features = ["udp", "srp", "embassy-net-driver-channel", "esp-ieee802154", "isupper"] }
+tinyrlibc = { version = "0.5", default-features = false, features = ["utoa", "strtoul"] }
 
 [[bin]]
 path = "./src/bin/basic_enet.rs"

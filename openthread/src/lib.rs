@@ -40,6 +40,8 @@ pub mod enal;
 pub mod enet;
 #[cfg(feature = "esp-ieee802154")]
 pub mod esp;
+#[cfg(feature = "embassy-nrf")]
+pub mod nrf;
 mod platform;
 mod radio;
 mod scan;
