@@ -53,7 +53,7 @@ where
             Cca::CarrierAndEd { ed_threshold } => RadioCca::EnergyDetection { ed_threshold },
             Cca::CarrierOrEd { ed_threshold } => RadioCca::EnergyDetection { ed_threshold },
         });
-        self.driver.set_transmission_power(config.power);
+        // TODO self.driver.set_transmission_power(config.power);
     }
 }
 

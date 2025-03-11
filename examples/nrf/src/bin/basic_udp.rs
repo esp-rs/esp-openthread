@@ -25,6 +25,8 @@ use openthread::{
     OpenThread, OperationalDataset, OtResources, OtUdpResources, ThreadTimestamp, UdpSocket,
 };
 
+use rtt_target::rtt_init_log;
+
 use tinyrlibc as _;
 
 macro_rules! mk_static {
@@ -52,9 +54,17 @@ const BOUND_PORT: u16 = 1212;
 const UDP_SOCKETS_BUF: usize = 1280;
 const UDP_MAX_SOCKETS: usize = 2;
 
+const LOG_RINGBUF_SIZE: usize = 1024;
+
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     let p = embassy_nrf::init(Default::default());
+
+    rtt_init_log!(
+        log::LevelFilter::Info,
+        rtt_target::ChannelMode::NoBlockSkip,
+        LOG_RINGBUF_SIZE
+    );
 
     info!("Starting...");
 
@@ -66,9 +76,15 @@ async fn main(spawner: Spawner) {
 
     let ot = OpenThread::new_with_udp(rng, ot_resources, ot_udp_resources).unwrap();
 
-    spawner
-        .spawn(run_ot(ot, NrfRadio::new(Ieee802154::new(p.RADIO, Irqs))))
-        .unwrap();
+    info!("About to spawn OT runner");
+
+    let radio = NrfRadio::new(Ieee802154::new(p.RADIO, Irqs));
+
+    info!("Radio created");
+
+    spawner.spawn(run_ot(ot, radio)).unwrap();
+
+    info!("About to spawn OT IP info");
 
     spawner.spawn(run_ot_ip_info(ot)).unwrap();
 

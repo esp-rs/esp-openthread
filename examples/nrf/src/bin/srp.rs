@@ -29,6 +29,8 @@ use openthread::{
     ThreadTimestamp, UdpSocket,
 };
 
+use rtt_target::rtt_init_log;
+
 use tinyrlibc as _;
 
 macro_rules! mk_static {
@@ -59,9 +61,17 @@ const UDP_MAX_SOCKETS: usize = 2;
 const SRP_SERVICE_BUF: usize = 300;
 const SRP_MAX_SERVICES: usize = 2;
 
+const LOG_RINGBUF_SIZE: usize = 1024;
+
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     let p = embassy_nrf::init(Default::default());
+
+    rtt_init_log!(
+        log::LevelFilter::Info,
+        rtt_target::ChannelMode::NoBlockSkip,
+        LOG_RINGBUF_SIZE
+    );
 
     info!("Starting...");
 
