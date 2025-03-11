@@ -16,7 +16,7 @@ impl RadioError for Error {
     }
 }
 
-/// The `esp-hal` ESP IEEE 802.15.4 radio.
+/// The `embassy-nrf` ESP IEEE 802.15.4 radio.
 pub struct NrfRadio<'a, T>
 where
     T: Ieee802154Peripheral,
