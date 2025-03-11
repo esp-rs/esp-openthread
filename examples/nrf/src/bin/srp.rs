@@ -61,11 +61,14 @@ const UDP_MAX_SOCKETS: usize = 2;
 const SRP_SERVICE_BUF: usize = 300;
 const SRP_MAX_SERVICES: usize = 2;
 
-const LOG_RINGBUF_SIZE: usize = 1024;
+const LOG_RINGBUF_SIZE: usize = 4096;
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
-    let p = embassy_nrf::init(Default::default());
+    let mut config = embassy_nrf::config::Config::default();
+    config.hfclk_source = embassy_nrf::config::HfclkSource::ExternalXtal;
+
+    let p = embassy_nrf::init(config);
 
     rtt_init_log!(
         log::LevelFilter::Info,

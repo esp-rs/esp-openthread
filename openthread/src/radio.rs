@@ -101,7 +101,7 @@ impl Config {
     pub const fn new() -> Self {
         Self {
             channel: 15,
-            power: 10,
+            power: 8,
             cca: Cca::Carrier,
             sfd: 0,
             promiscuous: false,

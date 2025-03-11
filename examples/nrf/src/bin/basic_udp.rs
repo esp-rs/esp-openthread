@@ -18,7 +18,7 @@ use embassy_nrf::{bind_interrupts, peripherals, radio};
 
 use log::info;
 
-use {panic_probe as _, rtt_target as _};
+use panic_probe as _;
 
 use openthread::nrf::{Ieee802154, NrfRadio};
 use openthread::{
@@ -54,11 +54,14 @@ const BOUND_PORT: u16 = 1212;
 const UDP_SOCKETS_BUF: usize = 1280;
 const UDP_MAX_SOCKETS: usize = 2;
 
-const LOG_RINGBUF_SIZE: usize = 1024;
+const LOG_RINGBUF_SIZE: usize = 4096;
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
-    let p = embassy_nrf::init(Default::default());
+    let mut config = embassy_nrf::config::Config::default();
+    config.hfclk_source = embassy_nrf::config::HfclkSource::ExternalXtal;
+
+    let p = embassy_nrf::init(config);
 
     rtt_init_log!(
         log::LevelFilter::Info,
