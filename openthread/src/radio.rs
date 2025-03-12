@@ -11,10 +11,11 @@ use core::pin::pin;
 use bitflags::bitflags;
 
 use embassy_futures::select::{select, Either};
+
 use embassy_sync::blocking_mutex::raw::{CriticalSectionRawMutex, RawMutex};
 use embassy_sync::signal::Signal;
-
 use embassy_sync::zerocopy_channel::{Channel, Receiver, Sender};
+
 use mac::ACK_PSDU_LEN;
 
 /// The error kind for radio errors.
