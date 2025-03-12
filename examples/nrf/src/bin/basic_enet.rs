@@ -11,9 +11,10 @@
 use core::net::Ipv6Addr;
 
 use embassy_executor::Spawner;
-use embassy_net::udp::{PacketMetadata, UdpMetadata, UdpSocket};
-use embassy_net::{Config, ConfigV6, Ipv6Cidr, Runner, StackResources, StaticConfigV6};
 
+use embassy_net::udp::{PacketMetadata, UdpMetadata, UdpSocket};
+
+use embassy_net::{Config, ConfigV6, Ipv6Cidr, Runner, StackResources, StaticConfigV6};
 use embassy_nrf::peripherals::{RADIO, RNG};
 use embassy_nrf::rng::{self, Rng};
 use embassy_nrf::{bind_interrupts, peripherals, radio};
@@ -91,6 +92,7 @@ async fn main(spawner: Spawner) {
 
     let radio = EnhRadio::new(
         NrfRadio::new(Ieee802154::new(p.RADIO, Irqs)),
+        embassy_time::Delay,
         AckPolicy::all(),
         FilterPolicy::all(),
     );
@@ -203,7 +205,7 @@ async fn main(spawner: Spawner) {
 #[embassy_executor::task]
 async fn run_enet_driver(
     mut runner: EnetRunner<'static, IPV6_PACKET_SIZE>,
-    radio: EnhRadio<NrfRadio<'static, RADIO>>,
+    radio: EnhRadio<NrfRadio<'static, RADIO>, embassy_time::Delay>,
 ) -> ! {
     runner.run(radio).await
 }

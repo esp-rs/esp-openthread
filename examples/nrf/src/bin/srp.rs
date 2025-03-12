@@ -91,6 +91,7 @@ async fn main(spawner: Spawner) {
 
     let radio = EnhRadio::new(
         NrfRadio::new(Ieee802154::new(p.RADIO, Irqs)),
+        embassy_time::Delay,
         AckPolicy::all(),
         FilterPolicy::all(),
     );
@@ -153,7 +154,10 @@ async fn main(spawner: Spawner) {
 }
 
 #[embassy_executor::task]
-async fn run_ot(ot: OpenThread<'static>, radio: EnhRadio<NrfRadio<'static, RADIO>>) -> ! {
+async fn run_ot(
+    ot: OpenThread<'static>,
+    radio: EnhRadio<NrfRadio<'static, RADIO>, embassy_time::Delay>,
+) -> ! {
     ot.run(radio).await
 }
 

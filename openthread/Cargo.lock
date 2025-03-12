@@ -1066,6 +1066,7 @@ dependencies = [
  "embassy-nrf",
  "embassy-sync",
  "embassy-time",
+ "embedded-hal-async",
  "esp-ieee802154",
  "heapless",
  "log",

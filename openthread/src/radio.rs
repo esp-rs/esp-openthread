@@ -16,6 +16,8 @@ use embassy_sync::blocking_mutex::raw::{CriticalSectionRawMutex, RawMutex};
 use embassy_sync::signal::Signal;
 use embassy_sync::zerocopy_channel::{Channel, Receiver, Sender};
 
+use embedded_hal_async::delay::DelayNs;
+
 use mac::ACK_PSDU_LEN;
 
 /// The error kind for radio errors.
@@ -326,8 +328,9 @@ impl AckPolicy {
 
 /// An enhanced radio that can optionally send and receive ACKs for transmitted frames
 /// as well as optionally do address filtering.
-pub struct EnhRadio<T> {
+pub struct EnhRadio<T, D> {
     radio: T,
+    delay: D,
     ack_buf: [u8; ACK_PSDU_LEN],
     ack_policy: AckPolicy,
     filter_policy: FilterPolicy,
@@ -336,21 +339,24 @@ pub struct EnhRadio<T> {
     filter_ext_addr: Option<u64>,
 }
 
-impl<T> EnhRadio<T>
+impl<T, D> EnhRadio<T, D>
 where
     T: Radio,
+    D: DelayNs,
 {
-    const ACK_WAIT_US: u64 = 190;
+    const ACK_WAIT_US: u32 = 190;
 
     /// Create a new enhanced radio.
     ///
     /// Arguments:
     /// - `radio`: The radio to wrap.
+    /// - `delay`: The delay implementation to use. Should be with a high precision of ideally < 10us
     /// - `ack_policy`: The ACK policy to use.
     /// - `filter_policy`: The filter policy to use.
-    pub fn new(radio: T, ack_policy: AckPolicy, filter_policy: FilterPolicy) -> Self {
+    pub fn new(radio: T, delay: D, ack_policy: AckPolicy, filter_policy: FilterPolicy) -> Self {
         Self {
             radio,
+            delay,
             ack_buf: [0; ACK_PSDU_LEN],
             ack_policy,
             filter_policy,
@@ -389,9 +395,10 @@ where
     }
 }
 
-impl<T> Radio for EnhRadio<T>
+impl<T, D> Radio for EnhRadio<T, D>
 where
     T: Radio,
+    D: DelayNs,
 {
     type Error = EnhRadioError<T::Error>;
 
@@ -426,9 +433,7 @@ where
         if self.ack_policy.tx_ack && Self::needs_ack(psdu)? {
             let result = {
                 let mut ack = pin!(self.radio.receive(&mut self.ack_buf));
-                let mut timeout = pin!(embassy_time::Timer::after(
-                    embassy_time::Duration::from_micros(Self::ACK_WAIT_US)
-                ));
+                let mut timeout = pin!(self.delay.delay_us(Self::ACK_WAIT_US));
 
                 select(&mut ack, &mut timeout).await
             };

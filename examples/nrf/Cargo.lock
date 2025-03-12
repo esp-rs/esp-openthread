@@ -794,6 +794,7 @@ dependencies = [
  "embassy-nrf",
  "embassy-sync",
  "embassy-time",
+ "embedded-hal-async",
  "heapless",
  "log",
  "openthread-sys",

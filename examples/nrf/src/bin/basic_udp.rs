@@ -98,6 +98,7 @@ async fn main(spawner: Spawner) {
 
     let radio = EnhRadio::new(
         NrfRadio::new(Ieee802154::new(p.RADIO, Irqs)),
+        embassy_time::Delay,
         AckPolicy::all(),
         FilterPolicy::all(),
     );
@@ -169,7 +170,7 @@ async fn run_ot(ot: OpenThread<'static>, radio: ProxyRadio<'static>) -> ! {
 #[embassy_executor::task]
 async fn run_radio(
     mut runner: PhyRadioRunner<'static>,
-    radio: EnhRadio<NrfRadio<'static, RADIO>>,
+    radio: EnhRadio<NrfRadio<'static, RADIO>, embassy_time::Delay>,
 ) -> ! {
     runner.run(radio).await
 }
