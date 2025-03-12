@@ -506,6 +506,7 @@ impl<'a> OpenThread<'a> {
 
             // TODO: Borrow it from the resources
             let mut psdu_buf = [0_u8; OT_RADIO_FRAME_MAX_SIZE as usize];
+            let mut ack_psdu_buf = [0_u8; OT_RADIO_FRAME_MAX_SIZE as usize];
 
             loop {
                 radio.set_config(cmd.conf()).await.unwrap();
@@ -532,8 +533,11 @@ impl<'a> OpenThread<'a> {
 
                         trace!("About to Tx 802.15.4 frame {:02x?}", &psdu_buf[..psdu_len]);
 
+                        ack_psdu_buf.fill(0);
+
                         let mut new_cmd = pin!(radio_cmd());
-                        let mut tx = pin!(radio.transmit(&psdu_buf[..psdu_len]));
+                        let mut tx =
+                            pin!(radio.transmit(&psdu_buf[..psdu_len], Some(&mut ack_psdu_buf)));
 
                         let result = embassy_futures::select::select(&mut new_cmd, &mut tx).await;
 
@@ -1386,7 +1390,7 @@ struct RadioResources {
     tns_psdu: [u8; OT_RADIO_FRAME_MAX_SIZE as usize],
     /// The PSDU of the frame to be send by the radio
     snd_psdu: [u8; OT_RADIO_FRAME_MAX_SIZE as usize],
-    /// The PSDU of the ACK frame send to `otPlatRadioReceiveDone` TBD why we need that
+    /// The PSDU of the ACK frame send to `otPlatRadioReceiveDone`
     ack_psdu: [u8; OT_RADIO_FRAME_MAX_SIZE as usize],
 }
 

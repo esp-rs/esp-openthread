@@ -46,9 +46,9 @@ impl<'a> EspRadio<'a> {
         let config = &self.config;
 
         let esp_config = EspConfig {
-            auto_ack_tx: true,    //config.auto_ack, TODO
-            auto_ack_rx: true,    //config.auto_ack, TODO
-            enhance_ack_tx: true, // config.auto_ack, TODO
+            auto_ack_tx: true,
+            auto_ack_rx: true,
+            enhance_ack_tx: true,
             promiscuous: config.promiscuous,
             coordinator: false,
             rx_when_idle: config.rx_when_idle,
@@ -101,7 +101,11 @@ impl Radio for EspRadio<'_> {
         Ok(())
     }
 
-    async fn transmit(&mut self, psdu: &[u8]) -> Result<(), Self::Error> {
+    async fn transmit(
+        &mut self,
+        psdu: &[u8],
+        _ack_psdu_buf: Option<&mut [u8]>,
+    ) -> Result<Option<PsduMeta>, Self::Error> {
         TX_SIGNAL.reset();
 
         debug!("ESP Radio, about to transmit: {psdu:02x?}");
@@ -112,7 +116,7 @@ impl Radio for EspRadio<'_> {
 
         trace!("ESP Radio, transmission done");
 
-        Ok(())
+        Ok(None)
     }
 
     async fn receive(&mut self, psdu_buf: &mut [u8]) -> Result<PsduMeta, Self::Error> {

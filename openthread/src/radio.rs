@@ -20,6 +20,8 @@ use embedded_hal_async::delay::DelayNs;
 
 use mac::ACK_PSDU_LEN;
 
+use crate::sys::OT_RADIO_FRAME_MAX_SIZE;
+
 /// The error kind for radio errors.
 // TODO: Fill in with extra variants
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -203,7 +205,16 @@ pub trait Radio {
     ///
     /// Arguments:
     /// - `psdu`: The PSDU to transmit as part of the frame.
-    async fn transmit(&mut self, psdu: &[u8]) -> Result<(), Self::Error>;
+    /// - `ack_psdu_buf`: The buffer to store the received ACK PSDU if the radio is capable of reporting received ACKs.
+    ///
+    /// Returns:
+    /// - The meta-data associated with the received ACK frame if the radio is capable of reporting received ACKs
+    ///   and an ACK was expected and received for the transmitted frame.
+    async fn transmit(
+        &mut self,
+        psdu: &[u8],
+        ack_psdu_buf: Option<&mut [u8]>,
+    ) -> Result<Option<PsduMeta>, Self::Error>;
 
     /// Receive a radio frame.
     ///
@@ -229,8 +240,12 @@ where
         T::set_config(self, config).await
     }
 
-    async fn transmit(&mut self, psdu: &[u8]) -> Result<(), Self::Error> {
-        T::transmit(self, psdu).await
+    async fn transmit(
+        &mut self,
+        psdu: &[u8],
+        ack_psdu_buf: Option<&mut [u8]>,
+    ) -> Result<Option<PsduMeta>, Self::Error> {
+        T::transmit(self, psdu, ack_psdu_buf).await
     }
 
     async fn receive(&mut self, psdu_buf: &mut [u8]) -> Result<PsduMeta, Self::Error> {
@@ -427,10 +442,17 @@ where
         Ok(())
     }
 
-    async fn transmit(&mut self, psdu: &[u8]) -> Result<(), Self::Error> {
-        self.radio.transmit(psdu).await.map_err(Self::Error::Io)?;
-
+    async fn transmit(
+        &mut self,
+        psdu: &[u8],
+        ack_psdu_buf: Option<&mut [u8]>,
+    ) -> Result<Option<PsduMeta>, Self::Error> {
         if self.ack_policy.tx_ack && Self::needs_ack(psdu)? {
+            self.radio
+                .transmit(psdu, None)
+                .await
+                .map_err(Self::Error::Io)?;
+
             let result = {
                 let mut ack = pin!(self.radio.receive(&mut self.ack_buf));
                 let mut timeout = pin!(self.delay.delay_us(Self::ACK_WAIT_US));
@@ -444,9 +466,18 @@ where
             };
 
             Self::process_ack(&self.ack_buf[..ack_meta.len])?;
-        }
 
-        Ok(())
+            if let Some(ack_psdu_buf) = ack_psdu_buf {
+                ack_psdu_buf.copy_from_slice(&self.ack_buf[..ack_meta.len]);
+            }
+
+            Ok(Some(ack_meta))
+        } else {
+            self.radio
+                .transmit(psdu, ack_psdu_buf)
+                .await
+                .map_err(Self::Error::Io)
+        }
     }
 
     async fn receive(&mut self, psdu_buf: &mut [u8]) -> Result<PsduMeta, Self::Error> {
@@ -481,7 +512,7 @@ where
                 if Self::needs_ack(psdu)? {
                     let ack_len = Self::fill_ack(psdu, &mut self.ack_buf)?;
                     self.radio
-                        .transmit(&self.ack_buf[..ack_len])
+                        .transmit(&self.ack_buf[..ack_len], None)
                         .await
                         .map_err(Self::Error::TxAckFailed)?;
                 }
@@ -589,7 +620,11 @@ impl Radio for ProxyRadio<'_> {
         Ok(())
     }
 
-    async fn transmit(&mut self, psdu: &[u8]) -> Result<(), Self::Error> {
+    async fn transmit(
+        &mut self,
+        psdu: &[u8],
+        ack_psdu_buf: Option<&mut [u8]>,
+    ) -> Result<Option<PsduMeta>, Self::Error> {
         self.cancel().await;
 
         {
@@ -603,7 +638,19 @@ impl Radio for ProxyRadio<'_> {
             self.request.send_done();
         }
 
-        let result = self.response.receive().await.result;
+        let resp = self.response.receive().await;
+
+        let psdu_meta = ack_psdu_buf.is_some().then_some(PsduMeta {
+            len: resp.psdu.len(),
+            channel: resp.psdu_channel,
+            rssi: resp.psdu_rssi,
+        });
+
+        if let Some(ack_psdu_buf) = ack_psdu_buf {
+            ack_psdu_buf.copy_from_slice(&resp.psdu);
+        }
+
+        let result = resp.result.map(|_| psdu_meta);
 
         self.response.receive_done();
 
@@ -693,9 +740,24 @@ impl PhyRadioRunner<'_> {
         let result = if result.is_err() {
             result
         } else if request.tx {
-            Self::with_cancel(radio.transmit(&request.psdu), self.new_request)
-                .await?
-                .map_err(|e| e.kind())
+            response
+                .psdu
+                .extend(repeat_n(0, request.psdu.capacity() - request.psdu.len()));
+
+            let result = Self::with_cancel(
+                radio.transmit(&request.psdu, Some(&mut response.psdu)),
+                self.new_request,
+            )
+            .await?
+            .map_err(|e| e.kind());
+
+            if let Ok(Some(psdu_meta)) = &result {
+                response.psdu.truncate(psdu_meta.len);
+                response.psdu_channel = psdu_meta.channel;
+                response.psdu_rssi = psdu_meta.rssi;
+            }
+
+            result.map(|_| ())
         } else {
             response
                 .psdu
@@ -735,7 +797,7 @@ impl PhyRadioRunner<'_> {
 
 unsafe impl Send for PhyRadioRunner<'_> {}
 
-const PSDU_LEN: usize = 127;
+const PSDU_LEN: usize = OT_RADIO_FRAME_MAX_SIZE as _;
 
 struct ProxyRadioState<'a> {
     request: Channel<'a, CriticalSectionRawMutex, ProxyRadioRequest>,

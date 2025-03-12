@@ -78,7 +78,11 @@ where
         Ok(())
     }
 
-    async fn transmit(&mut self, psdu: &[u8]) -> Result<(), Self::Error> {
+    async fn transmit(
+        &mut self,
+        psdu: &[u8],
+        _ack_psdu_buf: Option<&mut [u8]>,
+    ) -> Result<Option<PsduMeta>, Self::Error> {
         debug!("NRF Radio, about to transmit: {psdu:02x?}");
 
         let mut packet = Packet::new();
@@ -89,7 +93,7 @@ where
 
         trace!("NRF Radio, transmission done");
 
-        Ok(())
+        Ok(None)
     }
 
     // TODO: For NRF, need to implement software ACK for received frames
