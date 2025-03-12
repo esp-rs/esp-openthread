@@ -559,6 +559,17 @@ impl<'a> ProxyRadio<'a> {
 
         state.split(caps)
     }
+
+    async fn cancel(&mut self) {
+        self.request.clear();
+
+        self.request_processing_started.reset();
+        self.new_request.signal(());
+
+        self.request_processing_started.wait().await;
+
+        self.response.clear();
+    }
 }
 
 impl Radio for ProxyRadio<'_> {
@@ -574,13 +585,7 @@ impl Radio for ProxyRadio<'_> {
     }
 
     async fn transmit(&mut self, psdu: &[u8]) -> Result<(), Self::Error> {
-        self.request_processing_started.reset();
-        self.new_request.signal(());
-
-        self.request_processing_started.wait().await;
-
-        self.request.clear();
-        self.response.clear();
+        self.cancel().await;
 
         {
             let req = self.request.send().await;
@@ -601,13 +606,7 @@ impl Radio for ProxyRadio<'_> {
     }
 
     async fn receive(&mut self, psdu_buf: &mut [u8]) -> Result<PsduMeta, Self::Error> {
-        self.request_processing_started.reset();
-        self.new_request.signal(());
-
-        self.request_processing_started.wait().await;
-
-        self.request.clear();
-        self.response.clear();
+        self.cancel().await;
 
         {
             let req = self.request.send().await;
@@ -657,7 +656,7 @@ impl PhyRadioRunner<'_> {
     /// Arguments:
     /// - `radio`: The PHY radio to run.
     ///   Should be an `EnhRadio` wrapper if the PHY radio cannot do ACKs and filtering in hardware.
-    pub async fn run<T>(&mut self, mut radio: T)
+    pub async fn run<T>(&mut self, mut radio: T) -> !
     where
         T: Radio,
     {
@@ -728,6 +727,8 @@ impl PhyRadioRunner<'_> {
         }
     }
 }
+
+unsafe impl Send for PhyRadioRunner<'_> {}
 
 const PSDU_LEN: usize = 127;
 

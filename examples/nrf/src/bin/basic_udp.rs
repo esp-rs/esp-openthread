@@ -10,8 +10,11 @@
 
 use core::net::{Ipv6Addr, SocketAddrV6};
 
+use embassy_executor::InterruptExecutor;
 use embassy_executor::Spawner;
 
+use embassy_nrf::interrupt;
+use embassy_nrf::interrupt::{InterruptExt, Priority};
 use embassy_nrf::peripherals::{RADIO, RNG};
 use embassy_nrf::rng::{self, Rng};
 use embassy_nrf::{bind_interrupts, peripherals, radio};
@@ -22,8 +25,8 @@ use panic_probe as _;
 
 use openthread::nrf::{Ieee802154, NrfRadio};
 use openthread::{
-    AckPolicy, EnhRadio, FilterPolicy, OpenThread, OperationalDataset, OtResources, OtUdpResources,
-    ThreadTimestamp, UdpSocket,
+    AckPolicy, Capabilities, EnhRadio, FilterPolicy, OpenThread, OperationalDataset, OtResources,
+    OtUdpResources, PhyRadioRunner, ProxyRadio, ProxyRadioResources, ThreadTimestamp, UdpSocket,
 };
 
 use rtt_target::rtt_init_log;
@@ -49,6 +52,13 @@ bind_interrupts!(struct Irqs {
     RADIO => radio::InterruptHandler<peripherals::RADIO>;
     RNG => rng::InterruptHandler<peripherals::RNG>;
 });
+
+#[interrupt]
+unsafe fn EGU1_SWI1() {
+    EXECUTOR_HIGH.on_interrupt()
+}
+
+static EXECUTOR_HIGH: InterruptExecutor = InterruptExecutor::new();
 
 const BOUND_PORT: u16 = 1212;
 
@@ -82,15 +92,27 @@ async fn main(spawner: Spawner) {
 
     info!("About to spawn OT runner");
 
+    let proxy_radio_resources = mk_static!(ProxyRadioResources, ProxyRadioResources::new());
+    let (proxy_radio, phy_radio_runner) =
+        ProxyRadio::new(Capabilities::empty(), proxy_radio_resources);
+
     let radio = EnhRadio::new(
         NrfRadio::new(Ieee802154::new(p.RADIO, Irqs)),
         AckPolicy::all(),
         FilterPolicy::all(),
     );
 
+    // High-priority executor: EGU1_SWI1, priority level 6
+    interrupt::EGU1_SWI1.set_priority(Priority::P6);
+
+    let spawner_high = EXECUTOR_HIGH.start(interrupt::EGU1_SWI1);
+    spawner_high
+        .spawn(run_radio(phy_radio_runner, radio))
+        .unwrap();
+
     info!("Radio created");
 
-    spawner.spawn(run_ot(ot, radio)).unwrap();
+    spawner.spawn(run_ot(ot, proxy_radio)).unwrap();
 
     info!("About to spawn OT IP info");
 
@@ -140,8 +162,16 @@ async fn main(spawner: Spawner) {
 }
 
 #[embassy_executor::task]
-async fn run_ot(ot: OpenThread<'static>, radio: EnhRadio<NrfRadio<'static, RADIO>>) -> ! {
+async fn run_ot(ot: OpenThread<'static>, radio: ProxyRadio<'static>) -> ! {
     ot.run(radio).await
+}
+
+#[embassy_executor::task]
+async fn run_radio(
+    mut runner: PhyRadioRunner<'static>,
+    radio: EnhRadio<NrfRadio<'static, RADIO>>,
+) -> ! {
+    runner.run(radio).await
 }
 
 #[embassy_executor::task]
