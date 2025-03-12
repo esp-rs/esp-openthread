@@ -4,7 +4,7 @@
 
 use core::fmt::Debug;
 use core::future::Future;
-use core::iter::repeat;
+use core::iter::repeat_n;
 use core::mem::MaybeUninit;
 use core::pin::pin;
 
@@ -694,7 +694,7 @@ impl PhyRadioRunner<'_> {
         } else {
             response
                 .psdu
-                .extend(repeat(0).take(request.psdu.capacity() - request.psdu.len()));
+                .extend(repeat_n(0, request.psdu.capacity() - request.psdu.len()));
 
             let result = Self::with_cancel(radio.receive(&mut response.psdu), self.new_request)
                 .await?
