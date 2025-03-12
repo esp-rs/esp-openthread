@@ -22,7 +22,8 @@ use panic_probe as _;
 
 use openthread::nrf::{Ieee802154, NrfRadio};
 use openthread::{
-    OpenThread, OperationalDataset, OtResources, OtUdpResources, ThreadTimestamp, UdpSocket,
+    AckPolicy, EnhRadio, FilterPolicy, OpenThread, OperationalDataset, OtResources, OtUdpResources,
+    ThreadTimestamp, UdpSocket,
 };
 
 use rtt_target::rtt_init_log;
@@ -81,7 +82,11 @@ async fn main(spawner: Spawner) {
 
     info!("About to spawn OT runner");
 
-    let radio = NrfRadio::new(Ieee802154::new(p.RADIO, Irqs));
+    let radio = EnhRadio::new(
+        NrfRadio::new(Ieee802154::new(p.RADIO, Irqs)),
+        AckPolicy::all(),
+        FilterPolicy::all(),
+    );
 
     info!("Radio created");
 
@@ -135,7 +140,7 @@ async fn main(spawner: Spawner) {
 }
 
 #[embassy_executor::task]
-async fn run_ot(ot: OpenThread<'static>, radio: NrfRadio<'static, RADIO>) -> ! {
+async fn run_ot(ot: OpenThread<'static>, radio: EnhRadio<NrfRadio<'static, RADIO>>) -> ! {
     ot.run(radio).await
 }
 

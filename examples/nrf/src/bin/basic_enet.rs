@@ -26,7 +26,9 @@ use {panic_probe as _, rtt_target as _};
 
 use openthread::enet::{self, EnetDriver, EnetRunner};
 use openthread::nrf::{Ieee802154, NrfRadio};
-use openthread::{OpenThread, OperationalDataset, OtResources, ThreadTimestamp};
+use openthread::{
+    AckPolicy, EnhRadio, FilterPolicy, OpenThread, OperationalDataset, OtResources, ThreadTimestamp,
+};
 
 use rand_core::RngCore;
 
@@ -87,11 +89,16 @@ async fn main(spawner: Spawner) {
 
     let (_enet_controller, enet_driver_runner, enet_driver) = enet::new(ot, enet_driver_state);
 
+    let radio = EnhRadio::new(
+        NrfRadio::new(Ieee802154::new(p.RADIO, Irqs)),
+        AckPolicy::all(),
+        FilterPolicy::all(),
+    );
+
+    info!("Radio created");
+
     spawner
-        .spawn(run_enet_driver(
-            enet_driver_runner,
-            NrfRadio::new(Ieee802154::new(p.RADIO, Irqs)),
-        ))
+        .spawn(run_enet_driver(enet_driver_runner, radio))
         .unwrap();
 
     let enet_resources = mk_static!(StackResources<ENET_MAX_SOCKETS>, StackResources::new());
@@ -196,7 +203,7 @@ async fn main(spawner: Spawner) {
 #[embassy_executor::task]
 async fn run_enet_driver(
     mut runner: EnetRunner<'static, IPV6_PACKET_SIZE>,
-    radio: NrfRadio<'static, RADIO>,
+    radio: EnhRadio<NrfRadio<'static, RADIO>>,
 ) -> ! {
     runner.run(radio).await
 }

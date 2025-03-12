@@ -25,8 +25,8 @@ use {panic_probe as _, rtt_target as _};
 
 use openthread::nrf::{Ieee802154, NrfRadio};
 use openthread::{
-    OpenThread, OperationalDataset, OtResources, OtSrpResources, OtUdpResources, SrpConf,
-    ThreadTimestamp, UdpSocket,
+    AckPolicy, EnhRadio, FilterPolicy, OpenThread, OperationalDataset, OtResources, OtSrpResources,
+    OtUdpResources, SrpConf, ThreadTimestamp, UdpSocket,
 };
 
 use rtt_target::rtt_init_log;
@@ -89,9 +89,15 @@ async fn main(spawner: Spawner) {
     let ot = OpenThread::new_with_udp_srp(rng, ot_resources, ot_udp_resources, ot_srp_resources)
         .unwrap();
 
-    spawner
-        .spawn(run_ot(ot, NrfRadio::new(Ieee802154::new(p.RADIO, Irqs))))
-        .unwrap();
+    let radio = EnhRadio::new(
+        NrfRadio::new(Ieee802154::new(p.RADIO, Irqs)),
+        AckPolicy::all(),
+        FilterPolicy::all(),
+    );
+
+    info!("Radio created");
+
+    spawner.spawn(run_ot(ot, radio)).unwrap();
 
     spawner.spawn(run_ot_info(ot)).unwrap();
 
@@ -147,7 +153,7 @@ async fn main(spawner: Spawner) {
 }
 
 #[embassy_executor::task]
-async fn run_ot(ot: OpenThread<'static>, radio: NrfRadio<'static, RADIO>) -> ! {
+async fn run_ot(ot: OpenThread<'static>, radio: EnhRadio<NrfRadio<'static, RADIO>>) -> ! {
     ot.run(radio).await
 }
 
