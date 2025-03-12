@@ -3,11 +3,18 @@
 //! `openthread` operates the radio in terms of this trait, which is implemented by the actual radio driver.
 
 use core::fmt::Debug;
+use core::future::Future;
+use core::iter::repeat;
+use core::mem::MaybeUninit;
 use core::pin::pin;
 
 use bitflags::bitflags;
 
 use embassy_futures::select::{select, Either};
+use embassy_sync::blocking_mutex::raw::{CriticalSectionRawMutex, RawMutex};
+use embassy_sync::signal::Signal;
+
+use embassy_sync::zerocopy_channel::{Channel, Receiver, Sender};
 use mac::ACK_PSDU_LEN;
 
 /// The error kind for radio errors.
@@ -34,6 +41,12 @@ pub enum RadioErrorKind {
 pub trait RadioError: Debug {
     /// The kind of error.
     fn kind(&self) -> RadioErrorKind;
+}
+
+impl RadioError for RadioErrorKind {
+    fn kind(&self) -> RadioErrorKind {
+        *self
+    }
 }
 
 /// Carrier sense or Energy Detection (ED) mode.
@@ -409,24 +422,22 @@ where
     async fn transmit(&mut self, psdu: &[u8]) -> Result<(), Self::Error> {
         self.radio.transmit(psdu).await.map_err(Self::Error::Io)?;
 
-        if self.ack_policy.tx_ack {
-            if Self::needs_ack(psdu)? {
-                let result = {
-                    let mut ack = pin!(self.radio.receive(&mut self.ack_buf));
-                    let mut timeout = pin!(embassy_time::Timer::after(
-                        embassy_time::Duration::from_micros(Self::ACK_WAIT_US)
-                    ));
+        if self.ack_policy.tx_ack && Self::needs_ack(psdu)? {
+            let result = {
+                let mut ack = pin!(self.radio.receive(&mut self.ack_buf));
+                let mut timeout = pin!(embassy_time::Timer::after(
+                    embassy_time::Duration::from_micros(Self::ACK_WAIT_US)
+                ));
 
-                    select(&mut ack, &mut timeout).await
-                };
+                select(&mut ack, &mut timeout).await
+            };
 
-                let ack_meta = match result {
-                    Either::First(result) => result.map_err(Self::Error::RxAckFailed)?,
-                    Either::Second(_) => Err(Self::Error::RxAckTimeout)?,
-                };
+            let ack_meta = match result {
+                Either::First(result) => result.map_err(Self::Error::RxAckFailed)?,
+                Either::Second(_) => Err(Self::Error::RxAckTimeout)?,
+            };
 
-                Self::process_ack(&self.ack_buf[..ack_meta.len])?;
-            }
+            Self::process_ack(&self.ack_buf[..ack_meta.len])?;
         }
 
         Ok(())
@@ -471,6 +482,327 @@ where
             }
 
             break Ok(psdu_meta);
+        }
+    }
+}
+
+/// The resources for the radio proxy.
+pub struct ProxyRadioResources {
+    request_buf: MaybeUninit<[ProxyRadioRequest; 1]>,
+    response_buf: MaybeUninit<[ProxyRadioResponse; 1]>,
+    state: MaybeUninit<ProxyRadioState<'static>>,
+}
+
+impl ProxyRadioResources {
+    /// Create a new set of radio proxy resources.
+    pub const fn new() -> Self {
+        Self {
+            request_buf: MaybeUninit::uninit(),
+            response_buf: MaybeUninit::uninit(),
+            state: MaybeUninit::uninit(),
+        }
+    }
+}
+
+impl Default for ProxyRadioResources {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// A type that allows to offload the execution (TX/RX) of the actual PHY `Radio` impl (or its `EnhRadio` wrapper)
+/// to a separate - possibly higher-priority - executor.
+///
+/// Running the PHY radio in a separate higher priority executor is particularly desirable in the cases where it
+/// cannot do ACKs and filtering in hardware, and hence the `EnhRadio` wrapper is used to handle these tasks
+/// in software. Due to timing constraints with ACKs and filtering, this task should have a higher priority than
+/// all other `OpenThread`-related tasks.
+///
+/// This is achieved by splitting the radio into two types:
+/// - `ProxyRadio`, which is a radio proxy that implements the `Radio` trait and is to be used by the main execution
+///   by passing it to `OpenThread::run`
+/// - `PhyRadioRunner`, which is `Send` and therefore can be sent to a separate executor - to run the radio.
+///   Invoke `PhyRadioRunner::run(EnhRadio::new(<the-phy-radio>, ...)).await` in that separate executor.
+pub struct ProxyRadio<'a> {
+    caps: Capabilities,
+    request: Sender<'a, CriticalSectionRawMutex, ProxyRadioRequest>,
+    response: Receiver<'a, CriticalSectionRawMutex, ProxyRadioResponse>,
+    new_request: &'a Signal<CriticalSectionRawMutex, ()>,
+    request_processing_started: &'a Signal<CriticalSectionRawMutex, ()>,
+    config: Config,
+}
+
+impl<'a> ProxyRadio<'a> {
+    const INIT_REQUEST: [ProxyRadioRequest; 1] = [ProxyRadioRequest::new()];
+    const INIT_RESPONSE: [ProxyRadioResponse; 1] = [ProxyRadioResponse::new()];
+
+    /// Create a new `ProxyRadio` and its `PhyRadioRunner` instances.
+    ///
+    /// Arguments:
+    /// - `caps`: The radio capabilities. Should match the ones of the PHY radio
+    /// - `resources`: The radio proxy resources
+    pub fn new(
+        caps: Capabilities,
+        resources: &'a mut ProxyRadioResources,
+    ) -> (Self, PhyRadioRunner<'a>) {
+        resources.request_buf.write(Self::INIT_REQUEST);
+        resources.response_buf.write(Self::INIT_RESPONSE);
+
+        #[allow(clippy::missing_transmute_annotations)]
+        resources.state.write(ProxyRadioState::new(
+            unsafe { core::mem::transmute(resources.request_buf.assume_init_mut()) },
+            unsafe { core::mem::transmute(resources.response_buf.assume_init_mut()) },
+        ));
+
+        let state = unsafe { resources.state.assume_init_mut() };
+
+        state.split(caps)
+    }
+}
+
+impl Radio for ProxyRadio<'_> {
+    type Error = RadioErrorKind;
+
+    async fn caps(&mut self) -> Capabilities {
+        self.caps
+    }
+
+    async fn set_config(&mut self, config: &Config) -> Result<(), Self::Error> {
+        self.config = config.clone();
+        Ok(())
+    }
+
+    async fn transmit(&mut self, psdu: &[u8]) -> Result<(), Self::Error> {
+        self.request_processing_started.reset();
+        self.new_request.signal(());
+
+        self.request_processing_started.wait().await;
+
+        self.request.clear();
+        self.response.clear();
+
+        {
+            let req = self.request.send().await;
+
+            req.tx = true;
+            req.config = self.config.clone();
+            req.psdu.clear();
+            req.psdu.extend_from_slice(psdu).unwrap();
+
+            self.request.send_done();
+        }
+
+        let result = self.response.receive().await.result;
+
+        self.response.receive_done();
+
+        result
+    }
+
+    async fn receive(&mut self, psdu_buf: &mut [u8]) -> Result<PsduMeta, Self::Error> {
+        self.request_processing_started.reset();
+        self.new_request.signal(());
+
+        self.request_processing_started.wait().await;
+
+        self.request.clear();
+        self.response.clear();
+
+        {
+            let req = self.request.send().await;
+
+            req.tx = false;
+            req.config = self.config.clone();
+            req.psdu.clear();
+
+            self.request.send_done();
+        }
+
+        let resp = self.response.receive().await;
+
+        match resp.result {
+            Ok(()) => {
+                let len = resp.psdu.len();
+                psdu_buf[..len].copy_from_slice(&resp.psdu);
+
+                let psdu_meta = PsduMeta {
+                    len,
+                    channel: resp.psdu_channel,
+                    rssi: resp.psdu_rssi,
+                };
+
+                self.response.receive_done();
+
+                Ok(psdu_meta)
+            }
+            Err(e) => {
+                self.response.receive_done();
+                Err(e)
+            }
+        }
+    }
+}
+
+pub struct PhyRadioRunner<'a> {
+    request: Receiver<'a, CriticalSectionRawMutex, ProxyRadioRequest>,
+    response: Sender<'a, CriticalSectionRawMutex, ProxyRadioResponse>,
+    new_request: &'a Signal<CriticalSectionRawMutex, ()>,
+    request_processing_started: &'a Signal<CriticalSectionRawMutex, ()>,
+}
+
+impl PhyRadioRunner<'_> {
+    /// Run the PHY radio.
+    ///
+    /// Arguments:
+    /// - `radio`: The PHY radio to run.
+    ///   Should be an `EnhRadio` wrapper if the PHY radio cannot do ACKs and filtering in hardware.
+    pub async fn run<T>(&mut self, mut radio: T)
+    where
+        T: Radio,
+    {
+        self.new_request.wait().await;
+
+        loop {
+            self.request_processing_started.signal(());
+
+            if self.process(&mut radio).await.is_none() {
+                continue;
+            }
+
+            self.new_request.wait().await;
+        }
+    }
+
+    async fn process<T>(&mut self, mut radio: T) -> Option<()>
+    where
+        T: Radio,
+    {
+        self.request_processing_started.signal(());
+
+        let request = Self::with_cancel(self.request.receive(), self.new_request).await?;
+        let response = Self::with_cancel(self.response.send(), self.new_request).await?;
+
+        let result = Self::with_cancel(radio.set_config(&request.config), self.new_request)
+            .await?
+            .map_err(|e| e.kind());
+        let result = if result.is_err() {
+            result
+        } else if request.tx {
+            Self::with_cancel(radio.transmit(&request.psdu), self.new_request)
+                .await?
+                .map_err(|e| e.kind())
+        } else {
+            response
+                .psdu
+                .extend(repeat(0).take(request.psdu.capacity() - request.psdu.len()));
+
+            let result = Self::with_cancel(radio.receive(&mut response.psdu), self.new_request)
+                .await?
+                .map_err(|e| e.kind());
+
+            if let Ok(psdu_meta) = &result {
+                response.psdu.truncate(psdu_meta.len);
+                response.psdu_channel = psdu_meta.channel;
+                response.psdu_rssi = psdu_meta.rssi;
+            }
+
+            result.map(|_| ())
+        };
+
+        response.result = result;
+
+        self.request.receive_done();
+        self.response.send_done();
+
+        Some(())
+    }
+
+    async fn with_cancel<F>(fut: F, cancel: &Signal<impl RawMutex, ()>) -> Option<F::Output>
+    where
+        F: Future,
+    {
+        match select(fut, cancel.wait()).await {
+            Either::First(result) => Some(result),
+            Either::Second(_) => None,
+        }
+    }
+}
+
+const PSDU_LEN: usize = 127;
+
+struct ProxyRadioState<'a> {
+    request: Channel<'a, CriticalSectionRawMutex, ProxyRadioRequest>,
+    response: Channel<'a, CriticalSectionRawMutex, ProxyRadioResponse>,
+    new_request: Signal<CriticalSectionRawMutex, ()>,
+    request_processing_started: Signal<CriticalSectionRawMutex, ()>,
+}
+
+impl<'a> ProxyRadioState<'a> {
+    fn new(
+        request_buf: &'a mut [ProxyRadioRequest; 1],
+        response_buf: &'a mut [ProxyRadioResponse; 1],
+    ) -> Self {
+        Self {
+            request: Channel::new(request_buf),
+            response: Channel::new(response_buf),
+            new_request: Signal::new(),
+            request_processing_started: Signal::new(),
+        }
+    }
+
+    fn split(&mut self, caps: Capabilities) -> (ProxyRadio<'_>, PhyRadioRunner<'_>) {
+        let (request_sender, request_receiver) = self.request.split();
+        let (response_sender, response_receiver) = self.response.split();
+
+        (
+            ProxyRadio {
+                caps,
+                request: request_sender,
+                response: response_receiver,
+                new_request: &self.new_request,
+                request_processing_started: &self.request_processing_started,
+                config: Config::new(),
+            },
+            PhyRadioRunner {
+                request: request_receiver,
+                response: response_sender,
+                new_request: &self.new_request,
+                request_processing_started: &self.request_processing_started,
+            },
+        )
+    }
+}
+
+struct ProxyRadioRequest {
+    tx: bool,
+    config: Config,
+    psdu: heapless::Vec<u8, PSDU_LEN>,
+}
+
+impl ProxyRadioRequest {
+    const fn new() -> Self {
+        Self {
+            tx: false,
+            config: Config::new(),
+            psdu: heapless::Vec::new(),
+        }
+    }
+}
+
+struct ProxyRadioResponse {
+    result: Result<(), RadioErrorKind>,
+    psdu: heapless::Vec<u8, PSDU_LEN>,
+    psdu_channel: u8,
+    psdu_rssi: Option<i8>,
+}
+
+impl ProxyRadioResponse {
+    const fn new() -> Self {
+        Self {
+            result: Ok(()),
+            psdu: heapless::Vec::new(),
+            psdu_channel: 0,
+            psdu_rssi: None,
         }
     }
 }
