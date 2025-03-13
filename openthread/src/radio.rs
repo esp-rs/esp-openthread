@@ -18,6 +18,8 @@ use embassy_sync::zerocopy_channel::{Channel, Receiver, Sender};
 
 use embedded_hal_async::delay::DelayNs;
 
+use log::{debug, trace};
+
 use mac::ACK_PSDU_LEN;
 
 use crate::sys::OT_RADIO_FRAME_MAX_SIZE;
@@ -443,6 +445,8 @@ where
         ack_psdu_buf: Option<&mut [u8]>,
     ) -> Result<Option<PsduMeta>, Self::Error> {
         if !self.radio.mac_caps().contains(MacCapabilities::TX_ACK) && Self::needs_ack(psdu)? {
+            debug!("MacRadio, about to transmit with ACK: {psdu:02x?}");
+
             self.radio
                 .transmit(psdu, None)
                 .await
@@ -457,13 +461,21 @@ where
 
             let ack_meta = match result {
                 Either::First(result) => result.map_err(Self::Error::RxAckFailed)?,
-                Either::Second(_) => Err(Self::Error::RxAckTimeout)?,
+                Either::Second(_) => {
+                    debug!("MacRadio, transmit ACK timeout");
+
+                    Err(Self::Error::RxAckTimeout)?
+                }
             };
 
-            Self::process_ack(&self.ack_buf[..ack_meta.len])?;
+            let ack_psdu = &self.ack_buf[..ack_meta.len];
+
+            debug!("MacRadio, received transmit ACK: {ack_psdu:02x?}, meta: {ack_meta:?}");
+
+            Self::process_ack(ack_psdu)?;
 
             if let Some(ack_psdu_buf) = ack_psdu_buf {
-                ack_psdu_buf.copy_from_slice(&self.ack_buf[..ack_meta.len]);
+                ack_psdu_buf.copy_from_slice(ack_psdu);
             }
 
             Ok(Some(ack_meta))
@@ -477,40 +489,49 @@ where
 
     async fn receive(&mut self, psdu_buf: &mut [u8]) -> Result<PsduMeta, Self::Error> {
         loop {
+            debug!("MacRadio, about to receive");
+
             let psdu_meta = self
                 .radio
                 .receive(psdu_buf)
                 .await
                 .map_err(Self::Error::Io)?;
 
+            let psdu = &psdu_buf[..psdu_meta.len];
+
+            debug!("MacRadio, received: {psdu:02x?}, meta: {psdu_meta:?}");
+
             if let Some(pan_id) = self.pan_id.as_ref() {
-                if mac::pan_id(psdu_buf) != Some(*pan_id) {
+                if mac::pan_id(psdu) != Some(*pan_id) {
+                    debug!("MacRadio, received frame with wrong PAN ID, dropping");
                     continue;
                 }
             }
 
             if let Some(short_addr) = self.short_addr.as_ref() {
                 if mac::short_addr(psdu_buf) != Some(*short_addr) {
+                    debug!("MacRadio, received frame with wrong short address, dropping");
                     continue;
                 }
             }
 
             if let Some(ext_addr) = self.ext_addr.as_ref() {
                 if mac::ext_addr(psdu_buf) != Some(*ext_addr) {
+                    debug!("MacRadio, received frame with wrong extended address, dropping");
                     continue;
                 }
             }
 
-            if !self.radio.mac_caps().contains(MacCapabilities::RX_ACK) {
-                let psdu = &psdu_buf[..psdu_meta.len];
+            if !self.radio.mac_caps().contains(MacCapabilities::RX_ACK) && Self::needs_ack(psdu)? {
+                let ack_len = Self::fill_ack(psdu, &mut self.ack_buf)?;
 
-                if Self::needs_ack(psdu)? {
-                    let ack_len = Self::fill_ack(psdu, &mut self.ack_buf)?;
-                    self.radio
-                        .transmit(&self.ack_buf[..ack_len], None)
-                        .await
-                        .map_err(Self::Error::TxAckFailed)?;
-                }
+                let ack_psdu = &self.ack_buf[..ack_len];
+                debug!("MacRadio, about to transmit ACK: {ack_psdu:02x?}");
+
+                self.radio
+                    .transmit(ack_psdu, None)
+                    .await
+                    .map_err(Self::Error::TxAckFailed)?;
             }
 
             break Ok(psdu_meta);
@@ -650,6 +671,8 @@ impl Radio for ProxyRadio<'_> {
         psdu: &[u8],
         ack_psdu_buf: Option<&mut [u8]>,
     ) -> Result<Option<PsduMeta>, Self::Error> {
+        trace!("ProxyRadio, about to transmit: {psdu:02x?}");
+
         self.cancel_current_request().await;
 
         {
@@ -660,10 +683,16 @@ impl Radio for ProxyRadio<'_> {
             req.psdu.clear();
             req.psdu.extend_from_slice(psdu).unwrap();
 
+            debug!("ProxyRadio, transmit request sent: {req:?}");
+
             self.request.send_done();
         }
 
+        trace!("ProxyRadio, waiting for transmit response");
+
         let resp = self.response.receive().await;
+
+        debug!("ProxyRadio, transmit response received: {resp:?}");
 
         let psdu_meta = (ack_psdu_buf.is_some() && !resp.psdu.is_empty()).then_some(PsduMeta {
             len: resp.psdu.len(),
@@ -687,6 +716,8 @@ impl Radio for ProxyRadio<'_> {
     }
 
     async fn receive(&mut self, psdu_buf: &mut [u8]) -> Result<PsduMeta, Self::Error> {
+        trace!("ProxyRadio, about to receive");
+
         self.cancel_current_request().await;
 
         {
@@ -696,10 +727,16 @@ impl Radio for ProxyRadio<'_> {
             req.config = self.config.clone();
             req.psdu.clear();
 
+            debug!("ProxyRadio, receive request sent: {req:?}");
+
             self.request.send_done();
         }
 
+        trace!("ProxyRadio, waiting for receive response");
+
         let resp = self.response.receive().await;
+
+        debug!("ProxyRadio, receive response received: {resp:?}");
 
         match resp.result {
             Ok(()) => {
@@ -751,14 +788,20 @@ impl PhyRadioRunner<'_> {
     {
         let mut radio = MacRadio::new(radio, delay);
 
+        debug!("PhyRadioRunner, running");
+
         self.new_request.wait().await;
 
         loop {
+            debug!("PhyRadioRunner, new request received");
+
+            // Indicate to the other end of the pipe the start of a new request processing
             self.request_processing_started.signal(());
 
             if self.process(&mut radio).await.is_none() {
                 // Processing was cancelled by a new request,
                 // no need to wait for the next one
+                debug!("PhyRadioRunner, processing cancelled");
                 continue;
             }
 
@@ -778,13 +821,12 @@ impl PhyRadioRunner<'_> {
     where
         T: Radio,
     {
-        // Indicate to the other end of the pipe the start of a new request processing
-        self.request_processing_started.signal(());
-
         // Always lock the request first; see `cancel_current_request`
         let request = Self::with_cancel(self.request.receive(), self.new_request).await?;
 
         let response = Self::with_cancel(self.response.send(), self.new_request).await?;
+
+        debug!("PhyRadioRunner, processing request: {request:?}");
 
         // Always first set the configuration relevant for the current TX/RX request
         // The PHY driver should have intelligence to skip the configuration update if the new
@@ -792,6 +834,8 @@ impl PhyRadioRunner<'_> {
         let result = Self::with_cancel(radio.set_config(&request.config), self.new_request)
             .await?
             .map_err(|e| e.kind());
+
+        trace!("PhyRadioRunner, configuration set: {result:?}");
 
         let result = if result.is_err() {
             // Setting driver configuration resulted in an error, so skip the rest of the processing
@@ -833,6 +877,8 @@ impl PhyRadioRunner<'_> {
         };
 
         response.result = result;
+
+        debug!("PhyRadioRunner, processed response: {response:?}");
 
         self.request.receive_done();
         self.response.send_done();
@@ -919,6 +965,7 @@ impl<'a> ProxyRadioState<'a> {
 }
 
 /// A proxy radio request.
+#[derive(Debug)]
 struct ProxyRadioRequest {
     /// Transmit or receive
     tx: bool,
@@ -940,6 +987,7 @@ impl ProxyRadioRequest {
 }
 
 /// A proxy radio response.
+#[derive(Debug)]
 struct ProxyRadioResponse {
     /// The result of the TX/RX operation
     result: Result<(), RadioErrorKind>,
