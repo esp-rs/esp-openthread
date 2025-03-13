@@ -66,7 +66,7 @@ where
     type Error = Error;
 
     fn caps(&mut self) -> Capabilities {
-        Capabilities::AUTO_ACK | Capabilities::RX_WHEN_IDLE
+        Capabilities::RX_WHEN_IDLE
     }
 
     fn mac_caps(&mut self) -> MacCapabilities {

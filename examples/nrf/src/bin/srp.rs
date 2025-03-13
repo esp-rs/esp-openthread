@@ -28,8 +28,8 @@ use {panic_probe as _, rtt_target as _};
 
 use openthread::nrf::{Ieee802154, NrfRadio};
 use openthread::{
-    Capabilities, OpenThread, OperationalDataset, OtResources, OtSrpResources, OtUdpResources,
-    PhyRadioRunner, ProxyRadio, ProxyRadioResources, SrpConf, ThreadTimestamp, UdpSocket,
+    OpenThread, OperationalDataset, OtResources, OtSrpResources, OtUdpResources, PhyRadioRunner,
+    ProxyRadio, ProxyRadioResources, Radio, SrpConf, ThreadTimestamp, UdpSocket,
 };
 
 use rtt_target::rtt_init_log;
@@ -101,19 +101,17 @@ async fn main(spawner: Spawner) {
 
     info!("About to spawn OT runner");
 
+    let mut radio = NrfRadio::new(Ieee802154::new(p.RADIO, Irqs));
+
     let proxy_radio_resources = mk_static!(ProxyRadioResources, ProxyRadioResources::new());
-    let (proxy_radio, phy_radio_runner) =
-        ProxyRadio::new(Capabilities::empty(), proxy_radio_resources);
+    let (proxy_radio, phy_radio_runner) = ProxyRadio::new(radio.caps(), proxy_radio_resources);
 
     // High-priority executor: EGU1_SWI1, priority level 6
     interrupt::EGU1_SWI1.set_priority(Priority::P6);
 
     let spawner_high = EXECUTOR_HIGH.start(interrupt::EGU1_SWI1);
     spawner_high
-        .spawn(run_radio(
-            phy_radio_runner,
-            NrfRadio::new(Ieee802154::new(p.RADIO, Irqs)),
-        ))
+        .spawn(run_radio(phy_radio_runner, radio))
         .unwrap();
 
     info!("Radio created");
