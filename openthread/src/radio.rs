@@ -85,11 +85,21 @@ bitflags! {
         /// Radio supports promiscuous mode.
         const PROMISCUOUS = 0x02;
         /// Radio supports sleep mode.
-        const SLEEP = 0x04;
-        /// Radio supports automatic acknowledgement of TX and RX frames.
-        const AUTO_ACK = 0x08;
+        const SLEEP = 0x03;
         /// Radio supports receiving during idle state.
-        const RX_WHEN_IDLE = 0x10;
+        const RX_WHEN_IDLE = 0x04;
+    }
+}
+
+bitflags! {
+    /// Radio capabilities.
+    #[repr(transparent)]
+    #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub struct MacCapabilities: u16 {
+        /// Radio supports automatic acknowledgement of TX frames.
+        const TX_ACK = 0x01;
+        /// Radio sending of ACK frames for received TX frames.
+        const RX_ACK = 0x02;
         /// Radio supports filtering of PHY phrames by their short address in the MAC payload.
         const FILTER_SHORT_ADDR = 0x20;
         /// Radio supports filtering of PHY phrames by their extended address in the MAC payload.
@@ -113,36 +123,33 @@ pub struct Config {
     /// Promiscuous mode (receive all frames regardless of address filtering)
     /// Disregarded if the radio is not capable of operating in promiscuous mode.
     pub promiscuous: bool,
-    /// PAN ID filter
-    /// If the radio is not capable of filtering by PAN ID, it should be wrapped with `EnhRadio` with
-    /// `FilterPolicy::pan_id` set to `true`.
-    pub pan_id: Option<u16>,
-    /// Short address filter
-    /// If the radio is not capable of filtering by short address, it should be wrapped with `EnhRadio` with
-    /// `FilterPolicy::short_addr` set to `true`.
-    pub short_addr: Option<u16>,
-    /// Extended address filter
-    /// If the radio is not capable of filtering by extended address, it should be wrapped with `EnhRadio` with
-    /// `FilterPolicy::ext_addr` set to `true`.
-    pub ext_addr: Option<u64>,
     /// Receive during idle state
     /// Disregarded if the radio is not capable of receiving during idle state.
     pub rx_when_idle: bool,
+    /// PAN ID filter
+    /// Disregarded if the radio is not capable of filtering by PAN ID.
+    pub pan_id: Option<u16>,
+    /// Short address filter
+    /// Disregarded if the radio is not capable of filtering by short address.
+    pub short_addr: Option<u16>,
+    /// Extended address filter
+    /// Disregarded if the radio is not capable of filtering by extended address.
+    pub ext_addr: Option<u64>,
 }
 
 impl Config {
     /// Create a new default configuration.
     pub const fn new() -> Self {
         Self {
-            channel: 15,
+            channel: 11,
             power: 8,
             cca: Cca::Carrier,
             sfd: 0,
             promiscuous: false,
+            rx_when_idle: false,
             pan_id: None,
             short_addr: None,
             ext_addr: None,
-            rx_when_idle: false,
         }
     }
 }
@@ -167,21 +174,34 @@ pub struct PsduMeta {
 
 /// The IEEE 802.15.4 PHY Radio trait.
 ///
-/// If the concrete radio trait implementation is NOT capable of sending ACKs for received frames
-/// and/or waiting for and processing incoming ACK frames for its transmitted frames, then the implementation
-/// should be wrapped in the `EnhRadio` wrapper wuth the appropriate `AckPolicy` passed in so that the
-/// ACK handling is done by the `EnhRadio` wrapper.
+/// While the trait models the PHY layer of the radio, it might implement some "MAC-offloading"
+/// capabilities as well - namely - the ability to send and receive ACK frames for transmitted frames,
+/// and the ability to filter received frames by PAN ID, short address, and extended address.
 ///
-/// If the concrete radio trait implementation is NOT capable of filtering received frames by PAN ID,
-/// and/or short address, and/or extended address, then the implementation should be wrapped in the
-/// `EnhRadio` wrapper with the appropriate `FilterPolicy::pan_id`, `FilterPolicy::short_addr`, and
-/// `FilterPolicy::ext_addr` set to `true` as required.
+/// If some of these capabilities are not available, `OpenThread` will emulate those in software.
+///
+/// The trait is used to abstract the radio hardware and provide a common interface for the radio
+/// operations. It needs to support the following operations:
+/// - Get the radio capabilities (phy and mac ones)
+/// - Set the radio configuration
+/// - Transmit a radio frame and (optionally) wait for an ACK frame (if the transmitted frame requires an ACK)
+/// - Receive a radio frame and (optionally) send an ACK frame (if the received frame requires an ACK)
+/// - Optionally, drop received radio frames if they do not match the filter criteria (PAN ID, short address, extended address)
+///
+/// The trait is NOT required to support the following operations:
+/// - Re-sending a TX frame if the ACK frame was not received; this is done by OpenThread
+/// - Dropping a duplicate RX frame; this is done by OpenThread
+/// - MAC layer security; this is done by OpenThread
 pub trait Radio {
     /// The error type for radio operations.
     type Error: RadioError;
 
     /// Get the radio capabilities.
-    async fn caps(&mut self) -> Capabilities;
+    fn caps(&mut self) -> Capabilities;
+
+    /// Get the radio "MAC-offloading" capabilities.
+    /// If some of these are missing, `OpenThread` will emulate them in software.
+    fn mac_caps(&mut self) -> MacCapabilities;
 
     /// Set the radio configuration.
     async fn set_config(&mut self, config: &Config) -> Result<(), Self::Error>;
@@ -232,8 +252,12 @@ where
 {
     type Error = T::Error;
 
-    async fn caps(&mut self) -> Capabilities {
-        T::caps(self).await
+    fn caps(&mut self) -> Capabilities {
+        T::caps(self)
+    }
+
+    fn mac_caps(&mut self) -> MacCapabilities {
+        T::mac_caps(self)
     }
 
     async fn set_config(&mut self, config: &Config) -> Result<(), Self::Error> {
@@ -255,7 +279,7 @@ where
 
 /// An error type for the enhanced radio.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub enum EnhRadioError<T> {
+pub enum MacRadioError<T> {
     /// Receiving failed due to sending an ACK frame failed
     TxAckFailed(T),
     /// Transmitting failed due to receiving an ACK frame failed
@@ -268,97 +292,50 @@ pub enum EnhRadioError<T> {
     Io(T),
 }
 
-impl<T> RadioError for EnhRadioError<T>
+impl<T> RadioError for MacRadioError<T>
 where
     T: RadioError,
 {
     fn kind(&self) -> RadioErrorKind {
         match self {
-            EnhRadioError::TxAckFailed(_) => RadioErrorKind::TxAckFailed,
-            EnhRadioError::RxAckFailed(_) => RadioErrorKind::RxAckFailed,
-            EnhRadioError::RxAckTimeout => RadioErrorKind::RxAckTimeout,
-            EnhRadioError::RxAckInvalid => RadioErrorKind::RxAckInvalid,
-            EnhRadioError::Io(e) => e.kind(),
-        }
-    }
-}
-
-/// A filter policy for the enhanced radio.
-#[derive(Debug, Default, Clone, Eq, PartialEq, Hash)]
-pub struct FilterPolicy {
-    /// Filter by PAN ID
-    pan_id: bool,
-    /// Filter by short address
-    short_addr: bool,
-    /// Filter by extended address
-    ext_addr: bool,
-}
-
-impl FilterPolicy {
-    /// Create a new filter policy which does not filter.
-    pub const fn none() -> Self {
-        Self {
-            pan_id: false,
-            short_addr: false,
-            ext_addr: false,
-        }
-    }
-
-    /// Create a new filter policy which filters by all addresses.
-    pub const fn all() -> Self {
-        Self {
-            pan_id: true,
-            short_addr: true,
-            ext_addr: true,
-        }
-    }
-}
-
-/// An ACK policy for the enhanced radio.
-#[derive(Debug, Default, Clone, Eq, PartialEq, Hash)]
-pub struct AckPolicy {
-    /// Process ACKs for transmitted frames
-    pub tx_ack: bool,
-    /// Send ACKs for received frames
-    pub rx_ack: bool,
-}
-
-impl AckPolicy {
-    /// Create a new ACK policy which does not process or send ACKs.
-    pub const fn none() -> Self {
-        Self {
-            tx_ack: false,
-            rx_ack: false,
-        }
-    }
-
-    /// Create a new ACK policy which processes and sends ACKs.
-    pub const fn all() -> Self {
-        Self {
-            tx_ack: true,
-            rx_ack: true,
+            MacRadioError::TxAckFailed(_) => RadioErrorKind::TxAckFailed,
+            MacRadioError::RxAckFailed(_) => RadioErrorKind::RxAckFailed,
+            MacRadioError::RxAckTimeout => RadioErrorKind::RxAckTimeout,
+            MacRadioError::RxAckInvalid => RadioErrorKind::RxAckInvalid,
+            MacRadioError::Io(e) => e.kind(),
         }
     }
 }
 
 /// An enhanced radio that can optionally send and receive ACKs for transmitted frames
 /// as well as optionally do address filtering.
-pub struct EnhRadio<T, D> {
+pub(crate) struct MacRadio<T, D> {
+    /// The wrapped radio.
     radio: T,
+    /// The delay implementation to use.
+    /// Necessary for the waiting timeout for a TX ACK to be received
+    /// if the `MacRadio` is instructed to receive TX ACKs in software.
+    ///
+    /// Should be with a high precision of ideally < 10us.
     delay: D,
+    /// The buffer for the ACK PSDU, if the `MacRadio` is instructed
+    /// to send or receive ACKs in software.
     ack_buf: [u8; ACK_PSDU_LEN],
-    ack_policy: AckPolicy,
-    filter_policy: FilterPolicy,
-    filter_pan_id: Option<u16>,
-    filter_short_addr: Option<u16>,
-    filter_ext_addr: Option<u64>,
+    /// The PAN ID to filter by, if the filter policy allows it.
+    pan_id: Option<u16>,
+    /// The short address to filter by, if the filter policy allows it.
+    short_addr: Option<u16>,
+    /// The extended address to filter by, if the filter policy allows it.
+    ext_addr: Option<u64>,
 }
 
-impl<T, D> EnhRadio<T, D>
+impl<T, D> MacRadio<T, D>
 where
     T: Radio,
     D: DelayNs,
 {
+    /// The waiting timeout for a TX ACK to be received.
+    /// 190us per spec.
     const ACK_WAIT_US: u32 = 190;
 
     /// Create a new enhanced radio.
@@ -368,57 +345,63 @@ where
     /// - `delay`: The delay implementation to use. Should be with a high precision of ideally < 10us
     /// - `ack_policy`: The ACK policy to use.
     /// - `filter_policy`: The filter policy to use.
-    pub fn new(radio: T, delay: D, ack_policy: AckPolicy, filter_policy: FilterPolicy) -> Self {
+    pub fn new(radio: T, delay: D) -> Self {
         Self {
             radio,
             delay,
             ack_buf: [0; ACK_PSDU_LEN],
-            ack_policy,
-            filter_policy,
-            filter_pan_id: None,
-            filter_short_addr: None,
-            filter_ext_addr: None,
+            pan_id: None,
+            short_addr: None,
+            ext_addr: None,
         }
     }
 
-    fn needs_ack(psdu: &[u8]) -> Result<bool, EnhRadioError<T::Error>> {
+    /// Check if a PSDU needs an ACK.
+    fn needs_ack(psdu: &[u8]) -> Result<bool, MacRadioError<T::Error>> {
         if psdu.len() < mac::ACK_PSDU_LEN {
-            Err(EnhRadioError::RxAckInvalid)?;
+            Err(MacRadioError::RxAckInvalid)?;
         }
 
         Ok(mac::FrameType::get(psdu).needs_ack(mac::FrameVersion::get(psdu)))
     }
 
-    fn fill_ack(psdu: &[u8], ack_buf: &mut [u8]) -> Result<usize, EnhRadioError<T::Error>> {
+    /// Fill an ACK PSDU based on a received PSDU.
+    /// Note that the received PSDU should be a valid frame that needs an ACK.
+    fn fill_ack(psdu: &[u8], ack_buf: &mut [u8]) -> Result<usize, MacRadioError<T::Error>> {
         if psdu.len() < mac::ACK_PSDU_LEN {
-            Err(EnhRadioError::RxAckInvalid)?;
+            Err(MacRadioError::RxAckInvalid)?;
         }
 
         Ok(mac::fill_ack(psdu, ack_buf))
     }
 
-    fn process_ack(psdu: &[u8]) -> Result<(), EnhRadioError<T::Error>> {
+    /// Process a received ACK PSDU by just doing basic validation on it.
+    fn process_ack(psdu: &[u8]) -> Result<(), MacRadioError<T::Error>> {
         if psdu.len() < mac::ACK_PSDU_LEN {
-            Err(EnhRadioError::RxAckInvalid)?;
+            Err(MacRadioError::RxAckInvalid)?;
         }
 
         if mac::FrameType::get(psdu) != mac::FrameType::Ack {
-            Err(EnhRadioError::RxAckInvalid)?;
+            Err(MacRadioError::RxAckInvalid)?;
         }
 
         Ok(())
     }
 }
 
-impl<T, D> Radio for EnhRadio<T, D>
+impl<T, D> Radio for MacRadio<T, D>
 where
     T: Radio,
     D: DelayNs,
 {
-    type Error = EnhRadioError<T::Error>;
+    type Error = MacRadioError<T::Error>;
 
-    async fn caps(&mut self) -> Capabilities {
-        self.radio.caps().await
+    fn caps(&mut self) -> Capabilities {
+        self.radio.caps()
+    }
+
+    fn mac_caps(&mut self) -> MacCapabilities {
+        self.radio.mac_caps()
     }
 
     async fn set_config(&mut self, config: &Config) -> Result<(), Self::Error> {
@@ -427,16 +410,28 @@ where
             .await
             .map_err(Self::Error::Io)?;
 
-        if self.filter_policy.pan_id {
-            self.filter_pan_id = config.pan_id;
+        if !self
+            .radio
+            .mac_caps()
+            .contains(MacCapabilities::FILTER_PAN_ID)
+        {
+            self.pan_id = config.pan_id;
         }
 
-        if self.filter_policy.short_addr {
-            self.filter_short_addr = config.short_addr;
+        if !self
+            .radio
+            .mac_caps()
+            .contains(MacCapabilities::FILTER_SHORT_ADDR)
+        {
+            self.short_addr = config.short_addr;
         }
 
-        if self.filter_policy.ext_addr {
-            self.filter_ext_addr = config.ext_addr;
+        if !self
+            .radio
+            .mac_caps()
+            .contains(MacCapabilities::FILTER_EXT_ADDR)
+        {
+            self.ext_addr = config.ext_addr;
         }
 
         Ok(())
@@ -447,7 +442,7 @@ where
         psdu: &[u8],
         ack_psdu_buf: Option<&mut [u8]>,
     ) -> Result<Option<PsduMeta>, Self::Error> {
-        if self.ack_policy.tx_ack && Self::needs_ack(psdu)? {
+        if !self.radio.mac_caps().contains(MacCapabilities::TX_ACK) && Self::needs_ack(psdu)? {
             self.radio
                 .transmit(psdu, None)
                 .await
@@ -488,25 +483,25 @@ where
                 .await
                 .map_err(Self::Error::Io)?;
 
-            if let Some(pan_id) = self.filter_pan_id.as_ref() {
+            if let Some(pan_id) = self.pan_id.as_ref() {
                 if mac::pan_id(psdu_buf) != Some(*pan_id) {
                     continue;
                 }
             }
 
-            if let Some(short_addr) = self.filter_short_addr.as_ref() {
+            if let Some(short_addr) = self.short_addr.as_ref() {
                 if mac::short_addr(psdu_buf) != Some(*short_addr) {
                     continue;
                 }
             }
 
-            if let Some(ext_addr) = self.filter_ext_addr.as_ref() {
+            if let Some(ext_addr) = self.ext_addr.as_ref() {
                 if mac::ext_addr(psdu_buf) != Some(*ext_addr) {
                     continue;
                 }
             }
 
-            if self.ack_policy.rx_ack {
+            if !self.radio.mac_caps().contains(MacCapabilities::RX_ACK) {
                 let psdu = &psdu_buf[..psdu_meta.len];
 
                 if Self::needs_ack(psdu)? {
@@ -547,25 +542,33 @@ impl Default for ProxyRadioResources {
     }
 }
 
-/// A type that allows to offload the execution (TX/RX) of the actual PHY `Radio` impl (or its `EnhRadio` wrapper)
+/// A type that allows to offload the execution (TX/RX) of the actual PHY `Radio` impl
 /// to a separate - possibly higher-priority - executor.
 ///
 /// Running the PHY radio in a separate higher priority executor is particularly desirable in the cases where it
-/// cannot do ACKs and filtering in hardware, and hence the `EnhRadio` wrapper is used to handle these tasks
-/// in software. Due to timing constraints with ACKs and filtering, this task should have a higher priority than
-/// all other `OpenThread`-related tasks.
+/// cannot do MAC-offloading (ACKs and filtering) in hardware, and hence the `MacRadio` wrapper is used to handle
+/// these tasks in software. Due to timing constraints with ACKs and filtering, this task should have a higher
+/// priority than all other `OpenThread`-related tasks.
 ///
 /// This is achieved by splitting the radio into two types:
 /// - `ProxyRadio`, which is a radio proxy that implements the `Radio` trait and is to be used by the main execution
 ///   by passing it to `OpenThread::run`
 /// - `PhyRadioRunner`, which is `Send` and therefore can be sent to a separate executor - to run the radio.
-///   Invoke `PhyRadioRunner::run(EnhRadio::new(<the-phy-radio>, ...)).await` in that separate executor.
+///   Invoke `PhyRadioRunner::run(<the-phy-radio>, <delay-provider>).await` in that separate executor.
 pub struct ProxyRadio<'a> {
+    /// The radio capabilities. Should match what the PHY radio reports
     caps: Capabilities,
+    /// The request channel to the PHY radio
     request: Sender<'a, CriticalSectionRawMutex, ProxyRadioRequest>,
+    /// The response channel from the PHY radio
     response: Receiver<'a, CriticalSectionRawMutex, ProxyRadioResponse>,
+    /// The signal to indicate a new request to the PHY radio, so that
+    /// the PHY radio can cancel the current request (if any) and start processing the new one
     new_request: &'a Signal<CriticalSectionRawMutex, ()>,
+    /// The signal to indicate to us that the PHY radio has started processing the new request
+    /// so that we can fill the request and wait for the response
     request_processing_started: &'a Signal<CriticalSectionRawMutex, ()>,
+    /// The current radio configuration
     config: Config,
 }
 
@@ -596,14 +599,28 @@ impl<'a> ProxyRadio<'a> {
         state.split(caps)
     }
 
-    async fn cancel(&mut self) {
+    /// Indicate to the driver that the current requerst (if any) should be cancelled.
+    async fn cancel_current_request(&mut self) {
+        // NOTE: The sequence of signals amd waits is important here
+        // so as not to deadlock
+
+        // Start clean
+        self.request_processing_started.reset();
+
+        // Also clear the request channel to make sure the next request (if any) is not processed
         self.request.clear();
 
-        self.request_processing_started.reset();
+        // Indicate cancellation to the driver
         self.new_request.signal(());
 
+        // Wait for the driver to indicate that the request processing has started
+        // The driver should be waiting for the new request at its channel at this point,
+        // which is empty because we cleared it above
         self.request_processing_started.wait().await;
 
+        // Also clear the response channel; the driver is async-locking the request channel
+        // first, and only after that - the response channel, so we can be sure that the driver
+        // is not waiting for the response channel at this point
         self.response.clear();
     }
 }
@@ -611,11 +628,19 @@ impl<'a> ProxyRadio<'a> {
 impl Radio for ProxyRadio<'_> {
     type Error = RadioErrorKind;
 
-    async fn caps(&mut self) -> Capabilities {
+    fn caps(&mut self) -> Capabilities {
         self.caps
     }
 
+    fn mac_caps(&mut self) -> MacCapabilities {
+        // ... because the actual PHY radio on the other side
+        // of the pipe will be wrapped with `MacRadio` if it cannot do ACKs and filtering in hardware
+        MacCapabilities::all()
+    }
+
     async fn set_config(&mut self, config: &Config) -> Result<(), Self::Error> {
+        // There is no separate command for updating the configuration
+        // The updated configuration is always valid for the next request
         self.config = config.clone();
         Ok(())
     }
@@ -625,7 +650,7 @@ impl Radio for ProxyRadio<'_> {
         psdu: &[u8],
         ack_psdu_buf: Option<&mut [u8]>,
     ) -> Result<Option<PsduMeta>, Self::Error> {
-        self.cancel().await;
+        self.cancel_current_request().await;
 
         {
             let req = self.request.send().await;
@@ -640,14 +665,18 @@ impl Radio for ProxyRadio<'_> {
 
         let resp = self.response.receive().await;
 
-        let psdu_meta = ack_psdu_buf.is_some().then_some(PsduMeta {
+        let psdu_meta = (ack_psdu_buf.is_some() && !resp.psdu.is_empty()).then_some(PsduMeta {
             len: resp.psdu.len(),
             channel: resp.psdu_channel,
             rssi: resp.psdu_rssi,
         });
 
         if let Some(ack_psdu_buf) = ack_psdu_buf {
-            ack_psdu_buf.copy_from_slice(&resp.psdu);
+            if psdu_meta.is_some() {
+                ack_psdu_buf.copy_from_slice(&resp.psdu);
+            } else {
+                ack_psdu_buf.fill(0);
+            }
         }
 
         let result = resp.result.map(|_| psdu_meta);
@@ -658,7 +687,7 @@ impl Radio for ProxyRadio<'_> {
     }
 
     async fn receive(&mut self, psdu_buf: &mut [u8]) -> Result<PsduMeta, Self::Error> {
-        self.cancel().await;
+        self.cancel_current_request().await;
 
         {
             let req = self.request.send().await;
@@ -695,10 +724,17 @@ impl Radio for ProxyRadio<'_> {
     }
 }
 
+/// A type modeling the running of the PHY radio - the other side of the `ProxyRadio` pipe.
 pub struct PhyRadioRunner<'a> {
+    /// The request channel from the proxy radio
     request: Receiver<'a, CriticalSectionRawMutex, ProxyRadioRequest>,
+    /// The response channel to the proxy radio
     response: Sender<'a, CriticalSectionRawMutex, ProxyRadioResponse>,
+    /// The signal to indicate a new request from the proxy radio
+    /// which means we have to cancel processing the current request (if any)
     new_request: &'a Signal<CriticalSectionRawMutex, ()>,
+    /// The signal to indicate the start of a new request processing
+    /// to the proxy radio, so that it can fill the request and wait for the response
     request_processing_started: &'a Signal<CriticalSectionRawMutex, ()>,
 }
 
@@ -707,70 +743,90 @@ impl PhyRadioRunner<'_> {
     ///
     /// Arguments:
     /// - `radio`: The PHY radio to run.
-    ///   Should be an `EnhRadio` wrapper if the PHY radio cannot do ACKs and filtering in hardware.
-    pub async fn run<T>(&mut self, mut radio: T) -> !
+    /// - `delay`: The delay implementation to use.
+    pub async fn run<T, D>(&mut self, radio: T, delay: D) -> !
     where
         T: Radio,
+        D: DelayNs,
     {
+        let mut radio = MacRadio::new(radio, delay);
+
         self.new_request.wait().await;
 
         loop {
             self.request_processing_started.signal(());
 
             if self.process(&mut radio).await.is_none() {
+                // Processing was cancelled by a new request,
+                // no need to wait for the next one
                 continue;
             }
 
+            // Processing was done successfully (meaning, the request was processed and not cancelled)
+            // wait for a new one to arrive
             self.new_request.wait().await;
         }
     }
 
+    // Process a single request (TX or RX) by first updating the driver configuration
+    // (driver should skip that if the new configuration is the same as the current one),
+    // and then transmitting or receiving the frame.
+    //
+    // Updating the configuration, as well as the TX/RX operation might be cancelled at
+    // any moment, if a new request arrives.
     async fn process<T>(&mut self, mut radio: T) -> Option<()>
     where
         T: Radio,
     {
+        // Indicate to the other end of the pipe the start of a new request processing
         self.request_processing_started.signal(());
 
+        // Always lock the request first; see `cancel_current_request`
         let request = Self::with_cancel(self.request.receive(), self.new_request).await?;
+
         let response = Self::with_cancel(self.response.send(), self.new_request).await?;
 
+        // Always first set the configuration relevant for the current TX/RX request
+        // The PHY driver should have intelligence to skip the configuration update if the new
+        // configuration is the same as the current one
         let result = Self::with_cancel(radio.set_config(&request.config), self.new_request)
             .await?
             .map_err(|e| e.kind());
+
         let result = if result.is_err() {
+            // Setting driver configuration resulted in an error, so skip the rest of the processing
             result
-        } else if request.tx {
-            response
-                .psdu
-                .extend(repeat_n(0, request.psdu.capacity() - request.psdu.len()));
-
-            let result = Self::with_cancel(
-                radio.transmit(&request.psdu, Some(&mut response.psdu)),
-                self.new_request,
-            )
-            .await?
-            .map_err(|e| e.kind());
-
-            if let Ok(Some(psdu_meta)) = &result {
-                response.psdu.truncate(psdu_meta.len);
-                response.psdu_channel = psdu_meta.channel;
-                response.psdu_rssi = psdu_meta.rssi;
-            }
-
-            result.map(|_| ())
         } else {
             response
                 .psdu
                 .extend(repeat_n(0, request.psdu.capacity() - request.psdu.len()));
 
-            let result = Self::with_cancel(radio.receive(&mut response.psdu), self.new_request)
-                .await?
-                .map_err(|e| e.kind());
+            let result = if request.tx {
+                // ... as the driver is not oblidged to return the ACK frame
+                response.psdu.fill(0);
 
-            if let Ok(psdu_meta) = &result {
+                Self::with_cancel(
+                    radio.transmit(&request.psdu, Some(&mut response.psdu)),
+                    self.new_request,
+                )
+                .await?
+                .map_err(|e| e.kind())
+            } else {
+                Self::with_cancel(radio.receive(&mut response.psdu), self.new_request)
+                    .await?
+                    .map_err(|e| e.kind())
+                    .map(Some)
+            };
+
+            if let Ok(Some(psdu_meta)) = &result {
                 response.psdu.truncate(psdu_meta.len);
                 response.psdu_channel = psdu_meta.channel;
                 response.psdu_rssi = psdu_meta.rssi;
+            } else {
+                // No frame returned, so clear the response fields
+                response.psdu.clear();
+                response.psdu_channel = 0;
+                response.psdu_rssi = None;
             }
 
             result.map(|_| ())
@@ -795,18 +851,37 @@ impl PhyRadioRunner<'_> {
     }
 }
 
+// Should be safe because while not (yet) marked formally as such, zerocopy-channel's
+// `Receiver` and `Sender` are `Send`, as long as the critical section is `Send` + `Sync`
+// (which is the case as we use `CriticalSectionRawMutex`), and the `ProxyRadioRequest` and
+// `ProxyRadioResponse` are `Send` (which is the case).
+//
+// The signals are obviously `Send` + `Sync`.
 unsafe impl Send for PhyRadioRunner<'_> {}
 
 const PSDU_LEN: usize = OT_RADIO_FRAME_MAX_SIZE as _;
 
+/// The state of the proxy radio
+///
+/// This state is borrowed and shared between
+/// the two ends of the pipe: the proxy radio, and the PHY radio runner.
 struct ProxyRadioState<'a> {
+    /// The request channel to the PHY radio
     request: Channel<'a, CriticalSectionRawMutex, ProxyRadioRequest>,
+    /// The response channel from the PHY radio
     response: Channel<'a, CriticalSectionRawMutex, ProxyRadioResponse>,
+    /// The signal to indicate a new request to the PHY radio
     new_request: Signal<CriticalSectionRawMutex, ()>,
+    /// The signal of the PHY radio to indicate the start of a new request processing
     request_processing_started: Signal<CriticalSectionRawMutex, ()>,
 }
 
 impl<'a> ProxyRadioState<'a> {
+    /// Create a new proxy radio state.
+    ///
+    /// Arguments:
+    /// - `request_buf`: The request buffer
+    /// - `response_buf`: The response buffer
     fn new(
         request_buf: &'a mut [ProxyRadioRequest; 1],
         response_buf: &'a mut [ProxyRadioResponse; 1],
@@ -819,6 +894,7 @@ impl<'a> ProxyRadioState<'a> {
         }
     }
 
+    /// Split the state into the proxy radio and the PHY radio runner.
     fn split(&mut self, caps: Capabilities) -> (ProxyRadio<'_>, PhyRadioRunner<'_>) {
         let (request_sender, request_receiver) = self.request.split();
         let (response_sender, response_receiver) = self.response.split();
@@ -842,13 +918,18 @@ impl<'a> ProxyRadioState<'a> {
     }
 }
 
+/// A proxy radio request.
 struct ProxyRadioRequest {
+    /// Transmit or receive
     tx: bool,
+    /// The radio configuration for the TX/RX operation
     config: Config,
+    /// The PSDU to transmit for the TX operation
     psdu: heapless::Vec<u8, PSDU_LEN>,
 }
 
 impl ProxyRadioRequest {
+    /// Create a new empty proxy radio request.
     const fn new() -> Self {
         Self {
             tx: false,
@@ -858,14 +939,26 @@ impl ProxyRadioRequest {
     }
 }
 
+/// A proxy radio response.
 struct ProxyRadioResponse {
+    /// The result of the TX/RX operation
     result: Result<(), RadioErrorKind>,
+    /// The received PSDU, if the operation was successful:
+    /// - For TX: the received ACK PSDU (might be empty)
+    /// - For RX: the received frame PSDU
     psdu: heapless::Vec<u8, PSDU_LEN>,
+    /// The channel on which the frame was received:
+    /// - For TX: the channel on which the ACK frame was received
+    /// - For RX: the channel on which the regular frame was received
     psdu_channel: u8,
+    /// The RSSI of the received frame, if the radio supports appending it at the end of the frame:
+    /// - For TX: the RSSI of the received ACK frame
+    /// - For RX: the RSSI of the received frame
     psdu_rssi: Option<i8>,
 }
 
 impl ProxyRadioResponse {
+    /// Create a new empty proxy radio response.
     const fn new() -> Self {
         Self {
             result: Ok(()),

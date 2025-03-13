@@ -16,6 +16,7 @@ use embassy_futures::select::{Either, Either3};
 
 use embassy_time::Instant;
 
+use embedded_hal_async::delay::DelayNs;
 use log::{debug, info, trace, warn};
 
 use platform::OT_ACTIVE_STATE;
@@ -312,7 +313,7 @@ impl<'a> OpenThread<'a> {
         poll_fn(move |cx| self.activate().state().ot.changes.poll_wait(cx)).await;
     }
 
-    /// Run the OpenThread stack with the provided radio implementation, by:
+    /// Run the OpenThread stack with the provided radio implementation.
     ///
     /// Arguments:
     /// - `radio`: The radio to be used by the OpenThread stack.
@@ -321,11 +322,16 @@ impl<'a> OpenThread<'a> {
     /// It is not advised to call this method concurrently from multiple async tasks
     /// because it uses a single waker registration. Thus, while the method will not panic,
     /// the tasks will fight with each other by each re-registering its own waker, thus keeping the CPU constantly busy.
+    ///
+    /// NOTE:
+    /// If the provided radio does not implement some of the MAC capabilities required by OpenThread (`MacCapabilities`)
+    /// it is advisable to use `ProxyRadio` and `PhyRadioRunner` to run the radio in a higher priority executor, where
+    /// the radio MAC capabilities (which are then emulated in software) can meet their timing deadlines.
     pub async fn run<R>(&self, radio: R) -> !
     where
         R: Radio,
     {
-        let mut radio = pin!(self.run_radio(radio));
+        let mut radio = pin!(self.run_radio(radio, embassy_time::Delay));
         let mut alarm = pin!(self.run_alarm());
         let mut openthread = pin!(self.run_tasklets());
 
@@ -492,10 +498,17 @@ impl<'a> OpenThread<'a> {
     ///
     /// Needs to be a separate async loop, because OpenThread C is unaware of async/await and futures,
     /// however, the Radio driver is async.
-    async fn run_radio<R>(&self, mut radio: R) -> !
+    ///
+    /// Arguments:
+    /// - `radio`: The radio to be used by the OpenThread stack.
+    /// - `delay`: The delay implementation to be used by the OpenThread stack.
+    async fn run_radio<R, D>(&self, radio: R, delay: D) -> !
     where
         R: Radio,
+        D: DelayNs,
     {
+        let mut radio = MacRadio::new(radio, delay);
+
         let radio_cmd = || poll_fn(move |cx| self.activate().state().ot.radio.poll_wait(cx));
 
         loop {

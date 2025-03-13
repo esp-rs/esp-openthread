@@ -25,8 +25,8 @@ use panic_probe as _;
 
 use openthread::nrf::{Ieee802154, NrfRadio};
 use openthread::{
-    AckPolicy, Capabilities, EnhRadio, FilterPolicy, OpenThread, OperationalDataset, OtResources,
-    OtUdpResources, PhyRadioRunner, ProxyRadio, ProxyRadioResources, ThreadTimestamp, UdpSocket,
+    Capabilities, OpenThread, OperationalDataset, OtResources, OtUdpResources, PhyRadioRunner,
+    ProxyRadio, ProxyRadioResources, ThreadTimestamp, UdpSocket,
 };
 
 use rtt_target::rtt_init_log;
@@ -96,19 +96,15 @@ async fn main(spawner: Spawner) {
     let (proxy_radio, phy_radio_runner) =
         ProxyRadio::new(Capabilities::empty(), proxy_radio_resources);
 
-    let radio = EnhRadio::new(
-        NrfRadio::new(Ieee802154::new(p.RADIO, Irqs)),
-        embassy_time::Delay,
-        AckPolicy::all(),
-        FilterPolicy::all(),
-    );
-
     // High-priority executor: EGU1_SWI1, priority level 6
     interrupt::EGU1_SWI1.set_priority(Priority::P6);
 
     let spawner_high = EXECUTOR_HIGH.start(interrupt::EGU1_SWI1);
     spawner_high
-        .spawn(run_radio(phy_radio_runner, radio))
+        .spawn(run_radio(
+            phy_radio_runner,
+            NrfRadio::new(Ieee802154::new(p.RADIO, Irqs)),
+        ))
         .unwrap();
 
     info!("Radio created");
@@ -168,11 +164,13 @@ async fn run_ot(ot: OpenThread<'static>, radio: ProxyRadio<'static>) -> ! {
 }
 
 #[embassy_executor::task]
-async fn run_radio(
-    mut runner: PhyRadioRunner<'static>,
-    radio: EnhRadio<NrfRadio<'static, RADIO>, embassy_time::Delay>,
-) -> ! {
-    runner.run(radio).await
+async fn run_radio(mut runner: PhyRadioRunner<'static>, radio: NrfRadio<'static, RADIO>) -> ! {
+    runner
+        .run(
+            radio,
+            embassy_time::Delay, /*TODO: Likely not precise enough*/
+        )
+        .await
 }
 
 #[embassy_executor::task]

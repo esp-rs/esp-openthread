@@ -10,11 +10,15 @@
 
 use core::net::Ipv6Addr;
 
+use embassy_executor::InterruptExecutor;
 use embassy_executor::Spawner;
 
 use embassy_net::udp::{PacketMetadata, UdpMetadata, UdpSocket};
 
 use embassy_net::{Config, ConfigV6, Ipv6Cidr, Runner, StackResources, StaticConfigV6};
+
+use embassy_nrf::interrupt;
+use embassy_nrf::interrupt::{InterruptExt, Priority};
 use embassy_nrf::peripherals::{RADIO, RNG};
 use embassy_nrf::rng::{self, Rng};
 use embassy_nrf::{bind_interrupts, peripherals, radio};
@@ -28,7 +32,8 @@ use {panic_probe as _, rtt_target as _};
 use openthread::enet::{self, EnetDriver, EnetRunner};
 use openthread::nrf::{Ieee802154, NrfRadio};
 use openthread::{
-    AckPolicy, EnhRadio, FilterPolicy, OpenThread, OperationalDataset, OtResources, ThreadTimestamp,
+    Capabilities, OpenThread, OperationalDataset, OtResources, PhyRadioRunner, ProxyRadio,
+    ProxyRadioResources, ThreadTimestamp,
 };
 
 use rand_core::RngCore;
@@ -56,6 +61,13 @@ bind_interrupts!(struct Irqs {
     RADIO => radio::InterruptHandler<peripherals::RADIO>;
     RNG => rng::InterruptHandler<peripherals::RNG>;
 });
+
+#[interrupt]
+unsafe fn EGU1_SWI1() {
+    EXECUTOR_HIGH.on_interrupt()
+}
+
+static EXECUTOR_HIGH: InterruptExecutor = InterruptExecutor::new();
 
 const BOUND_PORT: u16 = 1212;
 
@@ -90,17 +102,27 @@ async fn main(spawner: Spawner) {
 
     let (_enet_controller, enet_driver_runner, enet_driver) = enet::new(ot, enet_driver_state);
 
-    let radio = EnhRadio::new(
-        NrfRadio::new(Ieee802154::new(p.RADIO, Irqs)),
-        embassy_time::Delay,
-        AckPolicy::all(),
-        FilterPolicy::all(),
-    );
+    info!("About to spawn OT runner");
+
+    let proxy_radio_resources = mk_static!(ProxyRadioResources, ProxyRadioResources::new());
+    let (proxy_radio, phy_radio_runner) =
+        ProxyRadio::new(Capabilities::empty(), proxy_radio_resources);
+
+    // High-priority executor: EGU1_SWI1, priority level 6
+    interrupt::EGU1_SWI1.set_priority(Priority::P6);
+
+    let spawner_high = EXECUTOR_HIGH.start(interrupt::EGU1_SWI1);
+    spawner_high
+        .spawn(run_radio(
+            phy_radio_runner,
+            NrfRadio::new(Ieee802154::new(p.RADIO, Irqs)),
+        ))
+        .unwrap();
 
     info!("Radio created");
 
     spawner
-        .spawn(run_enet_driver(enet_driver_runner, radio))
+        .spawn(run_enet_driver(enet_driver_runner, proxy_radio))
         .unwrap();
 
     let enet_resources = mk_static!(StackResources<ENET_MAX_SOCKETS>, StackResources::new());
@@ -205,9 +227,19 @@ async fn main(spawner: Spawner) {
 #[embassy_executor::task]
 async fn run_enet_driver(
     mut runner: EnetRunner<'static, IPV6_PACKET_SIZE>,
-    radio: EnhRadio<NrfRadio<'static, RADIO>, embassy_time::Delay>,
+    radio: ProxyRadio<'static>,
 ) -> ! {
     runner.run(radio).await
+}
+
+#[embassy_executor::task]
+async fn run_radio(mut runner: PhyRadioRunner<'static>, radio: NrfRadio<'static, RADIO>) -> ! {
+    runner
+        .run(
+            radio,
+            embassy_time::Delay, /*TODO: Likely not precise enough*/
+        )
+        .await
 }
 
 #[embassy_executor::task]

@@ -7,7 +7,9 @@ use esp_ieee802154::{Config as EspConfig, Error};
 
 use log::{debug, trace};
 
-use crate::{Capabilities, Cca, Config, PsduMeta, Radio, RadioError, RadioErrorKind};
+use crate::{
+    Capabilities, Cca, Config, MacCapabilities, PsduMeta, Radio, RadioError, RadioErrorKind,
+};
 
 pub use esp_ieee802154::Ieee802154;
 
@@ -86,8 +88,12 @@ impl<'a> EspRadio<'a> {
 impl Radio for EspRadio<'_> {
     type Error = Error;
 
-    async fn caps(&mut self) -> Capabilities {
-        Capabilities::AUTO_ACK | Capabilities::FILTER_EXT_ADDR | Capabilities::RX_WHEN_IDLE
+    fn caps(&mut self) -> Capabilities {
+        Capabilities::RX_WHEN_IDLE
+    }
+
+    fn mac_caps(&mut self) -> MacCapabilities {
+        MacCapabilities::all()
     }
 
     async fn set_config(&mut self, config: &Config) -> Result<(), Self::Error> {
