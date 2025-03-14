@@ -18,9 +18,9 @@ use embassy_sync::zerocopy_channel::{Channel, Receiver, Sender};
 
 use embedded_hal_async::delay::DelayNs;
 
-use log::{debug, trace};
+use log::{debug, info, trace};
 
-use mac::MacFrame;
+use mac::MacHeader;
 
 use crate::sys::OT_RADIO_FRAME_MAX_SIZE;
 
@@ -88,10 +88,8 @@ bitflags! {
     pub struct Capabilities: u16 {
         /// Radio supports energy scan.
         const ENERGY_SCAN = 0x01;
-        /// Radio supports promiscuous mode.
-        const PROMISCUOUS = 0x02;
         /// Radio supports sleep mode.
-        const SLEEP = 0x03;
+        const SLEEP = 0x02;
         /// Radio supports receiving during idle state.
         const RX_WHEN_IDLE = 0x04;
     }
@@ -106,12 +104,14 @@ bitflags! {
         const TX_ACK = 0x01;
         /// Radio sending of ACK frames for received TX frames.
         const RX_ACK = 0x02;
-        /// Radio supports filtering of PHY phrames by their short address in the MAC payload.
-        const FILTER_SHORT_ADDR = 0x20;
-        /// Radio supports filtering of PHY phrames by their extended address in the MAC payload.
-        const FILTER_EXT_ADDR = 0x40;
-        /// Radio supports filtering of PHY phrames by their PAN ID in the MAC payload.
-        const FILTER_PAN_ID = 0x80;
+        /// Radio supports promiscuous mode.
+        const PROMISCUOUS = 0x04;
+        /// Radio supports filtering of PHY frames by their short address in the MAC payload.
+        const FILTER_SHORT_ADDR = 0x08;
+        /// Radio supports filtering of PHY frames by their extended address in the MAC payload.
+        const FILTER_EXT_ADDR = 0x10;
+        /// Radio supports filtering of PHY frames by their PAN ID in the MAC payload.
+        const FILTER_PAN_ID = 0x20;
     }
 }
 
@@ -330,15 +330,20 @@ pub(crate) struct MacRadio<T, D> {
     ///
     /// Should be with a high precision of ideally < 10us.
     delay: D,
+    /// Whether the radio is in promiscuous mode.
+    promiscuous: bool,
+    /// A buffer for the MAC header of the received or transmitted frame.
+    /// (For filtering and ACKs)
+    mac_header: MacHeader,
     /// The buffer for the ACK PSDU, if the `MacRadio` is instructed
     /// to send or receive ACKs in software.
-    ack_buf: [u8; MacFrame::ACK_PSDU_LEN],
+    ack_psdu_buf: [u8; MacHeader::ACK_PSDU_LEN],
     /// The PAN ID to filter by, if the filter policy allows it.
-    pan_id: Option<u16>,
+    pan_id: u16,
     /// The short address to filter by, if the filter policy allows it.
-    short_addr: Option<u16>,
+    short_addr: u16,
     /// The extended address to filter by, if the filter policy allows it.
-    ext_addr: Option<u64>,
+    ext_addr: u64,
 }
 
 impl<T, D> MacRadio<T, D>
@@ -361,10 +366,12 @@ where
         Self {
             radio,
             delay,
-            ack_buf: [0; MacFrame::ACK_PSDU_LEN],
-            pan_id: None,
-            short_addr: None,
-            ext_addr: None,
+            mac_header: MacHeader::new(),
+            ack_psdu_buf: [0; MacHeader::ACK_PSDU_LEN],
+            promiscuous: false,
+            pan_id: MacHeader::BROADCAST_PAN_ID,
+            short_addr: MacHeader::BROADCAST_SHORT_ADDR,
+            ext_addr: MacHeader::BROADCAST_EXT_ADDR,
         }
     }
 }
@@ -390,29 +397,10 @@ where
             .await
             .map_err(Self::Error::Io)?;
 
-        if !self
-            .radio
-            .mac_caps()
-            .contains(MacCapabilities::FILTER_PAN_ID)
-        {
-            self.pan_id = config.pan_id;
-        }
-
-        if !self
-            .radio
-            .mac_caps()
-            .contains(MacCapabilities::FILTER_SHORT_ADDR)
-        {
-            self.short_addr = config.short_addr;
-        }
-
-        if !self
-            .radio
-            .mac_caps()
-            .contains(MacCapabilities::FILTER_EXT_ADDR)
-        {
-            self.ext_addr = config.ext_addr;
-        }
+        self.promiscuous = config.promiscuous;
+        self.pan_id = config.pan_id.unwrap_or(MacHeader::BROADCAST_PAN_ID);
+        self.short_addr = config.short_addr.unwrap_or(MacHeader::BROADCAST_SHORT_ADDR);
+        self.ext_addr = config.ext_addr.unwrap_or(MacHeader::BROADCAST_EXT_ADDR);
 
         Ok(())
     }
@@ -422,57 +410,57 @@ where
         psdu: &[u8],
         ack_psdu_buf: Option<&mut [u8]>,
     ) -> Result<Option<PsduMeta>, Self::Error> {
-        if !self.radio.mac_caps().contains(MacCapabilities::TX_ACK)
-            && MacFrame::new(psdu)
-                .needs_ack()
-                .map_err(|_| MacRadioError::TxInvalid)?
-        {
-            debug!("MacRadio, about to transmit with ACK: {psdu:02x?}");
-
+        if self.radio.mac_caps().contains(MacCapabilities::TX_ACK) {
+            self.radio
+                .transmit(psdu, ack_psdu_buf)
+                .await
+                .map_err(Self::Error::Io)
+        } else {
             self.radio
                 .transmit(psdu, None)
                 .await
                 .map_err(Self::Error::Io)?;
 
-            let result = {
-                let mut ack = pin!(self.radio.receive(&mut self.ack_buf));
-                let mut timeout = pin!(self.delay.delay_us(Self::ACK_WAIT_US));
+            self.mac_header.load(psdu).ok_or(MacRadioError::TxInvalid)?;
 
-                select(&mut ack, &mut timeout).await
-            };
+            if self.mac_header.needs_ack() {
+                let psdu_seq = self.mac_header.seq;
 
-            let ack_meta = match result {
-                Either::First(result) => result.map_err(Self::Error::RxAckFailed)?,
-                Either::Second(_) => {
-                    debug!("MacRadio, transmit ACK timeout");
+                debug!("MacRadio, about to receive transmit ACK");
 
-                    Err(Self::Error::RxAckTimeout)?
+                let result = {
+                    let mut ack = pin!(self.radio.receive(&mut self.ack_psdu_buf));
+                    let mut timeout = pin!(self.delay.delay_us(Self::ACK_WAIT_US * 30));
+
+                    select(&mut ack, &mut timeout).await
+                };
+
+                let ack_meta = match result {
+                    Either::First(result) => result.map_err(Self::Error::RxAckFailed)?,
+                    Either::Second(_) => {
+                        debug!("MacRadio, transmit ACK timeout");
+
+                        Err(Self::Error::RxAckTimeout)?
+                    }
+                };
+
+                let ack_psdu = &self.ack_psdu_buf[..ack_meta.len];
+                self.mac_header
+                    .load(ack_psdu)
+                    .ok_or(MacRadioError::RxAckInvalid)?;
+
+                if !self.mac_header.ack_for(psdu_seq) {
+                    Err(MacRadioError::RxAckInvalid)?;
                 }
-            };
-
-            let ack_psdu = &self.ack_buf[..ack_meta.len];
-
-            let ack_mac_frame = MacFrame::new(ack_psdu);
-
-            if ack_mac_frame
-                .ack_for(MacFrame::new(psdu))
-                .map_err(|_| MacRadioError::RxAckInvalid)?
-            {
-                debug!("MacRadio, received transmit ACK: {ack_psdu:02x?}, meta: {ack_meta:?}");
 
                 if let Some(ack_psdu_buf) = ack_psdu_buf {
-                    ack_psdu_buf.copy_from_slice(ack_psdu);
+                    ack_psdu_buf[..ack_psdu.len()].copy_from_slice(ack_psdu);
                 }
 
                 Ok(Some(ack_meta))
             } else {
-                Err(Self::Error::RxAckInvalid)?
+                Ok(None)
             }
-        } else {
-            self.radio
-                .transmit(psdu, ack_psdu_buf)
-                .await
-                .map_err(Self::Error::Io)
         }
     }
 
@@ -490,60 +478,56 @@ where
 
             debug!("MacRadio, received: {psdu:02x?}, meta: {psdu_meta:?}");
 
-            let mac_frame = MacFrame::new(psdu);
+            let mac_caps = self.radio.mac_caps();
 
-            if let Some(pan_id) = self.pan_id.as_ref() {
-                if let Some(dst_pan_id) = mac_frame
-                    .dst_pan_id()
-                    .map_err(|_| MacRadioError::RxInvalid)?
-                {
-                    if dst_pan_id != *pan_id {
-                        debug!("MacRadio filtering, expected Pan ID 0x{pan_id:02x}, got 0x{dst_pan_id:02x}, dropping");
+            if mac_caps != MacCapabilities::all() {
+                if self.mac_header.load(psdu).is_none() {
+                    debug!(
+                        "MacRadio, received frame with invalid MAC header, dropping: {psdu:02x?}"
+                    );
+                    continue;
+                }
+
+                if !mac_caps.contains(MacCapabilities::PROMISCUOUS) && !self.promiscuous {
+                    if !mac_caps.contains(MacCapabilities::FILTER_PAN_ID)
+                        && self.mac_header.pan_id != MacHeader::BROADCAST_PAN_ID
+                        && self.mac_header.pan_id != self.pan_id
+                    {
+                        debug!("MacRadio, filtering out frame: {psdu:02x?}, PAN ID does not match");
                         continue;
                     }
-                }
-            }
 
-            if let Some(short_addr) = self.short_addr.as_ref() {
-                if let Some(short_dst_addr) = mac_frame
-                    .short_dst_addr()
-                    .map_err(|_| MacRadioError::RxInvalid)?
-                {
-                    if short_dst_addr != *short_addr {
-                        debug!("MacRadio filtering, expected short address 0x{short_addr:02x}, got 0x{short_dst_addr:02x}, dropping");
+                    if !mac_caps.contains(MacCapabilities::FILTER_SHORT_ADDR)
+                        && self.mac_header.dst_short_addr != MacHeader::BROADCAST_SHORT_ADDR
+                        && self.mac_header.dst_short_addr != self.short_addr
+                    {
+                        debug!("MacRadio, filtering out frame: {psdu:02x?}, short address does not match");
                         continue;
                     }
-                }
-            }
 
-            if let Some(ext_addr) = self.ext_addr.as_ref() {
-                if let Some(ext_dst_addr) = mac_frame
-                    .ext_dst_addr()
-                    .map_err(|_| MacRadioError::RxInvalid)?
-                {
-                    if ext_dst_addr != *ext_addr {
-                        debug!("MacRadio filtering, expected extended address 0x{ext_addr:08x}, got 0x{ext_dst_addr:08x}, dropping");
+                    if !mac_caps.contains(MacCapabilities::FILTER_EXT_ADDR)
+                        && self.mac_header.dst_ext_addr != MacHeader::BROADCAST_EXT_ADDR
+                        && self.mac_header.dst_ext_addr != self.ext_addr
+                    {
+                        debug!("MacRadio, filtering out frame: {psdu:02x?}, extended address does not match");
                         continue;
                     }
+
+                    if !mac_caps.contains(MacCapabilities::RX_ACK) && self.mac_header.needs_ack() {
+                        let ack_len = self.mac_header.prep_ack(&mut self.ack_psdu_buf);
+                        let ack_psdu = &mut self.ack_psdu_buf[..ack_len];
+
+                        debug!("MacRadio, about to transmit ACK: {ack_psdu:02x?}");
+
+                        // TODO: We need to be much more precise here
+                        self.delay.delay_us(50).await;
+
+                        self.radio
+                            .transmit(ack_psdu, None)
+                            .await
+                            .map_err(Self::Error::TxAckFailed)?;
+                    }
                 }
-            }
-
-            if !self.radio.mac_caps().contains(MacCapabilities::RX_ACK)
-                && mac_frame
-                    .needs_ack()
-                    .map_err(|_| MacRadioError::RxInvalid)?
-            {
-                let ack_len = mac_frame
-                    .fill_ack(&mut self.ack_buf)
-                    .map_err(|_| MacRadioError::RxInvalid)?;
-
-                let ack_psdu = &self.ack_buf[..ack_len];
-                debug!("MacRadio, about to transmit ACK: {ack_psdu:02x?}");
-
-                self.radio
-                    .transmit(ack_psdu, None)
-                    .await
-                    .map_err(Self::Error::TxAckFailed)?;
             }
 
             break Ok(psdu_meta);
@@ -696,7 +680,7 @@ impl Radio for ProxyRadio<'_> {
             req.psdu.clear();
             req.psdu.extend_from_slice(psdu).unwrap();
 
-            debug!("ProxyRadio, transmit request sent: {req:?}");
+            info!("ProxyRadio, transmit request sent: {req:?}");
 
             self.request.send_done();
         }
@@ -705,7 +689,7 @@ impl Radio for ProxyRadio<'_> {
 
         let resp = self.response.receive().await;
 
-        debug!("ProxyRadio, transmit response received: {resp:?}");
+        info!("ProxyRadio, transmit response received: {resp:?}");
 
         let psdu_meta = (ack_psdu_buf.is_some() && !resp.psdu.is_empty()).then_some(PsduMeta {
             len: resp.psdu.len(),
@@ -715,7 +699,7 @@ impl Radio for ProxyRadio<'_> {
 
         if let Some(ack_psdu_buf) = ack_psdu_buf {
             if psdu_meta.is_some() {
-                ack_psdu_buf.copy_from_slice(&resp.psdu);
+                ack_psdu_buf[..resp.psdu.len()].copy_from_slice(&resp.psdu);
             } else {
                 ack_psdu_buf.fill(0);
             }
@@ -740,7 +724,7 @@ impl Radio for ProxyRadio<'_> {
             req.config = self.config.clone();
             req.psdu.clear();
 
-            debug!("ProxyRadio, receive request sent: {req:?}");
+            info!("ProxyRadio, receive request sent: {req:?}");
 
             self.request.send_done();
         }
@@ -749,7 +733,7 @@ impl Radio for ProxyRadio<'_> {
 
         let resp = self.response.receive().await;
 
-        debug!("ProxyRadio, receive response received: {resp:?}");
+        info!("ProxyRadio, receive response received: {resp:?}");
 
         match resp.result {
             Ok(()) => {
@@ -1036,22 +1020,38 @@ impl ProxyRadioResponse {
     }
 }
 
-/// A minimal set of utilities for working with IEEE 802.15.4 MAC frames
-/// so that ACKs can be send or processed.
+/// A minimal set of utilities for parsing the IEEE 802.15.4 MAC header
+/// for the purposes of MAC filtering and RX/TX ACK processing.
 mod mac {
-    use core::ops::Deref;
-    use core::slice::SliceIndex;
-
-    #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-    pub enum FrameError {
-        FrameTooShort,
+    /// A parsed IEEE 802.15.4 MAC header.
+    pub struct MacHeader {
+        /// Frame Control Field (FCF)
+        pub fcf: u16,
+        /// Sequence number
+        pub seq: u8,
+        /// PAN ID. 0xffff if the Frame does not contain a PAN ID
+        /// or if the PAN ID is the broadcast PAN ID
+        pub pan_id: u16,
+        /// Destination short address
+        /// 0xffff if the Frame does not contain a short address
+        /// or if the short address is the broadcast short address
+        pub dst_short_addr: u16,
+        /// Destination extended address
+        /// 0xffffffffffffffff if the Frame does not contain an extended address
+        /// or if the extended address is the broadcast extended address
+        pub dst_ext_addr: u64,
     }
 
-    #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-    pub struct MacFrame<'a>(&'a [u8]);
-
-    impl<'a> MacFrame<'a> {
+    impl MacHeader {
+        /// The length of an Imm-ACK PSDU.
         pub const ACK_PSDU_LEN: usize = Self::FCF_LEN + Self::SEQ_LEN + Self::CRC_LEN;
+
+        /// The broadcast PAN ID.
+        pub const BROADCAST_PAN_ID: u16 = u16::MAX;
+        /// The broadcast short address.
+        pub const BROADCAST_SHORT_ADDR: u16 = u16::MAX;
+        /// The broadcast extended address.
+        pub const BROADCAST_EXT_ADDR: u64 = u64::MAX;
 
         const FCF_LEN: usize = 2;
         const SEQ_LEN: usize = 1;
@@ -1067,7 +1067,7 @@ mod mac {
         const FCF_SECURITY_BIT: u16 = 1 << 3;
         #[allow(unused)]
         const FCF_PENDING_BIT: u16 = 1 << 4;
-        const FCF_ACK_REQ_NIT: u16 = 1 << 5;
+        const FCF_ACK_REQ_BIT: u16 = 1 << 5;
         #[allow(unused)]
         const FCF_PAN_ID_COMPRESSION_MASK: u16 = 1 << 6;
         const FCF_FRAME_DST_ADDR_MODE_SHIFT: u16 = 10;
@@ -1079,212 +1079,162 @@ mod mac {
         #[allow(unused)]
         const FCF_FRAME_SRC_ADDR_MODE_MASK: u16 = 0x03 << Self::FCF_FRAME_DST_ADDR_MODE_SHIFT;
 
-        pub const fn new(psdu: &'a [u8]) -> Self {
-            Self(psdu)
+        /// Create a new empty MAC header.
+        pub const fn new() -> Self {
+            Self {
+                fcf: 0,
+                seq: 0,
+                pan_id: 0,
+                dst_short_addr: 0,
+                dst_ext_addr: 0,
+            }
         }
 
+        /// Load the MAC header from a PSDU.
+        /// Returns `Some(())` if the MAC header was successfully loaded.
+        ///
+        /// This method will fail if the frame version or type is unknown (reserved)
+        /// or if the PSDU is too short.
+        pub fn load(&mut self, psdu: &[u8]) -> Option<()> {
+            Self::ensure_len(psdu, Self::ADDRS_OFFSET + Self::CRC_LEN)?;
+
+            self.fcf =
+                u16::from_le_bytes(psdu[Self::FCF_OFFSET..Self::SEQ_OFFSET].try_into().unwrap());
+            self.seq = psdu[Self::SEQ_OFFSET];
+
+            let _frame_type = FrameType::get(self.fcf)?;
+            let _frame_version = FrameVersion::get(self.fcf)?;
+            let dst_addr_mode = FrameAddrMode::get_dst(self.fcf)?;
+
+            match dst_addr_mode {
+                FrameAddrMode::NotPresent => {
+                    self.pan_id = Self::BROADCAST_PAN_ID;
+                    self.dst_short_addr = Self::BROADCAST_SHORT_ADDR;
+                    self.dst_ext_addr = Self::BROADCAST_EXT_ADDR;
+                }
+                FrameAddrMode::Short => {
+                    Self::ensure_len(psdu, Self::ADDRS_OFFSET + 2 + 2 + Self::CRC_LEN)?;
+
+                    self.pan_id = u16::from_le_bytes(psdu[3..5].try_into().unwrap());
+                    self.dst_short_addr = u16::from_le_bytes(psdu[5..7].try_into().unwrap());
+                    self.dst_ext_addr = Self::BROADCAST_EXT_ADDR;
+                }
+                FrameAddrMode::Extended => {
+                    Self::ensure_len(psdu, Self::ADDRS_OFFSET + 2 + 8 + Self::CRC_LEN)?;
+
+                    self.pan_id = u16::from_le_bytes(psdu[3..5].try_into().unwrap());
+                    self.dst_ext_addr = u64::from_le_bytes(psdu[5..13].try_into().unwrap());
+                    self.dst_short_addr = Self::BROADCAST_SHORT_ADDR;
+                }
+            }
+
+            Some(())
+        }
+
+        /// Return `true` if the frame needs an ACK.
         #[inline(always)]
-        pub fn needs_ack(self) -> Result<bool, FrameError> {
-            Ok((self.fcf()? & Self::FCF_ACK_REQ_NIT) != 0)
+        pub fn needs_ack(&self) -> bool {
+            (self.fcf & Self::FCF_ACK_REQ_BIT) != 0
         }
 
-        pub fn fill_ack(self, ack: &mut [u8]) -> Result<usize, FrameError> {
-            assert!(ack.len() >= Self::ACK_PSDU_LEN);
-
-            let src_fcf = self.fcf()?;
-            let src_seq = self.seq()?;
+        /// Prepare an ACK PSDU.
+        /// Assumes that the parsed frame header indicates that ACK is necessary (`self.needs_ack` returns `true`)
+        #[inline(always)]
+        pub fn prep_ack(&self, ack_buf: &mut [u8]) -> usize {
+            assert!(ack_buf.len() >= Self::ACK_PSDU_LEN);
 
             let ack_fcf = Self::FCF_FRAME_TYPE_ACK
-                | (src_fcf & Self::FCF_FRAME_VERSION_MASK)
+                | (self.fcf & Self::FCF_FRAME_VERSION_MASK)
                 //| (src_fcf & Self::FCF_PENDING_MASK)
                 ;
 
-            ack[0] = ack_fcf.to_le_bytes()[0];
-            ack[1] = ack_fcf.to_le_bytes()[1];
-            ack[2] = src_seq;
-            ack[3] = 0; // CRC, will be filled-in by the PHY driver
-            ack[4] = 0; // CRC, will be filled-in by the PHY driver
+            ack_buf[0] = ack_fcf.to_le_bytes()[0];
+            ack_buf[1] = ack_fcf.to_le_bytes()[1];
+            ack_buf[2] = self.seq;
+            ack_buf[3] = 0; // CRC, will be filled-in by the PHY driver
+            ack_buf[4] = 0; // CRC, will be filled-in by the PHY driver
 
-            Ok(Self::ACK_PSDU_LEN)
+            Self::ACK_PSDU_LEN
         }
 
-        pub fn ack_for(&self, orig: MacFrame) -> Result<bool, FrameError> {
-            Ok(matches!(FrameType::get(*self)?, FrameType::Ack) && self.seq()? == orig.seq()?)
-        }
-
-        #[inline(always)]
-        pub fn dst_pan_id(self) -> Result<Option<u16>, FrameError> {
-            Ok(if FrameAddrMode::get_dst(self)?.pan_id_present() {
-                Some(u16::from_le_bytes(
-                    self.get(Self::ADDRS_OFFSET..)?
-                        .get(..2)?
-                        .0
-                        .try_into()
-                        .unwrap(),
-                ))
-            } else {
-                None
-            })
+        /// Return `true` if the frame is an ACK frame and is an ACK for the given source sequence number.
+        pub fn ack_for(&self, src_seq: u8) -> bool {
+            matches!(FrameType::get(self.fcf).unwrap(), FrameType::Ack) && src_seq == self.seq
         }
 
         #[inline(always)]
-        pub fn short_dst_addr(self) -> Result<Option<u16>, FrameError> {
-            Ok(if FrameAddrMode::get_dst(self)?.short_addr_present() {
-                Some(u16::from_le_bytes(
-                    self.get(Self::ADDRS_OFFSET + 2..)?
-                        .get(..2)?
-                        .0
-                        .try_into()
-                        .unwrap(),
-                ))
-            } else {
-                None
-            })
+        fn ensure_len(psdu: &[u8], len: usize) -> Option<()> {
+            (psdu.len() >= len).then_some(())
         }
+    }
 
-        #[inline(always)]
-        pub fn ext_dst_addr(self) -> Result<Option<u64>, FrameError> {
-            Ok(if FrameAddrMode::get_dst(self)?.ext_addr_present() {
-                Some(u64::from_le_bytes(
-                    self.get(Self::ADDRS_OFFSET + 2..)?
-                        .get(..8)?
-                        .0
-                        .try_into()
-                        .unwrap(),
-                ))
-            } else {
-                None
-            })
-        }
+    /// The supported IEEE 802.15.4 frame versions
+    #[derive(Debug)]
+    enum FrameVersion {
+        IEEE802154_2003,
+        IEEE802154_2006,
+    }
 
+    impl FrameVersion {
+        /// Get the frame version from the FCF.
+        ///
+        /// If the version is not supported, returns `None`.
         #[inline(always)]
-        fn fcf(&self) -> Result<u16, FrameError> {
-            Ok(u16::from_le_bytes(
-                self.get(Self::FCF_OFFSET..)?
-                    .get(..Self::FCF_LEN)?
-                    .0
-                    .try_into()
-                    .unwrap(),
-            ))
-        }
-
-        #[inline(always)]
-        fn seq(&self) -> Result<u8, FrameError> {
-            Ok(self.get(Self::SEQ_OFFSET..)?.get(..Self::SEQ_LEN)?.0[0])
-        }
-
-        #[inline(always)]
-        fn get<I>(&self, index: I) -> Result<Self, FrameError>
-        where
-            I: SliceIndex<[u8], Output = [u8]>,
-        {
-            if let Some(slice) = self.0.get(index) {
-                Ok(Self(slice))
-            } else {
-                Err(FrameError::FrameTooShort)
+        fn get(fcf: u16) -> Option<Self> {
+            match (fcf & MacHeader::FCF_FRAME_VERSION_MASK) >> MacHeader::FCF_FRAME_VERSION_SHIFT {
+                0 => Some(Self::IEEE802154_2003),
+                1 => Some(Self::IEEE802154_2006),
+                _ => None,
             }
         }
     }
 
-    impl Deref for MacFrame<'_> {
-        type Target = [u8];
-
-        fn deref(&self) -> &Self::Target {
-            self.0
-        }
-    }
-
-    // #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-    // enum FrameVersion {
-    //     IEEE802154_2003,
-    //     IEEE802154_2006,
-    //     IEEE802154_2015,
-    //     Other,
-    // }
-
-    // impl FrameVersion {
-    //     #[inline(always)]
-    //     pub fn get(frame: MacFrame) -> Result<Self, FrameError> {
-    //         Ok(match (frame.fcf()? & MacFrame::FCF_FRAME_VERSION_MASK) >> MacFrame::FCF_FRAME_VERSION_SHIFT {
-    //             0 => Self::IEEE802154_2003,
-    //             1 => Self::IEEE802154_2006,
-    //             2 => Self::IEEE802154_2015,
-    //             _ => Self::Other,
-    //         })
-    //     }
-    // }
-
-    #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+    /// The supported IEEE 802.15.4 frame types
+    #[derive(Debug)]
     enum FrameType {
         Beacon,
         Data,
         Ack,
         Command,
-        Other,
     }
 
     impl FrameType {
+        /// Get the frame type from the FCF.
+        ///
+        /// If the type is not supported, returns `None`.
         #[inline(always)]
-        pub fn get(frame: MacFrame) -> Result<Self, FrameError> {
-            Ok(match frame.fcf()? & MacFrame::FCF_FRAME_TYPE_MASK {
-                0 => Self::Beacon,
-                1 => Self::Data,
-                2 => Self::Ack,
-                3 => Self::Command,
-                _ => Self::Other,
-            })
+        fn get(fcf: u16) -> Option<Self> {
+            match fcf & MacHeader::FCF_FRAME_TYPE_MASK {
+                0 => Some(Self::Beacon),
+                1 => Some(Self::Data),
+                2 => Some(Self::Ack),
+                3 => Some(Self::Command),
+                _ => None,
+            }
         }
     }
 
-    #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+    /// The supported IEEE 802.15.4 frame address modes
+    #[derive(Debug)]
     enum FrameAddrMode {
         NotPresent,
-        Reserved,
         Short,
         Extended,
     }
 
     impl FrameAddrMode {
+        /// Get the destination address mode from the FCF.
+        ///
+        /// If the mode is not supported, returns `None`.
         #[inline(always)]
-        pub fn get_dst(frame: MacFrame) -> Result<Self, FrameError> {
-            Ok(Self::get(
-                (frame.fcf()? & MacFrame::FCF_FRAME_DST_ADDR_MODE_MASK)
-                    >> MacFrame::FCF_FRAME_DST_ADDR_MODE_SHIFT,
-            ))
-        }
-
-        // #[inline(always)]
-        // pub const fn len(&self) -> usize {
-        //     match self {
-        //         Self::NotPresent | Self::Reserved => 0,
-        //         Self::Short => 2 + 2,
-        //         Self::Extended => 2 + 8,
-        //     }
-        // }
-
-        #[inline(always)]
-        pub const fn pan_id_present(&self) -> bool {
-            matches!(self, Self::Short | Self::Extended)
-        }
-
-        #[inline(always)]
-        pub const fn short_addr_present(&self) -> bool {
-            matches!(self, Self::Short)
-        }
-
-        #[inline(always)]
-        pub const fn ext_addr_present(&self) -> bool {
-            matches!(self, Self::Extended)
-        }
-
-        #[inline(always)]
-        const fn get(num: u16) -> Self {
-            match num {
-                0 => Self::NotPresent,
-                1 => Self::Reserved,
-                2 => Self::Short,
-                3 => Self::Extended,
-                _ => unreachable!(),
+        fn get_dst(fcf: u16) -> Option<Self> {
+            match (fcf & MacHeader::FCF_FRAME_DST_ADDR_MODE_MASK)
+                >> MacHeader::FCF_FRAME_DST_ADDR_MODE_SHIFT
+            {
+                0 => Some(Self::NotPresent),
+                2 => Some(Self::Short),
+                3 => Some(Self::Extended),
+                _ => None,
             }
         }
     }

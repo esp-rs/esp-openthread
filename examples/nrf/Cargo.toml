@@ -14,6 +14,10 @@ rust-version = "1.84"
 
 [profile.release]
 debug = true
+opt-level = "s"
+
+[profile.dev]
+opt-level = "z"
 
 [features]
 default = []

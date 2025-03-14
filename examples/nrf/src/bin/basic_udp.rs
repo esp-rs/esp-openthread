@@ -80,7 +80,7 @@ async fn main(spawner: Spawner) {
     let p = embassy_nrf::init(config);
 
     rtt_target::rtt_init_log!(
-        log::LevelFilter::Debug,
+        log::LevelFilter::Info,
         rtt_target::ChannelMode::NoBlockSkip,
         LOG_RINGBUF_SIZE
     );
