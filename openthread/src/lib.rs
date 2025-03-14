@@ -16,6 +16,7 @@ use embassy_futures::select::{Either, Either3};
 
 use embassy_time::Instant;
 
+use embedded_hal_async::delay::DelayNs;
 use log::{debug, info, trace, warn};
 
 use platform::OT_ACTIVE_STATE;
@@ -312,7 +313,7 @@ impl<'a> OpenThread<'a> {
         poll_fn(move |cx| self.activate().state().ot.changes.poll_wait(cx)).await;
     }
 
-    /// Run the OpenThread stack with the provided radio implementation, by:
+    /// Run the OpenThread stack with the provided radio implementation.
     ///
     /// Arguments:
     /// - `radio`: The radio to be used by the OpenThread stack.
@@ -321,11 +322,16 @@ impl<'a> OpenThread<'a> {
     /// It is not advised to call this method concurrently from multiple async tasks
     /// because it uses a single waker registration. Thus, while the method will not panic,
     /// the tasks will fight with each other by each re-registering its own waker, thus keeping the CPU constantly busy.
+    ///
+    /// NOTE:
+    /// If the provided radio does not implement some of the MAC capabilities required by OpenThread (`MacCapabilities`)
+    /// it is advisable to use `ProxyRadio` and `PhyRadioRunner` to run the radio in a higher priority executor, where
+    /// the radio MAC capabilities (which are then emulated in software) can meet their timing deadlines.
     pub async fn run<R>(&self, radio: R) -> !
     where
         R: Radio,
     {
-        let mut radio = pin!(self.run_radio(radio));
+        let mut radio = pin!(self.run_radio(radio, embassy_time::Delay));
         let mut alarm = pin!(self.run_alarm());
         let mut openthread = pin!(self.run_tasklets());
 
@@ -492,10 +498,17 @@ impl<'a> OpenThread<'a> {
     ///
     /// Needs to be a separate async loop, because OpenThread C is unaware of async/await and futures,
     /// however, the Radio driver is async.
-    async fn run_radio<R>(&self, mut radio: R) -> !
+    ///
+    /// Arguments:
+    /// - `radio`: The radio to be used by the OpenThread stack.
+    /// - `delay`: The delay implementation to be used by the OpenThread stack.
+    async fn run_radio<R, D>(&self, radio: R, delay: D) -> !
     where
         R: Radio,
+        D: DelayNs,
     {
+        let mut radio = MacRadio::new(radio, delay);
+
         let radio_cmd = || poll_fn(move |cx| self.activate().state().ot.radio.poll_wait(cx));
 
         loop {
@@ -506,6 +519,7 @@ impl<'a> OpenThread<'a> {
 
             // TODO: Borrow it from the resources
             let mut psdu_buf = [0_u8; OT_RADIO_FRAME_MAX_SIZE as usize];
+            let mut ack_psdu_buf = [0_u8; OT_RADIO_FRAME_MAX_SIZE as usize];
 
             loop {
                 radio.set_config(cmd.conf()).await.unwrap();
@@ -532,8 +546,11 @@ impl<'a> OpenThread<'a> {
 
                         trace!("About to Tx 802.15.4 frame {:02x?}", &psdu_buf[..psdu_len]);
 
+                        ack_psdu_buf.fill(0);
+
                         let mut new_cmd = pin!(radio_cmd());
-                        let mut tx = pin!(radio.transmit(&psdu_buf[..psdu_len]));
+                        let mut tx =
+                            pin!(radio.transmit(&psdu_buf[..psdu_len], Some(&mut ack_psdu_buf)));
 
                         let result = embassy_futures::select::select(&mut new_cmd, &mut tx).await;
 
@@ -1209,7 +1226,7 @@ impl<'a> OtContext<'a> {
     }
 
     fn plat_radio_set_extended_address(&mut self, address: u64) {
-        info!("Plat radio set extended address callback, addr: {address}");
+        info!("Plat radio set extended address callback, addr: 0x{address:08x}");
 
         let state = self.state();
 
@@ -1219,7 +1236,7 @@ impl<'a> OtContext<'a> {
     }
 
     fn plat_radio_set_short_address(&mut self, address: u16) {
-        info!("Plat radio set short address callback, addr: {address}");
+        info!("Plat radio set short address callback, addr: 0x{address:02x}");
 
         let state = self.state();
 
@@ -1229,7 +1246,7 @@ impl<'a> OtContext<'a> {
     }
 
     fn plat_radio_set_pan_id(&mut self, pan_id: u16) {
-        info!("Plat radio set PAN ID callback, PAN ID: {pan_id}");
+        info!("Plat radio set PAN ID callback, PAN ID: 0x{pan_id:02x}");
 
         let state = self.state();
 
@@ -1386,7 +1403,7 @@ struct RadioResources {
     tns_psdu: [u8; OT_RADIO_FRAME_MAX_SIZE as usize],
     /// The PSDU of the frame to be send by the radio
     snd_psdu: [u8; OT_RADIO_FRAME_MAX_SIZE as usize],
-    /// The PSDU of the ACK frame send to `otPlatRadioReceiveDone` TBD why we need that
+    /// The PSDU of the ACK frame send to `otPlatRadioReceiveDone`
     ack_psdu: [u8; OT_RADIO_FRAME_MAX_SIZE as usize],
 }
 

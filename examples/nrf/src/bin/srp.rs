@@ -13,23 +13,24 @@
 
 use core::net::{Ipv6Addr, SocketAddrV6};
 
+use embassy_executor::InterruptExecutor;
 use embassy_executor::Spawner;
 
+use embassy_nrf::interrupt;
+use embassy_nrf::interrupt::{InterruptExt, Priority};
 use embassy_nrf::peripherals::{RADIO, RNG};
 use embassy_nrf::rng::{self, Rng};
 use embassy_nrf::{bind_interrupts, peripherals, radio};
 
 use log::info;
 
-use {panic_probe as _, rtt_target as _};
-
 use openthread::nrf::{Ieee802154, NrfRadio};
 use openthread::{
-    OpenThread, OperationalDataset, OtResources, OtSrpResources, OtUdpResources, SrpConf,
-    ThreadTimestamp, UdpSocket,
+    OpenThread, OperationalDataset, OtResources, OtSrpResources, OtUdpResources, PhyRadioRunner,
+    ProxyRadio, ProxyRadioResources, Radio, SrpConf, ThreadTimestamp, UdpSocket,
 };
 
-use rtt_target::rtt_init_log;
+use panic_rtt_target as _;
 
 use tinyrlibc as _;
 
@@ -53,6 +54,13 @@ bind_interrupts!(struct Irqs {
     RNG => rng::InterruptHandler<peripherals::RNG>;
 });
 
+#[interrupt]
+unsafe fn EGU0_SWI0() {
+    EXECUTOR_HIGH.on_interrupt()
+}
+
+static EXECUTOR_HIGH: InterruptExecutor = InterruptExecutor::new();
+
 const BOUND_PORT: u16 = 1212;
 
 const UDP_SOCKETS_BUF: usize = 1280;
@@ -70,7 +78,7 @@ async fn main(spawner: Spawner) {
 
     let p = embassy_nrf::init(config);
 
-    rtt_init_log!(
+    rtt_target::rtt_init_log!(
         log::LevelFilter::Info,
         rtt_target::ChannelMode::NoBlockSkip,
         LOG_RINGBUF_SIZE
@@ -89,9 +97,24 @@ async fn main(spawner: Spawner) {
     let ot = OpenThread::new_with_udp_srp(rng, ot_resources, ot_udp_resources, ot_srp_resources)
         .unwrap();
 
-    spawner
-        .spawn(run_ot(ot, NrfRadio::new(Ieee802154::new(p.RADIO, Irqs))))
+    info!("About to spawn OT runner");
+
+    let mut radio = NrfRadio::new(Ieee802154::new(p.RADIO, Irqs));
+
+    let proxy_radio_resources = mk_static!(ProxyRadioResources, ProxyRadioResources::new());
+    let (proxy_radio, phy_radio_runner) = ProxyRadio::new(radio.caps(), proxy_radio_resources);
+
+    // High-priority executor: EGU0_SWI0, priority level 7
+    interrupt::EGU0_SWI0.set_priority(Priority::P7);
+
+    let spawner_high = EXECUTOR_HIGH.start(interrupt::EGU0_SWI0);
+    spawner_high
+        .spawn(run_radio(phy_radio_runner, radio))
         .unwrap();
+
+    info!("Radio created");
+
+    spawner.spawn(run_ot(ot, proxy_radio)).unwrap();
 
     spawner.spawn(run_ot_info(ot)).unwrap();
 
@@ -147,7 +170,7 @@ async fn main(spawner: Spawner) {
 }
 
 #[embassy_executor::task]
-async fn run_ot(ot: OpenThread<'static>, radio: NrfRadio<'static, RADIO>) -> ! {
+async fn run_ot(ot: OpenThread<'static>, radio: ProxyRadio<'static>) -> ! {
     ot.run(radio).await
 }
 
@@ -190,4 +213,14 @@ async fn run_ot_info(ot: OpenThread<'static>) -> ! {
 
         ot.wait_changed().await;
     }
+}
+
+#[embassy_executor::task]
+async fn run_radio(mut runner: PhyRadioRunner<'static>, radio: NrfRadio<'static, RADIO>) -> ! {
+    runner
+        .run(
+            radio,
+            embassy_time::Delay, /*TODO: Likely not precise enough*/
+        )
+        .await
 }

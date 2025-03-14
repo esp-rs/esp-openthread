@@ -28,6 +28,7 @@ openthread-sys = { path = "../openthread-sys" }
 log = { version = "0.4", default-features = false }
 scopeguard = { version = "1", default-features = false }
 rand_core = "0.6"
+embedded-hal-async = "1"
 embassy-sync = "0.6"
 embassy-time = "0.4"
 embassy-futures = "0.1"

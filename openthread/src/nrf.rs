@@ -4,7 +4,9 @@ use log::{debug, trace};
 
 pub use embassy_nrf::radio::ieee802154::{Cca as RadioCca, Packet};
 
-use crate::{Capabilities, Cca, Config, PsduMeta, Radio, RadioError, RadioErrorKind};
+use crate::{
+    Capabilities, Cca, Config, MacCapabilities, PsduMeta, Radio, RadioError, RadioErrorKind,
+};
 
 pub use embassy_nrf::radio::ieee802154::Radio as Ieee802154;
 pub use embassy_nrf::radio::{Error, Instance as Ieee802154Peripheral};
@@ -63,8 +65,13 @@ where
 {
     type Error = Error;
 
-    async fn caps(&mut self) -> Capabilities {
-        Capabilities::AUTO_ACK | Capabilities::RX_WHEN_IDLE
+    fn caps(&mut self) -> Capabilities {
+        Capabilities::RX_WHEN_IDLE
+    }
+
+    fn mac_caps(&mut self) -> MacCapabilities {
+        // The NRF radio does not have any MAC offloading capabilities
+        MacCapabilities::empty()
     }
 
     async fn set_config(&mut self, config: &Config) -> Result<(), Self::Error> {
@@ -78,7 +85,11 @@ where
         Ok(())
     }
 
-    async fn transmit(&mut self, psdu: &[u8]) -> Result<(), Self::Error> {
+    async fn transmit(
+        &mut self,
+        psdu: &[u8],
+        _ack_psdu_buf: Option<&mut [u8]>,
+    ) -> Result<Option<PsduMeta>, Self::Error> {
         debug!("NRF Radio, about to transmit: {psdu:02x?}");
 
         let mut packet = Packet::new();
@@ -89,11 +100,9 @@ where
 
         trace!("NRF Radio, transmission done");
 
-        Ok(())
+        Ok(None)
     }
 
-    // TODO: For NRF, need to implement software ACK for received frames
-    // as this is not supported in hardware.
     async fn receive(&mut self, psdu_buf: &mut [u8]) -> Result<PsduMeta, Self::Error> {
         trace!("NRF Radio, about to receive");
 
