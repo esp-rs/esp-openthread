@@ -319,9 +319,9 @@ where
     }
 }
 
-/// An enhanced radio that can optionally send and receive ACKs for transmitted frames
+/// An enhanced (MAC) radio that can optionally send and receive ACKs for transmitted frames
 /// as well as optionally do address filtering.
-pub(crate) struct MacRadio<T, D> {
+pub struct MacRadio<T, D> {
     /// The wrapped radio.
     radio: T,
     /// The delay implementation to use.
@@ -355,7 +355,7 @@ where
     /// 190us per spec.
     const ACK_WAIT_US: u32 = 190;
 
-    /// Create a new enhanced radio.
+    /// Create a new enhanced MAC radio.
     ///
     /// Arguments:
     /// - `radio`: The radio to wrap.
