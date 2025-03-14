@@ -1226,7 +1226,7 @@ impl<'a> OtContext<'a> {
     }
 
     fn plat_radio_set_extended_address(&mut self, address: u64) {
-        info!("Plat radio set extended address callback, addr: {address}");
+        info!("Plat radio set extended address callback, addr: 0x{address:08x}");
 
         let state = self.state();
 
@@ -1236,7 +1236,7 @@ impl<'a> OtContext<'a> {
     }
 
     fn plat_radio_set_short_address(&mut self, address: u16) {
-        info!("Plat radio set short address callback, addr: {address}");
+        info!("Plat radio set short address callback, addr: 0x{address:02x}");
 
         let state = self.state();
 
@@ -1246,7 +1246,7 @@ impl<'a> OtContext<'a> {
     }
 
     fn plat_radio_set_pan_id(&mut self, pan_id: u16) {
-        info!("Plat radio set PAN ID callback, PAN ID: {pan_id}");
+        info!("Plat radio set PAN ID callback, PAN ID: 0x{pan_id:02x}");
 
         let state = self.state();
 

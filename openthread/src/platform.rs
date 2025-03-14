@@ -137,7 +137,7 @@ pub extern "C" fn otPlatRadioGetPromiscuous(instance: *const otInstance) -> bool
 
 #[no_mangle]
 pub extern "C" fn otPlatRadioSetExtendedAddress(instance: *const otInstance, address: *const u8) {
-    OtContext::callback(instance).plat_radio_set_extended_address(u64::from_be_bytes(
+    OtContext::callback(instance).plat_radio_set_extended_address(u64::from_le_bytes(
         unsafe { core::slice::from_raw_parts(address, 8) }
             .try_into()
             .unwrap(),

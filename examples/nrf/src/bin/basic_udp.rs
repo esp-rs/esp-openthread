@@ -21,15 +21,13 @@ use embassy_nrf::{bind_interrupts, peripherals, radio};
 
 use log::info;
 
-use panic_probe as _;
-
 use openthread::nrf::{Ieee802154, NrfRadio};
 use openthread::{
     OpenThread, OperationalDataset, OtResources, OtUdpResources, PhyRadioRunner, ProxyRadio,
     ProxyRadioResources, Radio, ThreadTimestamp, UdpSocket,
 };
 
-use rtt_target::rtt_init_log;
+use panic_rtt_target as _;
 
 use tinyrlibc as _;
 
@@ -54,7 +52,7 @@ bind_interrupts!(struct Irqs {
 });
 
 #[interrupt]
-unsafe fn EGU1_SWI1() {
+unsafe fn EGU0_SWI0() {
     EXECUTOR_HIGH.on_interrupt()
 }
 
@@ -67,6 +65,13 @@ const UDP_MAX_SOCKETS: usize = 2;
 
 const LOG_RINGBUF_SIZE: usize = 4096;
 
+// #[panic_handler]
+// fn panic(info: &core::panic::PanicInfo) -> ! {
+//     log::error!("{}", info);
+
+//     loop {}
+// }
+
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     let mut config = embassy_nrf::config::Config::default();
@@ -74,8 +79,8 @@ async fn main(spawner: Spawner) {
 
     let p = embassy_nrf::init(config);
 
-    rtt_init_log!(
-        log::LevelFilter::Info,
+    rtt_target::rtt_init_log!(
+        log::LevelFilter::Debug,
         rtt_target::ChannelMode::NoBlockSkip,
         LOG_RINGBUF_SIZE
     );
@@ -97,10 +102,10 @@ async fn main(spawner: Spawner) {
     let proxy_radio_resources = mk_static!(ProxyRadioResources, ProxyRadioResources::new());
     let (proxy_radio, phy_radio_runner) = ProxyRadio::new(radio.caps(), proxy_radio_resources);
 
-    // High-priority executor: EGU1_SWI1, priority level 6
-    interrupt::EGU1_SWI1.set_priority(Priority::P6);
+    // High-priority executor: EGU0_SWI0, priority level 7
+    interrupt::EGU0_SWI0.set_priority(Priority::P7);
 
-    let spawner_high = EXECUTOR_HIGH.start(interrupt::EGU1_SWI1);
+    let spawner_high = EXECUTOR_HIGH.start(interrupt::EGU0_SWI0);
     spawner_high
         .spawn(run_radio(phy_radio_runner, radio))
         .unwrap();

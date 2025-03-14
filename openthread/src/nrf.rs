@@ -103,8 +103,6 @@ where
         Ok(None)
     }
 
-    // TODO: For NRF, need to implement software ACK for received frames
-    // as this is not supported in hardware.
     async fn receive(&mut self, psdu_buf: &mut [u8]) -> Result<PsduMeta, Self::Error> {
         trace!("NRF Radio, about to receive");
 

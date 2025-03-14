@@ -748,9 +748,9 @@ dependencies = [
  "heapless",
  "log",
  "openthread",
- "panic-probe",
+ "panic-rtt-target",
  "rand_core",
- "rtt-target 0.6.1",
+ "rtt-target",
  "static_cell",
  "tinyrlibc",
 ]
@@ -817,13 +817,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "panic-probe"
-version = "0.3.2"
+name = "panic-rtt-target"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4047d9235d1423d66cc97da7d07eddb54d4f154d6c13805c6d0793956f4f25b0"
+checksum = "9a8116ffce1f89818647b84fba66d16cfdf3c0bee3c9320e606588d3e7415ce7"
 dependencies = [
- "cortex-m",
- "rtt-target 0.5.0",
+ "critical-section",
+ "portable-atomic",
+ "rtt-target",
 ]
 
 [[package]]
@@ -915,16 +916,6 @@ name = "regex-syntax"
 version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
-
-[[package]]
-name = "rtt-target"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "10b34c9e6832388e45f3c01f1bb60a016384a0a4ad80cdd7d34913bed25037f0"
-dependencies = [
- "critical-section",
- "ufmt-write",
-]
 
 [[package]]
 name = "rtt-target"
