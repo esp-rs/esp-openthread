@@ -18,7 +18,7 @@ use embassy_sync::zerocopy_channel::{Channel, Receiver, Sender};
 
 use embedded_hal_async::delay::DelayNs;
 
-use log::{debug, info, trace};
+use log::{debug, trace};
 
 use mac::MacHeader;
 
@@ -680,7 +680,7 @@ impl Radio for ProxyRadio<'_> {
             req.psdu.clear();
             req.psdu.extend_from_slice(psdu).unwrap();
 
-            info!("ProxyRadio, transmit request sent: {req:?}");
+            debug!("ProxyRadio, transmit request sent: {req:?}");
 
             self.request.send_done();
         }
@@ -689,7 +689,7 @@ impl Radio for ProxyRadio<'_> {
 
         let resp = self.response.receive().await;
 
-        info!("ProxyRadio, transmit response received: {resp:?}");
+        debug!("ProxyRadio, transmit response received: {resp:?}");
 
         let psdu_meta = (ack_psdu_buf.is_some() && !resp.psdu.is_empty()).then_some(PsduMeta {
             len: resp.psdu.len(),
@@ -724,7 +724,7 @@ impl Radio for ProxyRadio<'_> {
             req.config = self.config.clone();
             req.psdu.clear();
 
-            info!("ProxyRadio, receive request sent: {req:?}");
+            debug!("ProxyRadio, receive request sent: {req:?}");
 
             self.request.send_done();
         }
@@ -733,7 +733,7 @@ impl Radio for ProxyRadio<'_> {
 
         let resp = self.response.receive().await;
 
-        info!("ProxyRadio, receive response received: {resp:?}");
+        debug!("ProxyRadio, receive response received: {resp:?}");
 
         match resp.result {
             Ok(()) => {
