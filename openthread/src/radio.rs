@@ -82,36 +82,36 @@ pub enum Cca {
 }
 
 bitflags! {
-    /// Radio capabilities.
+    /// Radio PHY capabilities.
     #[repr(transparent)]
     #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub struct Capabilities: u16 {
-        /// Radio supports energy scan.
-        const ENERGY_SCAN = 0x01;
+        /// Radio supports receiving during idle state.
+        const RX_WHEN_IDLE = 0x01;
         /// Radio supports sleep mode.
         const SLEEP = 0x02;
-        /// Radio supports receiving during idle state.
-        const RX_WHEN_IDLE = 0x04;
+        /// Radio supports energy scan.
+        const ENERGY_SCAN = 0x04;
     }
 }
 
 bitflags! {
-    /// Radio capabilities.
+    /// Radio MAC capabilities.
     #[repr(transparent)]
     #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub struct MacCapabilities: u16 {
-        /// Radio supports automatic acknowledgement of TX frames.
+        /// Radio supports automatic receival of ACKs for transmitted frames.
         const TX_ACK = 0x01;
-        /// Radio sending of ACK frames for received TX frames.
+        /// Radio supports automatic sending of ACKs for received frames.
         const RX_ACK = 0x02;
         /// Radio supports promiscuous mode.
         const PROMISCUOUS = 0x04;
-        /// Radio supports filtering of PHY frames by their short address in the MAC payload.
-        const FILTER_SHORT_ADDR = 0x08;
-        /// Radio supports filtering of PHY frames by their extended address in the MAC payload.
-        const FILTER_EXT_ADDR = 0x10;
         /// Radio supports filtering of PHY frames by their PAN ID in the MAC payload.
-        const FILTER_PAN_ID = 0x20;
+        const FILTER_PAN_ID = 0x08;
+        /// Radio supports filtering of PHY frames by their short address in the MAC payload.
+        const FILTER_SHORT_ADDR = 0x10;
+        /// Radio supports filtering of PHY frames by their extended address in the MAC payload.
+        const FILTER_EXT_ADDR = 0x20;
     }
 }
 
@@ -181,7 +181,7 @@ pub struct PsduMeta {
 /// The IEEE 802.15.4 PHY Radio trait.
 ///
 /// While the trait models the PHY layer of the radio, it might implement some "MAC-offloading"
-/// capabilities as well - namely - the ability to send and receive ACK frames for transmitted frames,
+/// capabilities as well - namely - the ability to automatically send and receive ACK frames
 /// and the ability to filter received frames by PAN ID, short address, and extended address.
 ///
 /// If some of these capabilities are not available, `OpenThread` will emulate those in software.
