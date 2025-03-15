@@ -19,6 +19,7 @@ use embassy_time::Instant;
 use embedded_hal_async::delay::DelayNs;
 use log::{debug, info, trace, warn};
 
+use openthread_sys::otIp6IsEnabled;
 use platform::OT_ACTIVE_STATE;
 
 use signal::Signal;
@@ -273,6 +274,7 @@ impl<'a> OpenThread<'a> {
         NetStatus {
             role: device_role,
             ext_pan_id: ext_pan_id.map(|id| u64::from_be_bytes(id.m8)),
+            ip6_enabled: unsafe { otIp6IsEnabled(state.ot.instance) },
         }
     }
 
@@ -874,6 +876,8 @@ pub struct NetStatus {
     pub role: DeviceRole,
     /// The extended PAN ID of the network, if the device is connected to a network.
     pub ext_pan_id: Option<u64>,
+    /// Whether the IPv6 interface is enabled.
+    pub ip6_enabled: bool,
 }
 
 /// The device role in the OpenThread network.
