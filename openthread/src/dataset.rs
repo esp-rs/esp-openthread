@@ -2,6 +2,8 @@
 //!
 //! Basically, a way to configure the Thread network settings.
 
+use openthread_sys::{otDatasetParseTlvs, otOperationalDatasetTlvs};
+
 use crate::sys::{
     otDatasetSetActive, otDatasetSetActiveTlvs, otDatasetSetPending, otDatasetSetPendingTlvs,
     otError_OT_ERROR_NO_BUFS, otExtendedPanId, otMeshLocalPrefix, otNetworkKey,
@@ -178,6 +180,38 @@ impl OperationalDataset<'_> {
             mIsWakeupChannelPresent: false, // we are not supporting Thread in Mobile in this lib right now
         };
     }
+
+    /// Extract the regular and extended PAN IDs from the raw dataset.
+    pub(crate) fn get_pan_ids(
+        raw_dataset: &otOperationalDataset,
+    ) -> (Option<u16>, Option<[u8; 8]>) {
+        (
+            raw_dataset
+                .mComponents
+                .mIsPanIdPresent
+                .then_some(raw_dataset.mPanId),
+            raw_dataset
+                .mComponents
+                .mIsExtendedPanIdPresent
+                .then_some(raw_dataset.mExtendedPanId.m8),
+        )
+    }
+
+    /// Parse the Thread TLV dataset and store it in the raw dataset.
+    pub(crate) fn parse_tlv(
+        tlv: &[u8],
+        ot_tlv: &mut otOperationalDatasetTlvs,
+        raw_dataset: &mut otOperationalDataset,
+    ) -> Result<(), OtError> {
+        if tlv.len() > ot_tlv.mTlvs.len() {
+            Err(OtError::new(otError_OT_ERROR_NO_BUFS))?;
+        }
+
+        ot_tlv.mTlvs[..tlv.len()].copy_from_slice(tlv);
+        ot_tlv.mLength = tlv.len() as _;
+
+        ot!(unsafe { otDatasetParseTlvs(ot_tlv, raw_dataset) })
+    }
 }
 
 /// Security Policy
@@ -217,6 +251,23 @@ pub struct ThreadTimestamp {
 }
 
 impl OpenThread<'_> {
+    /// Extract the regular and the extended PAN IDs from a Thread TLV dataset.
+    ///
+    /// Arguments:
+    /// - `tlv`: The Thread TLV dataset.
+    ///
+    /// Returns:
+    /// - A tuple containing the regular and the extended PAN IDs.
+    pub fn get_tlv_pan_ids(&self, tlv: &[u8]) -> Result<(Option<u16>, Option<[u8; 8]>), OtError> {
+        let mut ot = self.activate();
+        let state = ot.state();
+        let resources = &mut state.ot.dataset_resources;
+
+        OperationalDataset::parse_tlv(tlv, &mut resources.dataset_tlv, &mut resources.dataset)?;
+
+        Ok(OperationalDataset::get_pan_ids(&resources.dataset))
+    }
+
     /// Set a new active dataset in the OpenThread stack.
     ///
     /// Arguments:

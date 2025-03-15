@@ -17,9 +17,9 @@ use embassy_futures::select::{Either, Either3};
 use embassy_time::Instant;
 
 use embedded_hal_async::delay::DelayNs;
+
 use log::{debug, info, trace, warn};
 
-use openthread_sys::otIp6IsEnabled;
 use platform::OT_ACTIVE_STATE;
 
 use signal::Signal;
@@ -58,8 +58,8 @@ use sys::{
     otDeviceRole_OT_DEVICE_ROLE_DISABLED, otDeviceRole_OT_DEVICE_ROLE_LEADER,
     otDeviceRole_OT_DEVICE_ROLE_ROUTER, otError, otError_OT_ERROR_DROP, otError_OT_ERROR_FAILED,
     otError_OT_ERROR_NONE, otError_OT_ERROR_NO_BUFS, otInstance, otInstanceInitSingle,
-    otIp6Address, otIp6GetUnicastAddresses, otIp6NewMessageFromBuffer, otIp6Send, otIp6SetEnabled,
-    otIp6SetReceiveCallback, otMessage, otMessageFree,
+    otIp6Address, otIp6GetUnicastAddresses, otIp6IsEnabled, otIp6NewMessageFromBuffer, otIp6Send,
+    otIp6SetEnabled, otIp6SetReceiveCallback, otMessage, otMessageFree,
     otMessagePriority_OT_MESSAGE_PRIORITY_NORMAL, otMessageRead, otMessageSettings,
     otOperationalDataset, otOperationalDatasetTlvs, otPlatAlarmMilliFired,
     otPlatRadioEnergyScanDone, otPlatRadioReceiveDone, otPlatRadioTxDone, otPlatRadioTxStarted,
