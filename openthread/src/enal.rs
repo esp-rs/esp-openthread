@@ -94,7 +94,7 @@ impl edge_nal::UdpSplit for UdpSocket<'_> {
         Self: 'a;
 
     fn split(&mut self) -> (Self::Receive<'_>, Self::Send<'_>) {
-        todo!()
+        (&*self, &*self)
     }
 }
 

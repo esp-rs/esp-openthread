@@ -191,6 +191,15 @@ impl<'a> OpenThread<'a> {
         Ok(this)
     }
 
+    /// Create a new OpenThread instance with support for native OpenThread SRP services.
+    ///
+    /// Arguments:
+    /// - `rng`: A mutable reference to a random number generator that will be used by OpenThread.
+    /// - `resources`: A mutable reference to the OpenThread resources.
+    /// - `srp_resources`: A mutable reference to the OpenThread SRP resources.
+    ///
+    /// Returns:
+    /// - In case there were no errors related to initializing the OpenThread library, the OpenThread instance.
     #[cfg(feature = "srp")]
     pub fn new_with_srp<const SRP_SVCS: usize, const SRP_BUF_SZ: usize>(
         rng: &'a mut dyn OtRngCore,
@@ -214,6 +223,16 @@ impl<'a> OpenThread<'a> {
         Ok(this)
     }
 
+    /// Create a new OpenThread instance with support for native OpenThread UDP sockets and SRP services.
+    ///
+    /// Arguments:
+    /// - `rng`: A mutable reference to a random number generator that will be used by OpenThread.
+    /// - `resources`: A mutable reference to the OpenThread resources.
+    /// - `udp_resources`: A mutable reference to the OpenThread UDP resources.
+    /// - `srp_resources`: A mutable reference to the OpenThread SRP resources.
+    ///
+    /// Returns:
+    /// - In case there were no errors related to initializing the OpenThread library, the OpenThread instance.
     #[cfg(all(feature = "udp", feature = "srp"))]
     pub fn new_with_udp_srp<
         const UDP_SOCKETS: usize,
