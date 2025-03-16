@@ -628,33 +628,24 @@ impl OpenThread<'_> {
 }
 
 fn align_min<T>(buf: &mut [u8], count: usize) -> Result<(&mut [T], &mut [u8]), OtError> {
-    if count == 0 {
+    if count == 0 || core::mem::size_of::<T>() == 0 {
         return Ok((&mut [], buf));
     }
 
-    let size = est_size::<T>(count);
+    let buf_u = unsafe { core::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len()) };
 
-    if size >= buf.len() {
+    let (leading_buf, t_buf, _) = unsafe { buf.align_to_mut::<T>() };
+    if t_buf.len() < count {
         Err(OtError::new(otError_OT_ERROR_NO_BUFS))?;
     }
 
-    let (t_buf, buf) = buf.split_at_mut(size);
+    // Shrink `t_buf` to the number of requested items (count)
+    let t_buf = &mut t_buf[..count];
 
-    let (_, t_buf, _) = unsafe { t_buf.align_to_mut::<T>() };
+    // Re-compute the remaining buf with the shrinked `t_buf`
+    let remaining_buf = &mut buf_u[leading_buf.len() + core::mem::size_of_val(t_buf)..];
 
-    assert!(count == t_buf.len() || count == t_buf.len() + 1);
-
-    Ok((t_buf, buf))
-}
-
-fn est_size<T>(count: usize) -> usize {
-    let align = core::mem::align_of::<T>();
-    let mut size = core::mem::size_of::<T>();
-    if size % align != 0 {
-        size += align - (size % align);
-    }
-
-    count * size + align
+    Ok((t_buf, remaining_buf))
 }
 
 fn store_str<'t>(str: &str, buf: &'t mut [u8], offset: &mut usize) -> Result<&'t CStr, OtError> {
