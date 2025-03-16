@@ -666,7 +666,7 @@ fn store_str<'t>(str: &str, buf: &'t mut [u8], offset: &mut usize) -> Result<&'t
 fn store_data<'t>(data: &[u8], buf: &'t mut [u8], offset: &mut usize) -> Result<&'t [u8], OtError> {
     let buf = &mut buf[*offset..];
 
-    if data.len() >= buf.len() {
+    if data.len() > buf.len() {
         Err(OtError::new(otError_OT_ERROR_NO_BUFS))?;
     }
 
