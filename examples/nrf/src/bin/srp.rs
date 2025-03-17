@@ -11,6 +11,7 @@
 #![no_std]
 #![no_main]
 
+use core::fmt::Write;
 use core::net::{Ipv6Addr, SocketAddrV6};
 
 use embassy_executor::InterruptExecutor;
@@ -88,6 +89,8 @@ async fn main(spawner: Spawner) {
 
     let rng = mk_static!(Rng<RNG>, Rng::new(p.RNG, Irqs));
 
+    let random_srp_suffix: u32 = 42;
+
     let ot_resources = mk_static!(OtResources, OtResources::new());
     let ot_udp_resources =
         mk_static!(OtUdpResources<UDP_MAX_SOCKETS, UDP_SOCKETS_BUF>, OtUdpResources::new());
@@ -137,17 +140,44 @@ async fn main(spawner: Spawner) {
     };
     info!("Dataset: {:?}", dataset);
 
+    ot.srp_autostart().unwrap();
+
     ot.set_active_dataset(&dataset).unwrap();
     ot.enable_ipv6(true).unwrap();
     ot.enable_thread(true).unwrap();
 
+    let mut hostname = heapless::String::<32>::new();
+    write!(hostname, "srp-example-{random_srp_suffix:04x}").unwrap();
+
+    let _ = ot.srp_remove_all(false);
+
+    while !ot.srp_is_empty().unwrap() {
+        info!("Waiting for SRP records to be removed...");
+        ot.wait_changed().await;
+    }
+
     ot.srp_set_conf(&SrpConf {
-        host_name: "srp-example",
+        host_name: hostname.as_str(),
         ..SrpConf::new()
     })
     .unwrap();
 
-    ot.srp_autostart().unwrap();
+    let mut servicename = heapless::String::<32>::new();
+    write!(servicename, "srp-example-{random_srp_suffix:04x}").unwrap();
+
+    // NOTE: To get the host registered, we need to add at least one service
+    ot.srp_add_service(&openthread::SrpService {
+        name: servicename.as_str(),
+        instance_name: "_foo._tcp",
+        port: 44242,
+        subtype_labels: core::iter::empty(),
+        txt_entries: core::iter::empty(),
+        priority: 0,
+        weight: 0,
+        lease_secs: 0,
+        key_lease_secs: 0,
+    })
+    .unwrap();
 
     let socket = UdpSocket::bind(
         ot,
@@ -195,7 +225,7 @@ async fn run_ot_info(ot: OpenThread<'static>) -> ! {
         let mut state = cur_state;
         let server_addr = ot.srp_server_addr().unwrap();
 
-        ot.srp_conf(|_, new_state| {
+        ot.srp_conf(|_, new_state, _| {
             state = Some(new_state);
             Ok(())
         })
@@ -207,6 +237,20 @@ async fn run_ot_info(ot: OpenThread<'static>) -> ! {
             cur_addrs = addrs;
             cur_state = state;
             cur_server_addr = server_addr;
+
+            ot.srp_conf(|conf, state, empty| {
+                info!("SRP conf: {conf:?}, state: {state}, empty: {empty}");
+
+                Ok(())
+            })
+            .unwrap();
+
+            ot.srp_services(|service| {
+                if let Some((service, state, slot)) = service {
+                    info!("SRP service: {service:?}, state: {state}, slot: {slot}");
+                }
+            })
+            .unwrap();
 
             info!("Waiting for OpenThread changes signal...");
         }

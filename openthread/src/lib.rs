@@ -1090,7 +1090,7 @@ impl<'a> OtContext<'a> {
     ) {
         let instance = context as *mut otInstance;
 
-        Self::callback(instance).plat_changed(0);
+        Self::callback(instance).plat_srp_changed(0);
     }
 
     #[cfg(feature = "srp")]
@@ -1100,7 +1100,7 @@ impl<'a> OtContext<'a> {
     ) {
         let instance = context as *mut otInstance;
 
-        Self::callback(instance).plat_changed(0);
+        Self::callback(instance).plat_srp_changed(0);
     }
 
     //

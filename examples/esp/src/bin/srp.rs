@@ -108,8 +108,21 @@ async fn main(spawner: Spawner) {
     };
     info!("Dataset: {:?}", dataset);
 
+    ot.srp_autostart().unwrap();
+
+    ot.set_active_dataset(&dataset).unwrap();
+    ot.enable_ipv6(true).unwrap();
+    ot.enable_thread(true).unwrap();
+
     let mut hostname = heapless::String::<32>::new();
     write!(hostname, "srp-example-{random_srp_suffix:04x}").unwrap();
+
+    let _ = ot.srp_remove_all(false);
+
+    while !ot.srp_is_empty().unwrap() {
+        info!("Waiting for SRP records to be removed...");
+        ot.wait_changed().await;
+    }
 
     ot.srp_set_conf(&SrpConf {
         host_name: hostname.as_str(),
@@ -133,12 +146,6 @@ async fn main(spawner: Spawner) {
         key_lease_secs: 0,
     })
     .unwrap();
-
-    ot.srp_autostart().unwrap();
-
-    ot.set_active_dataset(&dataset).unwrap();
-    ot.enable_ipv6(true).unwrap();
-    ot.enable_thread(true).unwrap();
 
     let socket = UdpSocket::bind(
         ot,
@@ -186,7 +193,7 @@ async fn run_ot_info(ot: OpenThread<'static>) -> ! {
         let mut state = cur_state;
         let server_addr = ot.srp_server_addr().unwrap();
 
-        ot.srp_conf(|_, new_state| {
+        ot.srp_conf(|_, new_state, _| {
             state = Some(new_state);
             Ok(())
         })
@@ -199,16 +206,16 @@ async fn run_ot_info(ot: OpenThread<'static>) -> ! {
             cur_state = state;
             cur_server_addr = server_addr;
 
-            ot.srp_conf(|conf, state| {
-                info!("SRP conf: {conf:?}, state: {state:?}");
+            ot.srp_conf(|conf, state, empty| {
+                info!("SRP conf: {conf:?}, state: {state}, empty: {empty}");
 
                 Ok(())
             })
             .unwrap();
 
             ot.srp_services(|service| {
-                if let Some((service, state, id)) = service {
-                    info!("SRP service: {service:?}, state: {state}, id: {id}");
+                if let Some((service, state, slot)) = service {
+                    info!("SRP service: {service:?}, state: {state}, slot: {slot}");
                 }
             })
             .unwrap();
