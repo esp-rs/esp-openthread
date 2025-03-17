@@ -179,6 +179,8 @@ impl OpenThreadBuilder {
             .define("OT_APP_CLI", "OFF")
             .define("OT_APP_NCP", "OFF")
             .define("OT_APP_RCP", "OFF")
+            .define("OT_BORDER_ROUTER", "OFF")
+            .define("OT_BORDER_ROUTING", "OFF")
             .define("OT_SRP_CLIENT", "ON")
             .define("OT_SLAAC", "ON")
             .define("OT_ECDSA", "ON")
@@ -276,9 +278,19 @@ impl CMakeConfigurer {
             let mut split = target.split('-');
             let target_arch = split.next().unwrap();
             let target_os = split.next().unwrap();
+            
+            let mut target_vendor = "unknown";
+            let mut target_env = split.next().unwrap();
+            
+            if let Some(next) = split.next() {
+                target_vendor = target_env;
+                target_env = next;
+            }
 
             std::env::set_var("CARGO_CFG_TARGET_ARCH", target_arch);
             std::env::set_var("CARGO_CFG_TARGET_OS", target_os);
+            std::env::set_var("CARGO_CFG_TARGET_VENDOR", target_vendor);
+            std::env::set_var("CARGO_CFG_TARGET_ENV", target_env);
         }
 
         for arg in self.derive_c_args() {
