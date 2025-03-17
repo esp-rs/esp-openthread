@@ -219,7 +219,11 @@ impl SrpConf<'_> {
             addr.mFields.m8 = ip.octets();
         }
 
-        ot_srp.mAddresses = addrs.as_ptr();
+        ot_srp.mAddresses = if addrs.is_empty() {
+            core::ptr::null_mut()
+        } else {
+            addrs.as_ptr()
+        };
         ot_srp.mNumAddresses = addrs.len() as _;
         ot_srp.mAutoAddress = addrs.is_empty();
 
