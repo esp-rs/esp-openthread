@@ -114,7 +114,10 @@ impl Radio for EspRadio<'_> {
     ) -> Result<Option<PsduMeta>, Self::Error> {
         TX_SIGNAL.reset();
 
-        debug!("ESP Radio, about to transmit: {psdu:02x?} on channel {}", self.config.channel);
+        debug!(
+            "ESP Radio, about to transmit: {psdu:02x?} on channel {}",
+            self.config.channel
+        );
 
         self.driver.transmit_raw(psdu)?;
 
@@ -128,7 +131,10 @@ impl Radio for EspRadio<'_> {
     async fn receive(&mut self, psdu_buf: &mut [u8]) -> Result<PsduMeta, Self::Error> {
         RX_SIGNAL.reset();
 
-        trace!("ESP Radio, about to receive on channel {}", self.config.channel);
+        trace!(
+            "ESP Radio, about to receive on channel {}",
+            self.config.channel
+        );
 
         self.driver.start_receive();
 
@@ -143,7 +149,11 @@ impl Radio for EspRadio<'_> {
         let psdu_len = (raw.data.len() - 1).min((raw.data[0] & 0x7f) as usize);
         psdu_buf[..psdu_len].copy_from_slice(&raw.data[1..][..psdu_len]);
 
-        debug!("ESP Radio, received: {:02x?} on channel {}", &psdu_buf[..psdu_len], raw.channel);
+        debug!(
+            "ESP Radio, received: {:02x?} on channel {}",
+            &psdu_buf[..psdu_len],
+            raw.channel
+        );
 
         let rssi = raw.data[1..][psdu_len] as i8;
 

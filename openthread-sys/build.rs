@@ -62,7 +62,7 @@ fn main() -> Result<()> {
 
         for entry in std::fs::read_dir(libs_dir)? {
             let entry = entry?;
-            
+
             let file_name = entry.file_name();
             let file_name = file_name.to_str().unwrap();
             if file_name.ends_with(".a") || file_name.to_ascii_lowercase().ends_with(".lib") {

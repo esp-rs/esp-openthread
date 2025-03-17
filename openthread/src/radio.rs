@@ -1123,7 +1123,8 @@ mod mac {
                     Self::ensure_len(psdu, Self::ADDRS_OFFSET + 2 + 8 + Self::CRC_LEN)?;
 
                     self.pan_id = u16::from_le_bytes(psdu[3..5].try_into().unwrap());
-                    self.dst_ext_addr = u64::from_le_bytes(psdu[5..13].try_into().unwrap());
+                    // See platform.rs, `otPlatRadioSetExtendedAddress` impl
+                    self.dst_ext_addr = u64::from_be_bytes(psdu[5..13].try_into().unwrap());
                     self.dst_short_addr = Self::BROADCAST_SHORT_ADDR;
                 }
             }

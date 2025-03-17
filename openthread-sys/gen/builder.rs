@@ -278,10 +278,10 @@ impl CMakeConfigurer {
             let mut split = target.split('-');
             let target_arch = split.next().unwrap();
             let target_os = split.next().unwrap();
-            
+
             let mut target_vendor = "unknown";
             let mut target_env = split.next().unwrap();
-            
+
             if let Some(next) = split.next() {
                 target_vendor = target_env;
                 target_env = next;
