@@ -11,6 +11,7 @@
 #![no_std]
 #![no_main]
 
+use core::fmt::Write;
 use core::net::{Ipv6Addr, SocketAddrV6};
 
 use embassy_executor::Spawner;
@@ -24,8 +25,8 @@ use log::info;
 
 use openthread::esp::EspRadio;
 use openthread::{
-    OpenThread, OperationalDataset, OtResources, OtSrpResources, OtUdpResources, SrpConf,
-    ThreadTimestamp, UdpSocket,
+    OpenThread, OperationalDataset, OtResources, OtRngCore, OtSrpResources, OtUdpResources,
+    SrpConf, ThreadTimestamp, UdpSocket,
 };
 
 use tinyrlibc as _;
@@ -64,6 +65,8 @@ async fn main(spawner: Spawner) {
     esp_hal_embassy::init(SystemTimer::new(peripherals.SYSTIMER).alarm0);
 
     let rng = mk_static!(Rng, Rng::new(peripherals.RNG));
+
+    let random_srp_suffix = rng.next_u32();
 
     let ot_resources = mk_static!(OtResources, OtResources::new());
     let ot_udp_resources =
@@ -105,17 +108,37 @@ async fn main(spawner: Spawner) {
     };
     info!("Dataset: {:?}", dataset);
 
-    ot.set_active_dataset(&dataset).unwrap();
-    ot.enable_ipv6(true).unwrap();
-    ot.enable_thread(true).unwrap();
+    let mut hostname = heapless::String::<32>::new();
+    write!(hostname, "srp-example-{random_srp_suffix:04x}").unwrap();
 
     ot.srp_set_conf(&SrpConf {
-        host_name: "srp-example",
+        host_name: hostname.as_str(),
         ..SrpConf::new()
     })
     .unwrap();
 
+    let mut servicename = heapless::String::<32>::new();
+    write!(servicename, "srp-example-{random_srp_suffix:04x}").unwrap();
+
+    // NOTE: To get the host registered, we need to add at least one service
+    ot.srp_add_service(&openthread::SrpService {
+        name: servicename.as_str(),
+        instance_name: "_foo._tcp",
+        port: 44242,
+        subtype_labels: core::iter::empty(),
+        txt_entries: core::iter::empty(),
+        priority: 0,
+        weight: 0,
+        lease_secs: 0,
+        key_lease_secs: 0,
+    })
+    .unwrap();
+
     ot.srp_autostart().unwrap();
+
+    ot.set_active_dataset(&dataset).unwrap();
+    ot.enable_ipv6(true).unwrap();
+    ot.enable_thread(true).unwrap();
 
     let socket = UdpSocket::bind(
         ot,
@@ -175,6 +198,20 @@ async fn run_ot_info(ot: OpenThread<'static>) -> ! {
             cur_addrs = addrs;
             cur_state = state;
             cur_server_addr = server_addr;
+
+            ot.srp_conf(|conf, state| {
+                info!("SRP conf: {conf:?}, state: {state:?}");
+
+                Ok(())
+            })
+            .unwrap();
+
+            ot.srp_services(|service| {
+                if let Some((service, state, id)) = service {
+                    info!("SRP service: {service:?}, state: {state}, id: {id}");
+                }
+            })
+            .unwrap();
 
             info!("Waiting for OpenThread changes signal...");
         }

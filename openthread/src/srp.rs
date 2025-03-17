@@ -1,5 +1,6 @@
 use core::cell::RefCell;
 use core::ffi::CStr;
+use core::fmt::{self, Display};
 use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 use core::net::{Ipv6Addr, SocketAddrV6};
@@ -28,7 +29,14 @@ use crate::sys::{
 use crate::{ot, to_ot_addr, to_sock_addr, OpenThread, OtContext, OtError};
 
 /// The unique ID of a registered SRP service
+#[derive(Debug)]
 pub struct SrpServiceId(usize, PhantomData<*const ()>);
+
+impl Display for SrpServiceId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 unsafe impl Send for SrpServiceId {}
 
@@ -157,6 +165,22 @@ pub enum SrpState {
     Other(u32),
 }
 
+impl Display for SrpState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ToAdd => write!(f, "To add"),
+            Self::Adding => write!(f, "Adding"),
+            Self::ToRefresh => write!(f, "To refresh"),
+            Self::Refreshing => write!(f, "Refreshing"),
+            Self::ToRemove => write!(f, "To remove"),
+            Self::Removing => write!(f, "Removing"),
+            Self::Removed => write!(f, "Removed"),
+            Self::Registered => write!(f, "Registered"),
+            Self::Other(state) => write!(f, "Other ({})", state),
+        }
+    }
+}
+
 #[allow(non_upper_case_globals)]
 #[allow(non_snake_case)]
 impl From<otSrpClientItemState> for SrpState {
@@ -214,8 +238,8 @@ impl SrpConf<'_> {
 
         ot_srp.mName = store_str(self.host_name, buf, &mut offset)?.as_ptr();
 
-        for ip in self.host_addrs {
-            let addr = &mut addrs[offset];
+        for (index, ip) in self.host_addrs.iter().enumerate() {
+            let addr = &mut addrs[index];
             addr.mFields.m8 = ip.octets();
         }
 
@@ -391,9 +415,6 @@ impl OpenThread<'_> {
         let instance = ot.state().ot.instance;
         let srp = ot.state().srp()?;
 
-        ot!(unsafe { otSrpClientSetHostName(instance, c"".as_ptr()) })?;
-        ot!(unsafe { otSrpClientEnableAutoHostAddress(instance) })?;
-
         let mut srp_conf = otSrpClientHostInfo {
             mName: core::ptr::null(),
             mAddresses: core::ptr::null(),
@@ -410,6 +431,8 @@ impl OpenThread<'_> {
             ot!(unsafe {
                 otSrpClientSetHostAddresses(instance, srp_conf.mAddresses, srp_conf.mNumAddresses)
             })?;
+        } else {
+            ot!(unsafe { otSrpClientEnableAutoHostAddress(instance) })?;
         }
 
         unsafe {
@@ -607,10 +630,11 @@ impl OpenThread<'_> {
         let instance = ot.state().ot.instance;
         let srp = ot.state().srp()?;
 
-        let service: *const otSrpClientService = unsafe { otSrpClientGetServices(instance) };
+        let mut service_ptr: *const otSrpClientService =
+            unsafe { otSrpClientGetServices(instance) };
 
-        while !service.is_null() {
-            let service = unsafe { &*service };
+        while !service_ptr.is_null() {
+            let service = unsafe { &*service_ptr };
 
             let slot = srp
                 .services
@@ -623,6 +647,8 @@ impl OpenThread<'_> {
                 service.mState.into(),
                 SrpServiceId(slot, PhantomData),
             )));
+
+            service_ptr = service.mNext;
         }
 
         f(None);

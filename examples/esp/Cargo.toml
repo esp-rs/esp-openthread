@@ -12,8 +12,17 @@ license = "MIT OR Apache-2.0"
 readme = "README.md"
 rust-version = "1.84"
 
+[profile.dev]
+# Rust debug is too slow.
+# For debug builds always builds with some optimization
+opt-level = "z"
+
 [profile.release]
-debug = true
+codegen-units = 1 # LLVM can perform better optimizations using a single thread
+debug = 2
+debug-assertions = false
+opt-level = "s"
+overflow-checks = false
 
 [features]
 default = ["esp32c6"]
