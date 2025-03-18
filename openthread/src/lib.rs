@@ -691,19 +691,6 @@ impl<'a> OpenThread<'a> {
 
                         match result {
                             Either::First(new_cmd) => {
-                                let mut ot = self.activate();
-                                let state = ot.state();
-
-                                // Reporting receive failure because we got interrupted
-                                // by a new command
-                                unsafe {
-                                    otPlatRadioReceiveDone(
-                                        state.ot.instance,
-                                        &mut state.ot.radio_resources.rcv_frame,
-                                        otError_OT_ERROR_FAILED,
-                                    );
-                                }
-
                                 debug!("Rx interrupted by new command: {new_cmd:?}");
 
                                 cmd = new_cmd;
