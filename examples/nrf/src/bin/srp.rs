@@ -33,6 +33,8 @@ use openthread::{
 
 use panic_rtt_target as _;
 
+use rand_core::RngCore;
+
 use tinyrlibc as _;
 
 macro_rules! mk_static {
@@ -89,7 +91,10 @@ async fn main(spawner: Spawner) {
 
     let rng = mk_static!(Rng<RNG>, Rng::new(p.RNG, Irqs));
 
-    let random_srp_suffix: u32 = 42;
+    let mut ieee_eui64 = [0; 8];
+    RngCore::fill_bytes(rng, &mut ieee_eui64);
+
+    let random_srp_suffix: u32 = rng.next_u32();
 
     let ot_resources = mk_static!(OtResources, OtResources::new());
     let ot_udp_resources =
@@ -97,8 +102,14 @@ async fn main(spawner: Spawner) {
     let ot_srp_resources =
         mk_static!(OtSrpResources<SRP_MAX_SERVICES, SRP_SERVICE_BUF>, OtSrpResources::new());
 
-    let ot = OpenThread::new_with_udp_srp(rng, ot_resources, ot_udp_resources, ot_srp_resources)
-        .unwrap();
+    let ot = OpenThread::new_with_udp_srp(
+        ieee_eui64,
+        rng,
+        ot_resources,
+        ot_udp_resources,
+        ot_srp_resources,
+    )
+    .unwrap();
 
     info!("About to spawn OT runner");
 

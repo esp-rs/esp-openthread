@@ -24,6 +24,8 @@ use openthread::{
     OpenThread, OperationalDataset, OtResources, OtUdpResources, ThreadTimestamp, UdpSocket,
 };
 
+use rand_core::RngCore;
+
 use tinyrlibc as _;
 
 macro_rules! mk_static {
@@ -58,11 +60,14 @@ async fn main(spawner: Spawner) {
 
     let rng = mk_static!(Rng, Rng::new(peripherals.RNG));
 
+    let mut ieee_eui64 = [0; 8];
+    rng.fill_bytes(&mut ieee_eui64);
+
     let ot_resources = mk_static!(OtResources, OtResources::new());
     let ot_udp_resources =
         mk_static!(OtUdpResources<UDP_MAX_SOCKETS, UDP_SOCKETS_BUF>, OtUdpResources::new());
 
-    let ot = OpenThread::new_with_udp(rng, ot_resources, ot_udp_resources).unwrap();
+    let ot = OpenThread::new_with_udp(ieee_eui64, rng, ot_resources, ot_udp_resources).unwrap();
 
     spawner
         .spawn(run_ot(

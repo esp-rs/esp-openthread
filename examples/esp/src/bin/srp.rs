@@ -66,6 +66,9 @@ async fn main(spawner: Spawner) {
 
     let rng = mk_static!(Rng, Rng::new(peripherals.RNG));
 
+    let mut ieee_eui64 = [0; 8];
+    rng.fill_bytes(&mut ieee_eui64);
+
     let random_srp_suffix = rng.next_u32();
 
     let ot_resources = mk_static!(OtResources, OtResources::new());
@@ -74,8 +77,14 @@ async fn main(spawner: Spawner) {
     let ot_srp_resources =
         mk_static!(OtSrpResources<SRP_MAX_SERVICES, SRP_SERVICE_BUF>, OtSrpResources::new());
 
-    let ot = OpenThread::new_with_udp_srp(rng, ot_resources, ot_udp_resources, ot_srp_resources)
-        .unwrap();
+    let ot = OpenThread::new_with_udp_srp(
+        ieee_eui64,
+        rng,
+        ot_resources,
+        ot_udp_resources,
+        ot_srp_resources,
+    )
+    .unwrap();
 
     spawner
         .spawn(run_ot(

@@ -61,13 +61,17 @@ async fn main(spawner: Spawner) {
     esp_hal_embassy::init(SystemTimer::new(peripherals.SYSTIMER).alarm0);
 
     let rng = mk_static!(Rng, Rng::new(peripherals.RNG));
+
     let enet_seed = rng.next_u64();
+
+    let mut ieee_eui64 = [0; 8];
+    rng.fill_bytes(&mut ieee_eui64);
 
     let ot_resources = mk_static!(OtResources, OtResources::new());
     let enet_driver_state =
         mk_static!(enet::EnetDriverState<IPV6_PACKET_SIZE, 1, 1>, enet::EnetDriverState::new());
 
-    let ot = OpenThread::new(rng, ot_resources).unwrap();
+    let ot = OpenThread::new(ieee_eui64, rng, ot_resources).unwrap();
 
     let (_enet_controller, enet_driver_runner, enet_driver) = enet::new(ot, enet_driver_state);
 

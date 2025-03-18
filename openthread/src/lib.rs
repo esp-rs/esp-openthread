@@ -134,18 +134,20 @@ impl<'a> OpenThread<'a> {
     /// Create a new OpenThread instance.
     ///
     /// Arguments:
+    /// - `ieee_eui64`: The IEEE EUI-64 address of the Radio device.
     /// - `rng`: A mutable reference to a random number generator that will be used by OpenThread.
     /// - `resources`: A mutable reference to the OpenThread resources.
     ///
     /// Returns:
     /// - In case there were no errors related to initializing the OpenThread library, the OpenThread instance.
     pub fn new(
+        ieee_eui64: [u8; 8],
         rng: &'a mut dyn OtRngCore,
         resources: &'a mut OtResources,
     ) -> Result<Self, OtError> {
         // Needed so that we convert from the the actual `'a` lifetime of `rng` to the fake `'static` lifetime in `OtResources`
         #[allow(clippy::missing_transmute_annotations)]
-        let state = resources.init(unsafe { core::mem::transmute(rng) });
+        let state = resources.init(ieee_eui64, unsafe { core::mem::transmute(rng) });
 
         let mut this = Self {
             state,
@@ -163,6 +165,7 @@ impl<'a> OpenThread<'a> {
     /// Create a new OpenThread instance with support for native OpenThread UDP sockets.
     ///
     /// Arguments:
+    /// - `ieee_eui64`: The IEEE EUI-64 address of the Radio device.
     /// - `rng`: A mutable reference to a random number generator that will be used by OpenThread.
     /// - `resources`: A mutable reference to the OpenThread resources.
     /// - `udp_resources`: A mutable reference to the OpenThread UDP resources.
@@ -171,13 +174,14 @@ impl<'a> OpenThread<'a> {
     /// - In case there were no errors related to initializing the OpenThread library, the OpenThread instance.
     #[cfg(feature = "udp")]
     pub fn new_with_udp<const UDP_SOCKETS: usize, const UDP_RX_SZ: usize>(
+        ieee_eui64: [u8; 8],
         rng: &'a mut dyn OtRngCore,
         resources: &'a mut OtResources,
         udp_resources: &'a mut OtUdpResources<UDP_SOCKETS, UDP_RX_SZ>,
     ) -> Result<Self, OtError> {
         // Needed so that we convert from the the actual `'a` lifetime of `rng` to the fake `'static` lifetime in `OtResources`
         #[allow(clippy::missing_transmute_annotations)]
-        let state = resources.init(unsafe { core::mem::transmute(rng) });
+        let state = resources.init(ieee_eui64, unsafe { core::mem::transmute(rng) });
         let udp_state = udp_resources.init();
 
         let mut this = Self {
@@ -195,6 +199,7 @@ impl<'a> OpenThread<'a> {
     /// Create a new OpenThread instance with support for native OpenThread SRP services.
     ///
     /// Arguments:
+    /// - `ieee_eui64`: The IEEE EUI-64 address of the Radio device.
     /// - `rng`: A mutable reference to a random number generator that will be used by OpenThread.
     /// - `resources`: A mutable reference to the OpenThread resources.
     /// - `srp_resources`: A mutable reference to the OpenThread SRP resources.
@@ -203,13 +208,14 @@ impl<'a> OpenThread<'a> {
     /// - In case there were no errors related to initializing the OpenThread library, the OpenThread instance.
     #[cfg(feature = "srp")]
     pub fn new_with_srp<const SRP_SVCS: usize, const SRP_BUF_SZ: usize>(
+        ieee_eui64: [u8; 8],
         rng: &'a mut dyn OtRngCore,
         resources: &'a mut OtResources,
         srp_resources: &'a mut OtSrpResources<SRP_SVCS, SRP_BUF_SZ>,
     ) -> Result<Self, OtError> {
         // Needed so that we convert from the the actual `'a` lifetime of `rng` to the fake `'static` lifetime in `OtResources`
         #[allow(clippy::missing_transmute_annotations)]
-        let state = resources.init(unsafe { core::mem::transmute(rng) });
+        let state = resources.init(ieee_eui64, unsafe { core::mem::transmute(rng) });
         let srp_state = srp_resources.init();
 
         let mut this = Self {
@@ -227,6 +233,7 @@ impl<'a> OpenThread<'a> {
     /// Create a new OpenThread instance with support for native OpenThread UDP sockets and SRP services.
     ///
     /// Arguments:
+    /// - `ieee_eui64`: The IEEE EUI-64 address of the Radio device.
     /// - `rng`: A mutable reference to a random number generator that will be used by OpenThread.
     /// - `resources`: A mutable reference to the OpenThread resources.
     /// - `udp_resources`: A mutable reference to the OpenThread UDP resources.
@@ -241,6 +248,7 @@ impl<'a> OpenThread<'a> {
         const SRP_SVCS: usize,
         const SRP_BUF_SZ: usize,
     >(
+        ieee_eui64: [u8; 8],
         rng: &'a mut dyn OtRngCore,
         resources: &'a mut OtResources,
         udp_resources: &'a mut OtUdpResources<UDP_SOCKETS, UDP_RX_SZ>,
@@ -248,7 +256,7 @@ impl<'a> OpenThread<'a> {
     ) -> Result<Self, OtError> {
         // Needed so that we convert from the the actual `'a` lifetime of `rng` to the fake `'static` lifetime in `OtResources`
         #[allow(clippy::missing_transmute_annotations)]
-        let state = resources.init(unsafe { core::mem::transmute(rng) });
+        let state = resources.init(ieee_eui64, unsafe { core::mem::transmute(rng) });
         let udp_state = udp_resources.init();
         let srp_state = srp_resources.init();
 
@@ -261,6 +269,14 @@ impl<'a> OpenThread<'a> {
         this.init()?;
 
         Ok(this)
+    }
+
+    /// Return the IEEE EUI-64 address of the Radio device.
+    pub fn ieee_eui64(&self) -> [u8; 8] {
+        let mut ot = self.activate();
+        let state = ot.state();
+
+        state.ot.ieee_eui64
     }
 
     /// Return the Thread network status.
@@ -811,7 +827,11 @@ impl OtResources {
     ///
     /// Returns:
     /// - A reference to a `RefCell<OtState>` value that represents the initialized OpenThread state.
-    fn init(&mut self, rng: &'static mut dyn OtRngCore) -> &RefCell<OtState<'static>> {
+    fn init(
+        &mut self,
+        ieee_eui64: [u8; 8],
+        rng: &'static mut dyn OtRngCore,
+    ) -> &RefCell<OtState<'static>> {
         let radio_resources = unsafe { self.radio_resources.assume_init_mut() };
         let dataset_resources = unsafe { self.dataset_resources.assume_init_mut() };
 
@@ -820,6 +840,7 @@ impl OtResources {
         #[allow(clippy::missing_transmute_annotations)]
         self.state.write(RefCell::new(unsafe {
             core::mem::transmute(OtState {
+                ieee_eui64,
                 rng: Some(rng),
                 scan_callback: RefCell::new(None),
                 scan_done: Signal::new(),
@@ -1170,8 +1191,8 @@ impl<'a> OtContext<'a> {
     }
 
     fn plat_radio_ieee_eui64(&mut self, mac: &mut [u8; 8]) {
-        mac.fill(0);
         trace!("Plat radio IEEE EUI64 callback, MAC: {:02x?}", mac);
+        mac.copy_from_slice(self.state().ot.ieee_eui64.as_ref());
     }
 
     fn plat_radio_caps(&mut self) -> u8 {
@@ -1331,6 +1352,8 @@ impl Drop for OtContext<'_> {
 struct OtState<'a> {
     /// The OpenThread instance associated with the `OtData` instance.
     instance: *mut otInstance,
+    /// The IEEE EUI-64 address of the Radio device.
+    ieee_eui64: [u8; 8],
     /// The random number generator associated with the `OtData` instance.
     rng: Option<&'static mut dyn OtRngCore>,
     /// The callback to invoke when network scanning is in progress
