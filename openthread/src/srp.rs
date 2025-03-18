@@ -11,12 +11,11 @@ use log::{debug, info, trace};
 use crate::signal::Signal;
 use crate::sys::{
     otDnsTxtEntry, otError_OT_ERROR_INVALID_ARGS, otError_OT_ERROR_INVALID_STATE,
-    otError_OT_ERROR_NO_BUFS, otInstance, otIp6Address, otSrpClientAddService,
-    otSrpClientClearHostAndServices, otSrpClientClearService, otSrpClientEnableAutoHostAddress,
-    otSrpClientEnableAutoStartMode, otSrpClientGetHostInfo, otSrpClientGetKeyLeaseInterval,
-    otSrpClientGetLeaseInterval, otSrpClientGetServerAddress, otSrpClientGetServices,
-    otSrpClientGetTtl, otSrpClientHostInfo, otSrpClientIsAutoStartModeEnabled,
-    otSrpClientIsRunning, otSrpClientItemState,
+    otError_OT_ERROR_NO_BUFS, otIp6Address, otSrpClientAddService, otSrpClientClearHostAndServices,
+    otSrpClientClearService, otSrpClientEnableAutoHostAddress, otSrpClientEnableAutoStartMode,
+    otSrpClientGetHostInfo, otSrpClientGetKeyLeaseInterval, otSrpClientGetLeaseInterval,
+    otSrpClientGetServerAddress, otSrpClientGetServices, otSrpClientGetTtl, otSrpClientHostInfo,
+    otSrpClientIsAutoStartModeEnabled, otSrpClientIsRunning, otSrpClientItemState,
     otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_ADDING,
     otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_REFRESHING,
     otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_REGISTERED,
@@ -493,8 +492,6 @@ impl OpenThread<'_> {
         let instance = ot.state().ot.instance;
         let srp = ot.state().srp()?;
 
-        Self::cleanup(instance, srp);
-
         let info = unsafe { otSrpClientGetHostInfo(instance).as_ref().unwrap() };
 
         let conf = SrpConf {
@@ -525,10 +522,7 @@ impl OpenThread<'_> {
     pub fn srp_is_empty(&self) -> Result<bool, OtError> {
         let mut ot = self.activate();
         let state = ot.state();
-        let instance = state.ot.instance;
         let srp = state.srp()?;
-
-        Self::cleanup(instance, srp);
 
         Ok(!srp.conf_taken && srp.taken.iter().all(|&taken| !taken))
     }
@@ -717,8 +711,6 @@ impl OpenThread<'_> {
         let instance = ot.state().ot.instance;
         let srp = ot.state().srp()?;
 
-        Self::cleanup(instance, srp);
-
         let slot = srp
             .taken
             .iter()
@@ -817,58 +809,58 @@ impl OpenThread<'_> {
             core::future::pending::<()>().await;
         }
     }
-
-    fn cleanup(instance: *mut otInstance, srp: &mut OtSrpState) {
-        Self::cleanup_host(instance, srp);
-        Self::cleanup_services(instance, srp);
-    }
-
-    fn cleanup_host(instance: *mut otInstance, srp: &mut OtSrpState) {
-        if !srp.conf_taken {
-            return;
-        }
-
-        let info = unsafe { otSrpClientGetHostInfo(instance).as_ref().unwrap() };
-
-        if info.mState == otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_REMOVED {
-            srp.conf_taken = false;
-        }
-    }
-
-    fn cleanup_services(instance: *mut otInstance, srp: &mut OtSrpState) {
-        let mut service_ptr: *const otSrpClientService =
-            unsafe { otSrpClientGetServices(instance) };
-
-        while !service_ptr.is_null() {
-            let service = unsafe { &*service_ptr };
-
-            let slot = srp
-                .services
-                .iter()
-                .position(|s| core::ptr::eq(s, service))
-                .unwrap();
-
-            service_ptr = service.mNext;
-
-            if service.mState == otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_REMOVED {
-                unsafe {
-                    otSrpClientClearService(instance, &mut srp.services[slot]);
-                }
-                srp.taken[slot] = false;
-            }
-        }
-    }
 }
 
 impl OtContext<'_> {
-    pub(crate) fn plat_srp_changed(&mut self, _flags: u32) {
+    /// Reclaims the slots of the SRP host and services that are reported as removed
+    fn cleanup(
+        &mut self,
+        host_info: &otSrpClientHostInfo,
+        mut removed_services: Option<&otSrpClientService>,
+    ) {
+        let state = self.state();
+
+        if let Ok(srp) = state.srp() {
+            if host_info.mState == otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_REMOVED {
+                srp.conf_taken = false;
+                info!("SRP host removed");
+            }
+
+            while let Some(service) = removed_services {
+                let slot = srp
+                    .services
+                    .iter()
+                    .position(|s| core::ptr::eq(s, service))
+                    .unwrap();
+
+                removed_services = unsafe { service.mNext.as_ref() };
+
+                srp.taken[slot] = false;
+                info!("SRP service at slot {slot} removed");
+            }
+        }
+    }
+
+    pub(crate) fn plat_srp_auto_started(&mut self) {
+        let state = self.state();
+        if let Ok(srp) = state.srp() {
+            srp.changes.signal(());
+            state.ot.changes.signal(());
+        }
+    }
+
+    pub(crate) fn plat_srp_changed(
+        &mut self,
+        host_info: &otSrpClientHostInfo,
+        _services: Option<&otSrpClientService>,
+        removed_services: Option<&otSrpClientService>,
+    ) {
         trace!("Plat changed callback");
 
-        let state = self.state();
-        let instance = state.ot.instance;
-        if let Ok(srp) = state.srp() {
-            OpenThread::cleanup(instance, srp);
+        self.cleanup(host_info, removed_services);
 
+        let state = self.state();
+        if let Ok(srp) = state.srp() {
             srp.changes.signal(());
             state.ot.changes.signal(());
         }

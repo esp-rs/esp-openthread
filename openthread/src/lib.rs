@@ -1080,14 +1080,18 @@ impl<'a> OtContext<'a> {
     #[cfg(feature = "srp")]
     unsafe extern "C" fn plat_c_srp_state_change_callback(
         _error: otError,
-        _host_info: *const crate::sys::otSrpClientHostInfo,
-        _services: *const crate::sys::otSrpClientService,
-        _removed_services: *const crate::sys::otSrpClientService,
+        host_info: *const crate::sys::otSrpClientHostInfo,
+        services: *const crate::sys::otSrpClientService,
+        removed_services: *const crate::sys::otSrpClientService,
         context: *mut c_void,
     ) {
         let instance = context as *mut otInstance;
 
-        Self::callback(instance).plat_srp_changed(0);
+        Self::callback(instance).plat_srp_changed(
+            unsafe { &*host_info },
+            unsafe { services.as_ref() },
+            unsafe { removed_services.as_ref() },
+        );
     }
 
     #[cfg(feature = "srp")]
@@ -1097,7 +1101,7 @@ impl<'a> OtContext<'a> {
     ) {
         let instance = context as *mut otInstance;
 
-        Self::callback(instance).plat_srp_changed(0);
+        Self::callback(instance).plat_srp_auto_started();
     }
 
     //
