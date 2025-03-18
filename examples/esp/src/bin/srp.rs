@@ -215,7 +215,7 @@ async fn run_ot_info(ot: OpenThread<'static>) -> ! {
 
             ot.srp_services(|service| {
                 if let Some((service, state, slot)) = service {
-                    info!("SRP service: {service:?}, state: {state}, slot: {slot}");
+                    info!("SRP service: {service}, state: {state}, slot: {slot}");
                 }
             })
             .unwrap();

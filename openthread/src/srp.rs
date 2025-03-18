@@ -2,6 +2,7 @@ use core::cell::RefCell;
 use core::ffi::CStr;
 use core::fmt::{self, Display};
 use core::future::poll_fn;
+use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 use core::net::{Ipv6Addr, SocketAddrV6};
 
@@ -343,9 +344,108 @@ where
     }
 }
 
-pub type OutSrpService<'a> = SrpService<'a, SubtypeLabelsIter<'a>, TxtEntriesIter<'a>>;
-pub type SubtypeLabelsIter<'a> = core::iter::Empty<&'a str>;
-pub type TxtEntriesIter<'a> = core::iter::Empty<(&'a str, &'a [u8])>;
+impl<'a, SI, TI> Display for SrpService<'a, SI, TI>
+where
+    SI: Iterator<Item = &'a str> + Clone,
+    TI: Iterator<Item = (&'a str, &'a [u8])> + Clone,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "SRP Service {{name: {}, instance: {}, port: {}, priority: {}, weight: {}, lease: {}, keylease: {}, labels: [",
+            self.name,
+            self.instance_name,
+            self.port,
+            self.priority,
+            self.weight,
+            self.lease_secs,
+            self.key_lease_secs
+        )?;
+
+        for (index, label) in self.subtype_labels.clone().enumerate() {
+            if index > 0 {
+                write!(f, ", ")?;
+            }
+
+            write!(f, "{}", label)?;
+        }
+
+        write!(f, "], txt: [")?;
+
+        for (index, value) in self.txt_entries.clone().enumerate() {
+            if index > 0 {
+                write!(f, ", ")?;
+            }
+
+            write!(f, "{}: {:?}", value.0, value.1)?;
+        }
+
+        write!(f, "]}}")
+    }
+}
+
+/// Type alias for an SRP service as returned by
+/// `OpenThread::srp_services`.
+pub type OutSrpService<'a> = SrpService<'a, OutSrpSubtypeLabelsIter<'a>, OutSrpTxtEntriesIter<'a>>;
+
+/// An iterator over the subtype labels of an SRP service
+/// as returned by `OpenThread::srp_services`.
+#[derive(Clone)]
+pub struct OutSrpSubtypeLabelsIter<'a> {
+    ptr: *const *const u8,
+    index: usize,
+    _phantom: PhantomData<&'a ()>,
+}
+
+impl<'a> Iterator for OutSrpSubtypeLabelsIter<'a> {
+    type Item = &'a str;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.ptr.is_null() {
+            return None;
+        }
+
+        let label = unsafe { *self.ptr.add(self.index) };
+
+        if label.is_null() {
+            None
+        } else {
+            self.index += 1;
+            Some(unsafe { CStr::from_ptr(label as _).to_str().unwrap() })
+        }
+    }
+}
+
+/// An iterator over the TXT entries of an SRP service
+/// as returned by `OpenThread::srp_services`.
+#[derive(Clone)]
+pub struct OutSrpTxtEntriesIter<'a> {
+    ptr: *const otDnsTxtEntry,
+    size: usize,
+    index: usize,
+    _phantom: PhantomData<&'a ()>,
+}
+
+impl<'a> Iterator for OutSrpTxtEntriesIter<'a> {
+    type Item = (&'a str, &'a [u8]);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.ptr.is_null() || self.index == self.size {
+            return None;
+        }
+
+        let entry = unsafe { self.ptr.add(self.index) };
+
+        self.index += 1;
+
+        let entry = unsafe { &*entry };
+
+        Some((
+            unsafe { CStr::from_ptr(entry.mKey).to_str().unwrap() },
+            unsafe { core::slice::from_raw_parts(entry.mValue, entry.mValueLength as _) },
+        ))
+    }
+}
 
 impl<'a> From<&'a otSrpClientService> for OutSrpService<'a> {
     fn from(ot_srp: &'a otSrpClientService) -> Self {
@@ -360,8 +460,17 @@ impl<'a> From<&'a otSrpClientService> for OutSrpService<'a> {
             } else {
                 ""
             },
-            subtype_labels: core::iter::empty(), // TODO subtype_labels.as_slice(),
-            txt_entries: core::iter::empty(),    // TODO txt_entries.as_slice(),
+            subtype_labels: OutSrpSubtypeLabelsIter {
+                ptr: ot_srp.mSubTypeLabels as _,
+                index: 0,
+                _phantom: PhantomData,
+            },
+            txt_entries: OutSrpTxtEntriesIter {
+                ptr: ot_srp.mTxtEntries,
+                size: ot_srp.mNumTxtEntries as _,
+                index: 0,
+                _phantom: PhantomData,
+            },
             port: ot_srp.mPort,
             priority: ot_srp.mPriority,
             weight: ot_srp.mWeight,

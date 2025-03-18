@@ -57,10 +57,10 @@ use sys::{
     otChangedFlags, otDeviceRole_OT_DEVICE_ROLE_CHILD, otDeviceRole_OT_DEVICE_ROLE_DETACHED,
     otDeviceRole_OT_DEVICE_ROLE_DISABLED, otDeviceRole_OT_DEVICE_ROLE_LEADER,
     otDeviceRole_OT_DEVICE_ROLE_ROUTER, otError, otError_OT_ERROR_DROP, otError_OT_ERROR_FAILED,
-    otError_OT_ERROR_NONE, otError_OT_ERROR_NO_BUFS, otInstance, otInstanceInitSingle,
-    otIp6Address, otIp6GetUnicastAddresses, otIp6IsEnabled, otIp6NewMessageFromBuffer, otIp6Send,
-    otIp6SetEnabled, otIp6SetReceiveCallback, otMessage, otMessageFree,
-    otMessagePriority_OT_MESSAGE_PRIORITY_NORMAL, otMessageRead, otMessageSettings,
+    otError_OT_ERROR_NONE, otError_OT_ERROR_NO_BUFS, otInstance, otInstanceFinalize,
+    otInstanceInitSingle, otIp6Address, otIp6GetUnicastAddresses, otIp6IsEnabled,
+    otIp6NewMessageFromBuffer, otIp6Send, otIp6SetEnabled, otIp6SetReceiveCallback, otMessage,
+    otMessageFree, otMessagePriority_OT_MESSAGE_PRIORITY_NORMAL, otMessageRead, otMessageSettings,
     otOperationalDataset, otOperationalDatasetTlvs, otPlatAlarmMilliFired, otPlatRadioReceiveDone,
     otPlatRadioTxDone, otPlatRadioTxStarted, otRadioFrame, otSetStateChangedCallback,
     otTaskletsProcess, otThreadGetDeviceRole, otThreadGetExtendedPanId, otThreadSetEnabled,
@@ -435,11 +435,21 @@ impl<'a> OpenThread<'a> {
             let mut ot = self.activate();
             let state = ot.state();
 
-            state.ot.instance = unsafe { otInstanceInitSingle() };
+            // Initialize the OpenThread instance
+            //
+            // The init->finalize->init sequence is necessary because
+            // the OpenThread C library starts in initialized state -
+            // however - our wrapper does not have a drop fn, so we have
+            // to make sure that the OpenThread signleton is not holding
+            // dangling pointers to a previous / moved instance of our resources.
+            state.ot.instance = unsafe {
+                let instance = otInstanceInitSingle();
+                otInstanceFinalize(instance);
+
+                otInstanceInitSingle()
+            };
 
             info!("OpenThread instance initialized at {:p}", state.ot.instance);
-
-            // TODO: Remove on drop
 
             ot!(unsafe {
                 otSetStateChangedCallback(
