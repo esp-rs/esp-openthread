@@ -493,6 +493,8 @@ impl OpenThread<'_> {
         let instance = ot.state().ot.instance;
         let srp = ot.state().srp()?;
 
+        Self::cleanup(instance, srp);
+
         let info = unsafe { otSrpClientGetHostInfo(instance).as_ref().unwrap() };
 
         let conf = SrpConf {
@@ -516,13 +518,17 @@ impl OpenThread<'_> {
             default_key_lease_secs: unsafe { otSrpClientGetKeyLeaseInterval(instance) },
         };
 
-        f(&conf, info.mState.into(), srp.conf_taken)
+        f(&conf, info.mState.into(), !srp.conf_taken)
     }
 
     /// Return `true` if there is neither host, nor any service currently registered with the SRP client.
     pub fn srp_is_empty(&self) -> Result<bool, OtError> {
         let mut ot = self.activate();
-        let srp = ot.state().srp()?;
+        let state = ot.state();
+        let instance = state.ot.instance;
+        let srp = state.srp()?;
+
+        Self::cleanup(instance, srp);
 
         Ok(!srp.conf_taken && srp.taken.iter().all(|&taken| !taken))
     }
@@ -545,6 +551,16 @@ impl OpenThread<'_> {
             Err(OtError::new(otError_OT_ERROR_INVALID_STATE))?;
         }
 
+        unsafe {
+            otSrpClientSetLeaseInterval(instance, conf.default_lease_secs);
+        }
+        unsafe {
+            otSrpClientSetKeyLeaseInterval(instance, conf.default_key_lease_secs);
+        }
+        unsafe {
+            otSrpClientSetTtl(instance, conf.ttl);
+        }
+
         let mut srp_conf = otSrpClientHostInfo {
             mName: core::ptr::null(),
             mAddresses: core::ptr::null(),
@@ -554,6 +570,7 @@ impl OpenThread<'_> {
         };
 
         conf.store(&mut srp_conf, srp.conf)?;
+        srp.conf_taken = true;
 
         ot!(unsafe { otSrpClientSetHostName(instance, srp_conf.mName) })?;
 
@@ -563,16 +580,6 @@ impl OpenThread<'_> {
             })?;
         } else {
             ot!(unsafe { otSrpClientEnableAutoHostAddress(instance) })?;
-        }
-
-        unsafe {
-            otSrpClientSetLeaseInterval(instance, conf.default_lease_secs);
-        }
-        unsafe {
-            otSrpClientSetKeyLeaseInterval(instance, conf.default_key_lease_secs);
-        }
-        unsafe {
-            otSrpClientSetTtl(instance, conf.ttl);
         }
 
         Ok(())
@@ -710,6 +717,8 @@ impl OpenThread<'_> {
         let instance = ot.state().ot.instance;
         let srp = ot.state().srp()?;
 
+        Self::cleanup(instance, srp);
+
         let slot = srp
             .taken
             .iter()
@@ -809,6 +818,11 @@ impl OpenThread<'_> {
         }
     }
 
+    fn cleanup(instance: *mut otInstance, srp: &mut OtSrpState) {
+        Self::cleanup_host(instance, srp);
+        Self::cleanup_services(instance, srp);
+    }
+
     fn cleanup_host(instance: *mut otInstance, srp: &mut OtSrpState) {
         if !srp.conf_taken {
             return;
@@ -834,11 +848,14 @@ impl OpenThread<'_> {
                 .position(|s| core::ptr::eq(s, service))
                 .unwrap();
 
+            service_ptr = service.mNext;
+
             if service.mState == otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_REMOVED {
+                unsafe {
+                    otSrpClientClearService(instance, &mut srp.services[slot]);
+                }
                 srp.taken[slot] = false;
             }
-
-            service_ptr = service.mNext;
         }
     }
 }
@@ -850,8 +867,7 @@ impl OtContext<'_> {
         let state = self.state();
         let instance = state.ot.instance;
         if let Ok(srp) = state.srp() {
-            OpenThread::cleanup_host(instance, srp);
-            OpenThread::cleanup_services(instance, srp);
+            OpenThread::cleanup(instance, srp);
 
             srp.changes.signal(());
             state.ot.changes.signal(());

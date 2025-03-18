@@ -131,15 +131,15 @@ async fn main(spawner: Spawner) {
     .unwrap();
 
     let mut servicename = heapless::String::<32>::new();
-    write!(servicename, "srp-example-{random_srp_suffix:04x}").unwrap();
+    write!(servicename, "srp{random_srp_suffix:04x}").unwrap();
 
     // NOTE: To get the host registered, we need to add at least one service
     ot.srp_add_service(&openthread::SrpService {
-        name: servicename.as_str(),
-        instance_name: "_foo._tcp",
-        port: 44242,
-        subtype_labels: core::iter::empty(),
-        txt_entries: core::iter::empty(),
+        name: "_foo._tcp",
+        instance_name: servicename.as_str(),
+        port: 777,
+        subtype_labels: ["foo"].into_iter(),
+        txt_entries: [("a", "b".as_bytes())].into_iter(),
         priority: 0,
         weight: 0,
         lease_secs: 0,
