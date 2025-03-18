@@ -22,6 +22,7 @@ For certain MCUs / Rust targets, the OpenThread libraries are pre-compiled for c
 Current list (might be extended upon request):
 - `riscv32imac-unknown-none-elf` (ESP32C6 and ESP32H2)
 - `thumbv7em-none-eabi` (NRF52)
+- `thumbv6m-none-eabi` No chip with IEEE802.15.4 radio on this target (to our knowledge), but can be used with `openthread` RCP (radio offloading)
 
 **For these targets you only need `rustc`/`cargo` as usual!**
 
