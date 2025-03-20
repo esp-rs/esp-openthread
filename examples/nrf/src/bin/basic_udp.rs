@@ -23,13 +23,13 @@ use log::info;
 
 use openthread::nrf::{Ieee802154, NrfRadio};
 use openthread::{
-    OpenThread, OperationalDataset, OtResources, OtUdpResources, PhyRadioRunner, ProxyRadio,
-    ProxyRadioResources, Radio, ThreadTimestamp, UdpSocket,
+    EmbassyTimeTimer, OpenThread, OperationalDataset, OtResources, OtUdpResources, PhyRadioRunner,
+    ProxyRadio, ProxyRadioResources, Radio, ThreadTimestamp, UdpSocket,
 };
 
-use rand_core::RngCore;
-
 use panic_rtt_target as _;
+
+use rand_core::RngCore;
 
 use tinyrlibc as _;
 
@@ -176,7 +176,7 @@ async fn run_radio(mut runner: PhyRadioRunner<'static>, radio: NrfRadio<'static,
     runner
         .run(
             radio,
-            embassy_time::Delay, /*TODO: Likely not precise enough*/
+            EmbassyTimeTimer, /*TODO: Likely not precise enough*/
         )
         .await
 }

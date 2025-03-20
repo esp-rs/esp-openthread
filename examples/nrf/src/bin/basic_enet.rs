@@ -30,8 +30,8 @@ use log::info;
 use openthread::enet::{self, EnetDriver, EnetRunner};
 use openthread::nrf::{Ieee802154, NrfRadio};
 use openthread::{
-    OpenThread, OperationalDataset, OtResources, PhyRadioRunner, ProxyRadio, ProxyRadioResources,
-    Radio, ThreadTimestamp,
+    EmbassyTimeTimer, OpenThread, OperationalDataset, OtResources, PhyRadioRunner, ProxyRadio,
+    ProxyRadioResources, Radio, ThreadTimestamp,
 };
 
 use rand_core::RngCore;
@@ -237,7 +237,7 @@ async fn run_radio(mut runner: PhyRadioRunner<'static>, radio: NrfRadio<'static,
     runner
         .run(
             radio,
-            embassy_time::Delay, /*TODO: Likely not precise enough*/
+            EmbassyTimeTimer, /*TODO: Likely not precise enough*/
         )
         .await
 }

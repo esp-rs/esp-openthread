@@ -1,8 +1,8 @@
 //! `Radio` trait implementation for the `embassy-nrf` ESP IEEE 802.15.4 radio.
 
-use log::{debug, trace};
-
 pub use embassy_nrf::radio::ieee802154::{Cca as RadioCca, Packet};
+
+use log::{debug, trace};
 
 use crate::{
     Capabilities, Cca, Config, MacCapabilities, PsduMeta, Radio, RadioError, RadioErrorKind,
@@ -93,7 +93,8 @@ where
         debug!("NRF Radio, about to transmit: {psdu:02x?}");
 
         let mut packet = Packet::new();
-        // TODO: CRC mismatch between what OT gives and what NRF expects
+        // TODO: `embassy-nrf` driver wants the PSDU without the CRC,
+        // however, OpenThread provides 2 bytes CRC
         packet.copy_from_slice(&psdu[..psdu.len() - 2]);
 
         self.driver.try_send(&mut packet).await?;
@@ -108,23 +109,32 @@ where
 
         let channel = self.config.channel;
 
-        let mut packet = Packet::new();
+        loop {
+            let mut packet = Packet::new();
 
-        self.driver.receive(&mut packet).await?;
+            let result = self.driver.receive(&mut packet).await;
+            if matches!(&result, Err(Error::CrcFailed(_))) {
+                trace!("CRC error");
+                continue;
+            } else {
+                result?;
+            }
 
-        let len = (packet.len()) as _;
-        psdu_buf[..len].copy_from_slice(&packet);
+            let len = packet.len() as _;
+            psdu_buf[..len].copy_from_slice(&packet);
 
-        debug!("NRF Radio, received: {:02x?}", &psdu_buf[..len]);
+            debug!("NRF Radio, received: {:02x?}", &psdu_buf[..len]);
 
-        let lqi = packet.lqi();
-        let rssi = lqi as _; // TODO: Convert LQI to RSSI
+            let lqi = packet.lqi();
+            let rssi = lqi as _; // TODO: Convert LQI to RSSI
 
-        Ok(PsduMeta {
-            // TODO: CRC mismatch between what NRF gives and what OT expects
-            len: len + 2,
-            channel,
-            rssi: Some(rssi),
-        })
+            break Ok(PsduMeta {
+                // TODO: `embassy-nrf` driver provides the PSDU without the CRC,
+                // however, OpenThread wants the PSDU len to include the CRC
+                len: len + 2,
+                channel,
+                rssi: Some(rssi),
+            });
+        }
     }
 }

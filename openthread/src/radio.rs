@@ -4,7 +4,6 @@
 
 use core::fmt::Debug;
 use core::future::Future;
-use core::iter::repeat_n;
 use core::mem::MaybeUninit;
 use core::pin::pin;
 
@@ -16,7 +15,7 @@ use embassy_sync::blocking_mutex::raw::{CriticalSectionRawMutex, RawMutex};
 use embassy_sync::signal::Signal;
 use embassy_sync::zerocopy_channel::{Channel, Receiver, Sender};
 
-use embedded_hal_async::delay::DelayNs;
+use embassy_time::Instant;
 
 use log::{debug, trace};
 
@@ -321,15 +320,19 @@ where
 
 /// An enhanced (MAC) radio that can optionally send and receive ACKs for transmitted frames
 /// as well as optionally do address filtering.
-pub struct MacRadio<T, D> {
+pub struct MacRadio<R, T> {
     /// The wrapped radio.
-    radio: T,
-    /// The delay implementation to use.
-    /// Necessary for the waiting timeout for a TX ACK to be received
-    /// if the `MacRadio` is instructed to receive TX ACKs in software.
+    radio: R,
+    /// The timer implementation to use.
+    /// Necessary to properly time:
+    /// - How long to wait for an ACK for a transmitted frame
+    /// - How long to wait before sending an ACK for a received frame
+    ///
+    /// The above is only relevant if the `MacRadio` is instructed to
+    /// receive TX ACKs in software and/or to send RX ACKs in software.
     ///
     /// Should be with a high precision of ideally < 10us.
-    delay: D,
+    timer: T,
     /// Whether the radio is in promiscuous mode.
     promiscuous: bool,
     /// A buffer for the MAC header of the received or transmitted frame.
@@ -337,7 +340,8 @@ pub struct MacRadio<T, D> {
     mac_header: MacHeader,
     /// The buffer for the ACK PSDU, if the `MacRadio` is instructed
     /// to send or receive ACKs in software.
-    ack_psdu_buf: [u8; MacHeader::ACK_PSDU_LEN],
+    // TODO: Inject from outside
+    ack_psdu_buf: [u8; OT_RADIO_FRAME_MAX_SIZE as _],
     /// The PAN ID to filter by, if the filter policy allows it.
     pan_id: u16,
     /// The short address to filter by, if the filter policy allows it.
@@ -346,14 +350,17 @@ pub struct MacRadio<T, D> {
     ext_addr: u64,
 }
 
-impl<T, D> MacRadio<T, D>
+impl<R, T> MacRadio<R, T>
 where
-    T: Radio,
-    D: DelayNs,
+    R: Radio,
+    T: MacRadioTimer,
 {
     /// The waiting timeout for a TX ACK to be received.
-    /// 190us per spec.
-    const ACK_WAIT_US: u32 = 190;
+    const TX_ACK_WAIT_US: u64 = 500 * 1000;
+    /// The waiting timeout for an RX ACK to be sent.
+    // TODO: Should be 190us, but we need to be more precise
+    // and not use `embassy-time` with the NRF...
+    const RX_ACK_SEND_US: u64 = 50;
 
     /// Create a new enhanced MAC radio.
     ///
@@ -362,12 +369,12 @@ where
     /// - `delay`: The delay implementation to use. Should be with a high precision of ideally < 10us
     /// - `ack_policy`: The ACK policy to use.
     /// - `filter_policy`: The filter policy to use.
-    pub fn new(radio: T, delay: D) -> Self {
+    pub fn new(radio: R, timer: T) -> Self {
         Self {
             radio,
-            delay,
+            timer,
             mac_header: MacHeader::new(),
-            ack_psdu_buf: [0; MacHeader::ACK_PSDU_LEN],
+            ack_psdu_buf: [0; OT_RADIO_FRAME_MAX_SIZE as _],
             promiscuous: false,
             pan_id: MacHeader::BROADCAST_PAN_ID,
             short_addr: MacHeader::BROADCAST_SHORT_ADDR,
@@ -376,12 +383,12 @@ where
     }
 }
 
-impl<T, D> Radio for MacRadio<T, D>
+impl<R, T> Radio for MacRadio<R, T>
 where
-    T: Radio,
-    D: DelayNs,
+    R: Radio,
+    T: MacRadioTimer,
 {
-    type Error = MacRadioError<T::Error>;
+    type Error = MacRadioError<R::Error>;
 
     fn caps(&mut self) -> Capabilities {
         self.radio.caps()
@@ -421,6 +428,8 @@ where
                 .await
                 .map_err(Self::Error::Io)?;
 
+            let sent_at = self.timer.now();
+
             self.mac_header.load(psdu).ok_or(MacRadioError::TxInvalid)?;
 
             if self.mac_header.needs_ack() {
@@ -430,7 +439,7 @@ where
 
                 let result = {
                     let mut ack = pin!(self.radio.receive(&mut self.ack_psdu_buf));
-                    let mut timeout = pin!(self.delay.delay_us(Self::ACK_WAIT_US * 30));
+                    let mut timeout = pin!(self.timer.wait(sent_at + Self::TX_ACK_WAIT_US));
 
                     select(&mut ack, &mut timeout).await
                 };
@@ -457,8 +466,13 @@ where
                     ack_psdu_buf[..ack_psdu.len()].copy_from_slice(ack_psdu);
                 }
 
-                Ok(Some(ack_meta))
+                debug!("MacRadio, transmitted with ACK");
+
+                //Ok(Some(ack_meta)) TODO
+                Ok(None)
             } else {
+                debug!("MacRadio, transmitted");
+
                 Ok(None)
             }
         }
@@ -473,6 +487,8 @@ where
                 .receive(psdu_buf)
                 .await
                 .map_err(Self::Error::Io)?;
+
+            let ack_at = self.timer.now() + Self::RX_ACK_SEND_US;
 
             let psdu = &psdu_buf[..psdu_meta.len];
 
@@ -519,8 +535,9 @@ where
 
                         debug!("MacRadio, about to transmit ACK: {ack_psdu:02x?}");
 
-                        // TODO: We need to be much more precise here
-                        self.delay.delay_us(50).await;
+                        if self.timer.now() < ack_at {
+                            self.timer.wait(ack_at).await;
+                        }
 
                         self.radio
                             .transmit(ack_psdu, None)
@@ -530,8 +547,58 @@ where
                 }
             }
 
+            debug!("MacRadio, received frame: {psdu:02x?}");
+
             break Ok(psdu_meta);
         }
+    }
+}
+
+/// A high-res timer trait that is necessary for the `MacRadio` to send ACKs
+/// at the right time.
+///
+/// The timer should have a microsecond, or a few microseconds' resolution.
+pub trait MacRadioTimer {
+    /// Returns the current time - in microseconds - from some predefined period in time
+    /// The returned time should be monotonic.
+    fn now(&mut self) -> u64;
+
+    /// Waits until the current time becomes equal or greater than the given time.
+    ///
+    /// If the current time is already equal or greater than the given time,
+    /// the function should return immediately, without waiting.
+    ///
+    /// Arguments:
+    /// - `time`: The time - in microseconds - to wait until.
+    async fn wait(&mut self, at: u64);
+}
+
+impl<T> MacRadioTimer for &mut T
+where
+    T: MacRadioTimer,
+{
+    fn now(&mut self) -> u64 {
+        T::now(self)
+    }
+
+    async fn wait(&mut self, at: u64) {
+        T::wait(self, at).await
+    }
+}
+
+/// An implementation of `MacRadioTimer` that uses the `embassy_time` crate.
+///
+/// Note that this implementation might NOT be appropriate when the concrete
+/// `embassy-time` implementation is not having a high-enough resolution.
+pub struct EmbassyTimeTimer;
+
+impl MacRadioTimer for EmbassyTimeTimer {
+    fn now(&mut self) -> u64 {
+        Instant::now().as_micros()
+    }
+
+    async fn wait(&mut self, at: u64) {
+        embassy_time::Timer::at(Instant::from_micros(at)).await;
     }
 }
 
@@ -778,10 +845,10 @@ impl PhyRadioRunner<'_> {
     /// Arguments:
     /// - `radio`: The PHY radio to run.
     /// - `delay`: The delay implementation to use.
-    pub async fn run<T, D>(&mut self, radio: T, delay: D) -> !
+    pub async fn run<R, T>(&mut self, radio: R, delay: T) -> !
     where
-        T: Radio,
-        D: DelayNs,
+        R: Radio,
+        T: MacRadioTimer,
     {
         let mut radio = MacRadio::new(radio, delay);
 
@@ -844,14 +911,13 @@ impl PhyRadioRunner<'_> {
             // Setting driver configuration resulted in an error, so skip the rest of the processing
             result
         } else {
+            response.psdu.clear();
             response
                 .psdu
-                .extend(repeat_n(0, response.psdu.capacity() - response.psdu.len()));
+                .resize_default(response.psdu.capacity())
+                .unwrap();
 
             let result = if request.tx {
-                // ... as the driver is not oblidged to return the ACK frame
-                response.psdu.fill(0);
-
                 Self::with_cancel(
                     radio.transmit(&request.psdu, Some(&mut response.psdu)),
                     self.new_request,
@@ -1095,6 +1161,7 @@ mod mac {
         ///
         /// This method will fail if the frame version or type is unknown (reserved)
         /// or if the PSDU is too short.
+        #[inline(always)]
         pub fn load(&mut self, psdu: &[u8]) -> Option<()> {
             Self::ensure_len(psdu, Self::ADDRS_OFFSET + Self::CRC_LEN)?;
 
@@ -1159,6 +1226,7 @@ mod mac {
         }
 
         /// Return `true` if the frame is an ACK frame and is an ACK for the given source sequence number.
+        #[inline(always)]
         pub fn ack_for(&self, src_seq: u8) -> bool {
             matches!(FrameType::get(self.fcf).unwrap(), FrameType::Ack) && src_seq == self.seq
         }

@@ -16,8 +16,6 @@ use embassy_futures::select::{Either, Either3};
 
 use embassy_time::Instant;
 
-use embedded_hal_async::delay::DelayNs;
-
 use log::{debug, info, trace, warn};
 
 use platform::OT_ACTIVE_STATE;
@@ -368,7 +366,7 @@ impl<'a> OpenThread<'a> {
     where
         R: Radio,
     {
-        let mut radio = pin!(self.run_radio(radio, embassy_time::Delay));
+        let mut radio = pin!(self.run_radio(radio, EmbassyTimeTimer));
         let mut alarm = pin!(self.run_alarm());
         let mut openthread = pin!(self.run_tasklets());
 
@@ -549,10 +547,10 @@ impl<'a> OpenThread<'a> {
     /// Arguments:
     /// - `radio`: The radio to be used by the OpenThread stack.
     /// - `delay`: The delay implementation to be used by the OpenThread stack.
-    async fn run_radio<R, D>(&self, radio: R, delay: D) -> !
+    async fn run_radio<R, T>(&self, radio: R, timer: T) -> !
     where
         R: Radio,
-        D: DelayNs,
+        T: MacRadioTimer,
     {
         /// Fill the OpenThread frame structure based on the PSDU data returned by the radio
         fn fill_frame(
@@ -588,7 +586,7 @@ impl<'a> OpenThread<'a> {
             frame.mInfo.mRxInfo.mTimestamp = Instant::now().as_micros(); // TODO: Not precise
         }
 
-        let mut radio = MacRadio::new(radio, delay);
+        let mut radio = MacRadio::new(radio, timer);
 
         let radio_cmd = || poll_fn(move |cx| self.activate().state().ot.radio.poll_wait(cx));
 

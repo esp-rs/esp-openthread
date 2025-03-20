@@ -27,8 +27,8 @@ use log::info;
 
 use openthread::nrf::{Ieee802154, NrfRadio};
 use openthread::{
-    OpenThread, OperationalDataset, OtResources, OtSrpResources, OtUdpResources, PhyRadioRunner,
-    ProxyRadio, ProxyRadioResources, Radio, SrpConf, ThreadTimestamp, UdpSocket,
+    EmbassyTimeTimer, OpenThread, OperationalDataset, OtResources, OtSrpResources, OtUdpResources,
+    PhyRadioRunner, ProxyRadio, ProxyRadioResources, Radio, SrpConf, ThreadTimestamp, UdpSocket,
 };
 
 use panic_rtt_target as _;
@@ -130,6 +130,8 @@ async fn main(spawner: Spawner) {
 
     spawner.spawn(run_ot(ot, proxy_radio)).unwrap();
 
+    info!("About to spawn OT IP info");
+
     spawner.spawn(run_ot_info(ot)).unwrap();
 
     let dataset = OperationalDataset {
@@ -216,6 +218,16 @@ async fn run_ot(ot: OpenThread<'static>, radio: ProxyRadio<'static>) -> ! {
 }
 
 #[embassy_executor::task]
+async fn run_radio(mut runner: PhyRadioRunner<'static>, radio: NrfRadio<'static, RADIO>) -> ! {
+    runner
+        .run(
+            radio,
+            EmbassyTimeTimer, /*TODO: Likely not precise enough*/
+        )
+        .await
+}
+
+#[embassy_executor::task]
 async fn run_ot_info(ot: OpenThread<'static>) -> ! {
     let mut cur_state = None;
     let mut cur_server_addr = None;
@@ -268,14 +280,4 @@ async fn run_ot_info(ot: OpenThread<'static>) -> ! {
 
         ot.wait_changed().await;
     }
-}
-
-#[embassy_executor::task]
-async fn run_radio(mut runner: PhyRadioRunner<'static>, radio: NrfRadio<'static, RADIO>) -> ! {
-    runner
-        .run(
-            radio,
-            embassy_time::Delay, /*TODO: Likely not precise enough*/
-        )
-        .await
 }
