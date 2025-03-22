@@ -95,6 +95,7 @@ impl<const SRP_SVCS: usize, const SRP_BUF_SZ: usize> OtSrpResources<SRP_SVCS, SR
 
         let buffers: &mut [[u8; SRP_BUF_SZ]; SRP_SVCS] = unsafe { self.buffers.assume_init_mut() };
 
+        #[allow(clippy::missing_transmute_annotations)]
         self.state.write(RefCell::new(unsafe {
             core::mem::transmute(OtSrpState {
                 services: self.services.assume_init_mut(),
