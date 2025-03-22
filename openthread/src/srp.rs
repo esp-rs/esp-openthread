@@ -95,7 +95,6 @@ impl<const SRP_SVCS: usize, const SRP_BUF_SZ: usize> OtSrpResources<SRP_SVCS, SR
 
         let buffers: &mut [[u8; SRP_BUF_SZ]; SRP_SVCS] = unsafe { self.buffers.assume_init_mut() };
 
-        #[allow(clippy::missing_transmute_annotations)]
         self.state.write(RefCell::new(unsafe {
             core::mem::transmute(OtSrpState {
                 services: self.services.assume_init_mut(),
@@ -166,7 +165,7 @@ pub enum SrpState {
     /// The service/host is registered.
     Registered,
     /// Any other state.
-    Other(u32),
+    Other(otSrpClientItemState),
 }
 
 impl Display for SrpState {
@@ -236,11 +235,9 @@ impl SrpConf<'_> {
     }
 
     fn store(&self, ot_srp: &mut otSrpClientHostInfo, buf: &mut [u8]) -> Result<(), OtError> {
-        let mut offset = 0;
-
         let (addrs, buf) = align_min::<otIp6Address>(buf, self.host_addrs.len())?;
 
-        ot_srp.mName = store_str(self.host_name, buf, &mut offset)?.as_ptr();
+        ot_srp.mName = store_str(self.host_name, buf)?.0.as_ptr();
 
         for (index, ip) in self.host_addrs.iter().enumerate() {
             let addr = &mut addrs[index];
@@ -300,19 +297,23 @@ where
         let txt_entries_len = self.txt_entries.clone().count();
 
         let (txt_entries, buf) = align_min::<otDnsTxtEntry>(buf, txt_entries_len)?;
-        let (subtype_labels, strs) = align_min::<*const char>(buf, subtype_labels_len + 1)?;
+        let (subtype_labels, buf) = align_min::<*const char>(buf, subtype_labels_len + 1)?;
 
-        let mut offset = 0;
+        let (name, buf) = store_str(self.name, buf)?;
+        let (instance_name, buf) = store_str(self.instance_name, buf)?;
 
-        ot_srp.mName = store_str(self.name, strs, &mut offset)?.as_ptr();
-        ot_srp.mInstanceName = store_str(self.instance_name, strs, &mut offset)?.as_ptr();
+        ot_srp.mName = name.as_ptr();
+        ot_srp.mInstanceName = instance_name.as_ptr();
 
         let mut index = 0;
+        let mut buf = buf;
 
         for subtype_label in self.subtype_labels.clone() {
-            let subtype_label = store_str(subtype_label, strs, &mut offset)?;
+            let (subtype_label, rem_buf) = store_str(subtype_label, buf)?;
+
             subtype_labels[index] = subtype_label.as_ptr() as *const _;
 
+            buf = rem_buf;
             index += 1;
         }
 
@@ -323,10 +324,14 @@ where
         for (key, value) in self.txt_entries.clone() {
             let txt_entry = &mut txt_entries[index];
 
-            txt_entry.mKey = store_str(key, strs, &mut offset)?.as_ptr();
-            txt_entry.mValue = store_data(value, strs, &mut offset)?.as_ptr();
+            let (key, rem_buf) = store_str(key, buf)?;
+            let (value, rem_buf) = store_data(value, rem_buf)?;
+
+            txt_entry.mKey = key.as_ptr();
+            txt_entry.mValue = value.as_ptr();
             txt_entry.mValueLength = value.len() as _;
 
+            buf = rem_buf;
             index += 1;
         }
 
@@ -338,6 +343,8 @@ where
         ot_srp.mWeight = self.weight;
         ot_srp.mLease = self.lease_secs;
         ot_srp.mKeyLease = self.key_lease_secs;
+        ot_srp.mState = 0;
+        ot_srp.mNext = core::ptr::null_mut();
 
         Ok(())
     }
@@ -872,47 +879,52 @@ fn align_min<T>(buf: &mut [u8], count: usize) -> Result<(&mut [T], &mut [u8]), O
         return Ok((&mut [], buf));
     }
 
-    let buf_u = unsafe { core::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len()) };
-
-    let (leading_buf, t_buf, _) = unsafe { buf.align_to_mut::<T>() };
+    let (t_leading_buf0, t_buf, _) = unsafe { buf.align_to_mut::<T>() };
     if t_buf.len() < count {
         Err(OtError::new(otError_OT_ERROR_NO_BUFS))?;
     }
 
     // Shrink `t_buf` to the number of requested items (count)
     let t_buf = &mut t_buf[..count];
+    let t_leading_buf0_len = t_leading_buf0.len();
+    let t_buf_size = core::mem::size_of_val(t_buf);
 
-    // Re-compute the remaining buf with the shrinked `t_buf`
-    let remaining_buf = &mut buf_u[leading_buf.len() + core::mem::size_of_val(t_buf)..];
+    let (buf0, remaining_buf) = buf.split_at_mut(t_leading_buf0_len + t_buf_size);
+
+    let (t_leading_buf, t_buf, t_remaining_buf) = unsafe { buf0.align_to_mut::<T>() };
+    assert_eq!(t_leading_buf0_len, t_leading_buf.len());
+    assert_eq!(t_buf.len(), count);
+    assert!(t_remaining_buf.is_empty());
 
     Ok((t_buf, remaining_buf))
 }
 
-fn store_str<'t>(str: &str, buf: &'t mut [u8], offset: &mut usize) -> Result<&'t CStr, OtError> {
-    let buf = &mut buf[*offset..];
+fn store_str<'t>(str: &str, buf: &'t mut [u8]) -> Result<(&'t CStr, &'t mut [u8]), OtError> {
+    let data_len = str.len() + 1;
 
-    if str.len() + 1 >= buf.len() {
+    if data_len > buf.len() {
         Err(OtError::new(otError_OT_ERROR_NO_BUFS))?;
     }
 
-    buf[..str.len()].copy_from_slice(str.as_bytes());
-    buf[str.len()] = 0;
+    let (str_buf, rem_buf) = buf.split_at_mut(data_len);
 
-    *offset += str.len() + 1;
+    str_buf[..str.len()].copy_from_slice(str.as_bytes());
+    str_buf[str.len()] = 0;
 
-    Ok(unsafe { CStr::from_bytes_with_nul_unchecked(&buf[..str.len() + 1]) })
+    Ok((
+        CStr::from_bytes_with_nul(&str_buf[..data_len]).unwrap(),
+        rem_buf,
+    ))
 }
 
-fn store_data<'t>(data: &[u8], buf: &'t mut [u8], offset: &mut usize) -> Result<&'t [u8], OtError> {
-    let buf = &mut buf[*offset..];
-
+fn store_data<'t>(data: &[u8], buf: &'t mut [u8]) -> Result<(&'t [u8], &'t mut [u8]), OtError> {
     if data.len() > buf.len() {
         Err(OtError::new(otError_OT_ERROR_NO_BUFS))?;
     }
 
-    buf[..data.len()].copy_from_slice(data);
+    let (data_buf, rem_buf) = buf.split_at_mut(data.len() + 1);
 
-    *offset += data.len();
+    data_buf[..data.len()].copy_from_slice(data);
 
-    Ok(&buf[..data.len()])
+    Ok((data_buf, rem_buf))
 }
