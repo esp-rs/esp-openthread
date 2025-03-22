@@ -922,7 +922,7 @@ fn store_data<'t>(data: &[u8], buf: &'t mut [u8]) -> Result<(&'t [u8], &'t mut [
         Err(OtError::new(otError_OT_ERROR_NO_BUFS))?;
     }
 
-    let (data_buf, rem_buf) = buf.split_at_mut(data.len() + 1);
+    let (data_buf, rem_buf) = buf.split_at_mut(data.len());
 
     data_buf[..data.len()].copy_from_slice(data);
 
