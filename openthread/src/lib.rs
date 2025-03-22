@@ -52,13 +52,14 @@ mod srp;
 mod udp;
 
 use sys::{
-    otChangedFlags, otDeviceRole_OT_DEVICE_ROLE_CHILD, otDeviceRole_OT_DEVICE_ROLE_DETACHED,
-    otDeviceRole_OT_DEVICE_ROLE_DISABLED, otDeviceRole_OT_DEVICE_ROLE_LEADER,
-    otDeviceRole_OT_DEVICE_ROLE_ROUTER, otError, otError_OT_ERROR_DROP, otError_OT_ERROR_FAILED,
-    otError_OT_ERROR_NONE, otError_OT_ERROR_NO_BUFS, otInstance, otInstanceFinalize,
-    otInstanceInitSingle, otIp6Address, otIp6GetUnicastAddresses, otIp6IsEnabled,
-    otIp6NewMessageFromBuffer, otIp6Send, otIp6SetEnabled, otIp6SetReceiveCallback, otMessage,
-    otMessageFree, otMessagePriority_OT_MESSAGE_PRIORITY_NORMAL, otMessageRead, otMessageSettings,
+    otChangedFlags, otDeviceRole, otDeviceRole_OT_DEVICE_ROLE_CHILD,
+    otDeviceRole_OT_DEVICE_ROLE_DETACHED, otDeviceRole_OT_DEVICE_ROLE_DISABLED,
+    otDeviceRole_OT_DEVICE_ROLE_LEADER, otDeviceRole_OT_DEVICE_ROLE_ROUTER, otError,
+    otError_OT_ERROR_DROP, otError_OT_ERROR_FAILED, otError_OT_ERROR_NONE,
+    otError_OT_ERROR_NO_BUFS, otInstance, otInstanceFinalize, otInstanceInitSingle, otIp6Address,
+    otIp6GetUnicastAddresses, otIp6IsEnabled, otIp6NewMessageFromBuffer, otIp6Send,
+    otIp6SetEnabled, otIp6SetReceiveCallback, otMessage, otMessageFree,
+    otMessagePriority_OT_MESSAGE_PRIORITY_NORMAL, otMessageRead, otMessageSettings,
     otOperationalDataset, otOperationalDatasetTlvs, otPlatAlarmMilliFired, otPlatRadioReceiveDone,
     otPlatRadioTxDone, otPlatRadioTxStarted, otRadioFrame, otSetStateChangedCallback,
     otTaskletsProcess, otThreadGetDeviceRole, otThreadGetExtendedPanId, otThreadSetEnabled,
@@ -85,8 +86,8 @@ impl OtError {
     }
 }
 
-impl From<u32> for OtError {
-    fn from(value: u32) -> Self {
+impl From<otError> for OtError {
+    fn from(value: otError) -> Self {
         Self(value)
     }
 }
@@ -891,7 +892,7 @@ pub enum DeviceRole {
     /// The device is a leader.
     Leader,
     /// The device is in some other role.
-    Other(u32),
+    Other(otDeviceRole),
 }
 
 impl DeviceRole {
@@ -901,10 +902,10 @@ impl DeviceRole {
     }
 }
 
-impl From<u32> for DeviceRole {
+impl From<otDeviceRole> for DeviceRole {
     #[allow(non_upper_case_globals)]
     #[allow(non_snake_case)]
-    fn from(value: u32) -> Self {
+    fn from(value: otDeviceRole) -> Self {
         match value {
             otDeviceRole_OT_DEVICE_ROLE_DISABLED => Self::Disabled,
             otDeviceRole_OT_DEVICE_ROLE_DETACHED => Self::Detached,
