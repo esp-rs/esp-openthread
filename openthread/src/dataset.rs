@@ -2,14 +2,14 @@
 //!
 //! Basically, a way to configure the Thread network settings.
 
-use openthread_sys::{otDatasetParseTlvs, otOperationalDatasetTlvs};
-
 use crate::sys::{
-    otDatasetSetActive, otDatasetSetActiveTlvs, otDatasetSetPending, otDatasetSetPendingTlvs,
-    otError_OT_ERROR_NO_BUFS, otExtendedPanId, otMeshLocalPrefix, otNetworkKey,
-    otOperationalDataset, otOperationalDatasetComponents, otPskc, otSecurityPolicy, otTimestamp,
+    otDatasetParseTlvs, otDatasetSetActive, otDatasetSetActiveTlvs, otDatasetSetPending,
+    otDatasetSetPendingTlvs, otError_OT_ERROR_INVALID_ARGS, otError_OT_ERROR_NO_BUFS,
+    otExtendedPanId, otMeshLocalPrefix, otNetworkKey, otOperationalDataset,
+    otOperationalDatasetComponents, otOperationalDatasetTlvs, otPskc, otSecurityPolicy,
+    otTimestamp,
 };
-use crate::{ot, OpenThread, OtError};
+use crate::{ot, OpenThread, OtActiveState, OtError};
 
 /// Active or Pending Operational Dataset
 #[derive(Debug, Clone, Default, Eq, PartialEq, Hash)]
@@ -291,12 +291,24 @@ impl OpenThread<'_> {
         let mut ot = self.activate();
         let state = ot.state();
 
-        if state.ot.dataset_resources.dataset_tlv.mTlvs.len() < dataset.len() {
-            Err(OtError::new(otError_OT_ERROR_NO_BUFS))?;
-        }
+        Self::fill_dataset_tlv(state, dataset)?;
 
-        state.ot.dataset_resources.dataset_tlv.mTlvs[..dataset.len()].copy_from_slice(dataset);
-        state.ot.dataset_resources.dataset_tlv.mLength = dataset.len() as _;
+        ot!(unsafe {
+            otDatasetSetActiveTlvs(state.ot.instance, &state.ot.dataset_resources.dataset_tlv)
+        })
+    }
+
+    /// Set a new active dataset in the OpenThread stack.
+    ///
+    /// The dataset should be in Thread TLV format, encoded as a HEX string.
+    ///
+    /// Arguments:
+    /// - `dataset`: A reference to the new dataset to be set.
+    pub fn set_active_dataset_tlv_hexstr(&self, dataset: &str) -> Result<(), OtError> {
+        let mut ot = self.activate();
+        let state = ot.state();
+
+        Self::fill_dataset_tlv_hexstr(state, dataset)?;
 
         ot!(unsafe {
             otDatasetSetActiveTlvs(state.ot.instance, &state.ot.dataset_resources.dataset_tlv)
@@ -326,6 +338,32 @@ impl OpenThread<'_> {
         let mut ot = self.activate();
         let state = ot.state();
 
+        Self::fill_dataset_tlv(state, dataset)?;
+
+        ot!(unsafe {
+            otDatasetSetPendingTlvs(state.ot.instance, &state.ot.dataset_resources.dataset_tlv)
+        })
+    }
+
+    /// Set a new pending dataset in the OpenThread stack.
+    ///
+    /// The dataset should be in Thread TLV format, encoded as a HEX string.
+    ///
+    /// Arguments:
+    /// - `dataset`: A reference to the new dataset to be set.
+    pub fn set_pending_dataset_tlv_hexstr(&self, dataset: &str) -> Result<(), OtError> {
+        let mut ot = self.activate();
+        let state = ot.state();
+
+        Self::fill_dataset_tlv_hexstr(state, dataset)?;
+
+        ot!(unsafe {
+            otDatasetSetPendingTlvs(state.ot.instance, &state.ot.dataset_resources.dataset_tlv)
+        })
+    }
+
+    /// Populates the internal OT TLV datasert structure with the given dataset in TLV slice format.
+    fn fill_dataset_tlv(state: &mut OtActiveState<'_>, dataset: &[u8]) -> Result<(), OtError> {
         if state.ot.dataset_resources.dataset_tlv.mTlvs.len() < dataset.len() {
             Err(OtError::new(otError_OT_ERROR_NO_BUFS))?;
         }
@@ -333,8 +371,40 @@ impl OpenThread<'_> {
         state.ot.dataset_resources.dataset_tlv.mTlvs[..dataset.len()].copy_from_slice(dataset);
         state.ot.dataset_resources.dataset_tlv.mLength = dataset.len() as _;
 
-        ot!(unsafe {
-            otDatasetSetPendingTlvs(state.ot.instance, &state.ot.dataset_resources.dataset_tlv)
-        })
+        Ok(())
+    }
+
+    /// Populates the internal OT TLV datasert structure with the given dataset in HEX-TLV str format.
+    fn fill_dataset_tlv_hexstr(
+        state: &mut OtActiveState<'_>,
+        dataset: &str,
+    ) -> Result<(), OtError> {
+        let dataset = dataset.trim();
+        let mut offset = 0;
+
+        for (chf, chs) in dataset
+            .chars()
+            .step_by(2)
+            .zip(dataset.chars().skip(1).step_by(2))
+        {
+            let byte = chf
+                .to_digit(16)
+                .ok_or(OtError::new(otError_OT_ERROR_INVALID_ARGS))?
+                << 4
+                | chs
+                    .to_digit(16)
+                    .ok_or(OtError::new(otError_OT_ERROR_INVALID_ARGS))?;
+
+            if offset >= state.ot.dataset_resources.dataset_tlv.mTlvs.len() {
+                Err(OtError::new(otError_OT_ERROR_NO_BUFS))?;
+            }
+
+            state.ot.dataset_resources.dataset_tlv.mTlvs[offset] = byte as _;
+            offset += 1;
+        }
+
+        state.ot.dataset_resources.dataset_tlv.mLength = offset as _;
+
+        Ok(())
     }
 }
