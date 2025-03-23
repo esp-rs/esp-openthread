@@ -1379,7 +1379,7 @@ pub const otError_OT_NUM_ERRORS: otError = 38;
 /// Generic error (should not use).
 pub const otError_OT_ERROR_GENERIC: otError = 255;
 /// Represents error codes used throughout OpenThread.
-pub type otError = ::core::ffi::c_uint;
+pub type otError = ::core::ffi::c_uchar;
 unsafe extern "C" {
     /// Converts an otError enum into a string.
     ///
@@ -1443,7 +1443,7 @@ pub const otLogRegion_OT_LOG_REGION_DNS: otLogRegion = 23;
 /// The support for log region is removed and instead each core module can define its own name to appended to the logs.
 /// However, the `otLogRegion` enumeration is still defined as before to help with platforms which we may be using it
 /// in their `otPlatLog()` implementation. The OT core will always emit all logs with `OT_LOG_REGION_CORE`.
-pub type otLogRegion = ::core::ffi::c_uint;
+pub type otLogRegion = ::core::ffi::c_uchar;
 unsafe extern "C" {
     /// Outputs logs.
     ///
@@ -1695,7 +1695,7 @@ pub const otMessagePriority_OT_MESSAGE_PRIORITY_NORMAL: otMessagePriority = 1;
 ///< High priority level.
 pub const otMessagePriority_OT_MESSAGE_PRIORITY_HIGH: otMessagePriority = 2;
 /// Defines the OpenThread message priority levels.
-pub type otMessagePriority = ::core::ffi::c_uint;
+pub type otMessagePriority = ::core::ffi::c_uchar;
 ///< Message from Thread Netif.
 pub const otMessageOrigin_OT_MESSAGE_ORIGIN_THREAD_NETIF: otMessageOrigin = 0;
 ///< Message from a trusted source on host.
@@ -1703,7 +1703,7 @@ pub const otMessageOrigin_OT_MESSAGE_ORIGIN_HOST_TRUSTED: otMessageOrigin = 1;
 ///< Message from an untrusted source on host.
 pub const otMessageOrigin_OT_MESSAGE_ORIGIN_HOST_UNTRUSTED: otMessageOrigin = 2;
 /// Defines the OpenThread message origins.
-pub type otMessageOrigin = ::core::ffi::c_uint;
+pub type otMessageOrigin = ::core::ffi::c_uchar;
 /// Represents a message settings.
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -2179,7 +2179,7 @@ pub const otCryptoKeyType_OT_CRYPTO_KEY_TYPE_HMAC: otCryptoKeyType = 2;
 ///< Key Type: ECDSA.
 pub const otCryptoKeyType_OT_CRYPTO_KEY_TYPE_ECDSA: otCryptoKeyType = 3;
 /// Defines the key types.
-pub type otCryptoKeyType = ::core::ffi::c_uint;
+pub type otCryptoKeyType = ::core::ffi::c_uchar;
 ///< Key Algorithm: Vendor Defined.
 pub const otCryptoKeyAlgorithm_OT_CRYPTO_KEY_ALG_VENDOR: otCryptoKeyAlgorithm = 0;
 ///< Key Algorithm: AES ECB.
@@ -2189,7 +2189,7 @@ pub const otCryptoKeyAlgorithm_OT_CRYPTO_KEY_ALG_HMAC_SHA_256: otCryptoKeyAlgori
 ///< Key Algorithm: ECDSA.
 pub const otCryptoKeyAlgorithm_OT_CRYPTO_KEY_ALG_ECDSA: otCryptoKeyAlgorithm = 3;
 /// Defines the key algorithms.
-pub type otCryptoKeyAlgorithm = ::core::ffi::c_uint;
+pub type otCryptoKeyAlgorithm = ::core::ffi::c_uchar;
 ///< Key Usage: Key Usage is empty.
 pub const OT_CRYPTO_KEY_USAGE_NONE: _bindgen_ty_1 = 0;
 ///< Key Usage: Key can be exported.
@@ -2203,13 +2203,13 @@ pub const OT_CRYPTO_KEY_USAGE_SIGN_HASH: _bindgen_ty_1 = 8;
 ///< Key Usage: Verify Hash.
 pub const OT_CRYPTO_KEY_USAGE_VERIFY_HASH: _bindgen_ty_1 = 16;
 /// Defines the key usage flags.
-pub type _bindgen_ty_1 = ::core::ffi::c_uint;
+pub type _bindgen_ty_1 = ::core::ffi::c_uchar;
 ///< Key Persistence: Key is volatile.
 pub const otCryptoKeyStorage_OT_CRYPTO_KEY_STORAGE_VOLATILE: otCryptoKeyStorage = 0;
 ///< Key Persistence: Key is persistent.
 pub const otCryptoKeyStorage_OT_CRYPTO_KEY_STORAGE_PERSISTENT: otCryptoKeyStorage = 1;
 /// Defines the key storage types.
-pub type otCryptoKeyStorage = ::core::ffi::c_uint;
+pub type otCryptoKeyStorage = ::core::ffi::c_uchar;
 /// This datatype represents the key reference.
 pub type otCryptoKeyRef = u32;
 /// @struct otCryptoKey
@@ -2828,7 +2828,7 @@ pub const OT_RADIO_CHANNEL_PAGE_2: _bindgen_ty_3 = 2;
 ///< 915 MHz IEEE 802.15.4-2006
 pub const OT_RADIO_CHANNEL_PAGE_2_MASK: _bindgen_ty_3 = 4;
 /// Defines the channel page.
-pub type _bindgen_ty_3 = ::core::ffi::c_uint;
+pub type _bindgen_ty_3 = ::core::ffi::c_uchar;
 ///< 915 MHz IEEE 802.15.4-2006
 pub const OT_RADIO_915MHZ_OQPSK_CHANNEL_MIN: _bindgen_ty_4 = 1;
 ///< 915 MHz IEEE 802.15.4-2006
@@ -2870,7 +2870,7 @@ pub const OT_RADIO_CAPS_RX_ON_WHEN_IDLE: _bindgen_ty_5 = 256;
 ///< Radio supports setting per-frame transmit power.
 pub const OT_RADIO_CAPS_TRANSMIT_FRAME_POWER: _bindgen_ty_5 = 512;
 /// Defines constants that are used to indicate different radio capabilities. See `otRadioCaps`.
-pub type _bindgen_ty_5 = ::core::ffi::c_uint;
+pub type _bindgen_ty_5 = ::core::ffi::c_ushort;
 /// Represents the IEEE 802.15.4 PAN ID.
 pub type otPanId = u16;
 /// Represents the IEEE 802.15.4 Short Address.
@@ -2884,7 +2884,7 @@ pub const OT_ACK_IE_MAX_SIZE: _bindgen_ty_6 = 16;
 ///< Max length of Link Metrics data in Vendor-Specific IE.
 pub const OT_ENH_PROBING_IE_DATA_MAX_SIZE: _bindgen_ty_6 = 2;
 /// Defines constants about size of header IE in ACK.
-pub type _bindgen_ty_6 = ::core::ffi::c_uint;
+pub type _bindgen_ty_6 = ::core::ffi::c_uchar;
 /// @struct otExtAddress
 ///
 /// Represents the IEEE 802.15.4 Extended Address.
@@ -2926,7 +2926,7 @@ pub const otRadioKeyType_OT_KEY_TYPE_LITERAL_KEY: otRadioKeyType = 0;
 ///< Use Reference to Key.
 pub const otRadioKeyType_OT_KEY_TYPE_KEY_REF: otRadioKeyType = 1;
 /// Defines constants about key types.
-pub type otRadioKeyType = ::core::ffi::c_uint;
+pub type otRadioKeyType = ::core::ffi::c_uchar;
 /// Represents the IEEE 802.15.4 Header IE (Information Element) related information of a radio frame.
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -3330,7 +3330,7 @@ pub const otRadioState_OT_RADIO_STATE_TRANSMIT: otRadioState = 3;
 pub const otRadioState_OT_RADIO_STATE_INVALID: otRadioState = 255;
 /// Represents the state of a radio.
 /// Initially, a radio is in the Disabled state.
-pub type otRadioState = ::core::ffi::c_uint;
+pub type otRadioState = ::core::ffi::c_uchar;
 /// Represents radio coexistence metrics.
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -4540,7 +4540,7 @@ pub const OT_ADDRESS_ORIGIN_DHCPV6: _bindgen_ty_7 = 2;
 ///< Manually assigned address
 pub const OT_ADDRESS_ORIGIN_MANUAL: _bindgen_ty_7 = 3;
 /// IPv6 Address origins
-pub type _bindgen_ty_7 = ::core::ffi::c_uint;
+pub type _bindgen_ty_7 = ::core::ffi::c_uchar;
 /// Represents an IPv6 network interface unicast address.
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -4857,7 +4857,7 @@ pub const OT_ECN_CAPABLE_1: _bindgen_ty_8 = 1;
 ///< Congestion encountered (CE)
 pub const OT_ECN_MARKED: _bindgen_ty_8 = 3;
 /// ECN statuses, represented as in the IP header.
-pub type _bindgen_ty_8 = ::core::ffi::c_uint;
+pub type _bindgen_ty_8 = ::core::ffi::c_uchar;
 /// Represents the local and peer IPv6 socket addresses.
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -5056,7 +5056,7 @@ pub const OT_IP6_PROTO_NONE: _bindgen_ty_9 = 59;
 ///< Destination Options for IPv6
 pub const OT_IP6_PROTO_DST_OPTS: _bindgen_ty_9 = 60;
 /// Internet Protocol Numbers.
-pub type _bindgen_ty_9 = ::core::ffi::c_uint;
+pub type _bindgen_ty_9 = ::core::ffi::c_uchar;
 unsafe extern "C" {
     /// Brings the IPv6 interface up or down.
     ///
@@ -5906,7 +5906,7 @@ pub const otNetifIdentifier_OT_NETIF_THREAD: otNetifIdentifier = 1;
 ///< The Backbone interface.
 pub const otNetifIdentifier_OT_NETIF_BACKBONE: otNetifIdentifier = 2;
 /// Defines the OpenThread network interface identifiers.
-pub type otNetifIdentifier = ::core::ffi::c_uint;
+pub type otNetifIdentifier = ::core::ffi::c_uchar;
 unsafe extern "C" {
     /// Allocate a new message buffer for sending a UDP message.
     ///
@@ -6693,7 +6693,7 @@ pub const otMeshcopTlvType_OT_MESHCOP_TLV_DISCOVERYRESPONSE: otMeshcopTlvType = 
 ///< meshcop Joiner Advertisement TLV
 pub const otMeshcopTlvType_OT_MESHCOP_TLV_JOINERADVERTISEMENT: otMeshcopTlvType = 241;
 /// Represents meshcop TLV types.
-pub type otMeshcopTlvType = ::core::ffi::c_uint;
+pub type otMeshcopTlvType = ::core::ffi::c_uchar;
 /// Pointer is called when a response to a MGMT_SET request is received or times out.
 ///
 /// @param[in]  aResult   A result of the operation.
@@ -7016,7 +7016,7 @@ pub const otJoinerState_OT_JOINER_STATE_CONNECTED: otJoinerState = 3;
 pub const otJoinerState_OT_JOINER_STATE_ENTRUST: otJoinerState = 4;
 pub const otJoinerState_OT_JOINER_STATE_JOINED: otJoinerState = 5;
 /// Defines the Joiner State.
-pub type otJoinerState = ::core::ffi::c_uint;
+pub type otJoinerState = ::core::ffi::c_uchar;
 /// Represents a Joiner Discerner.
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -7133,14 +7133,14 @@ pub const otCommissionerState_OT_COMMISSIONER_STATE_PETITION: otCommissionerStat
 ///< Commissioner role is active.
 pub const otCommissionerState_OT_COMMISSIONER_STATE_ACTIVE: otCommissionerState = 2;
 /// Defines the Commissioner State.
-pub type otCommissionerState = ::core::ffi::c_uint;
+pub type otCommissionerState = ::core::ffi::c_uchar;
 pub const otCommissionerJoinerEvent_OT_COMMISSIONER_JOINER_START: otCommissionerJoinerEvent = 0;
 pub const otCommissionerJoinerEvent_OT_COMMISSIONER_JOINER_CONNECTED: otCommissionerJoinerEvent = 1;
 pub const otCommissionerJoinerEvent_OT_COMMISSIONER_JOINER_FINALIZE: otCommissionerJoinerEvent = 2;
 pub const otCommissionerJoinerEvent_OT_COMMISSIONER_JOINER_END: otCommissionerJoinerEvent = 3;
 pub const otCommissionerJoinerEvent_OT_COMMISSIONER_JOINER_REMOVED: otCommissionerJoinerEvent = 4;
 /// Defines a Joiner Event on the Commissioner.
-pub type otCommissionerJoinerEvent = ::core::ffi::c_uint;
+pub type otCommissionerJoinerEvent = ::core::ffi::c_uchar;
 /// Represents the steering data.
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -7378,7 +7378,7 @@ pub const otJoinerInfoType_OT_JOINER_INFO_TYPE_EUI64: otJoinerInfoType = 1;
 ///< Joiner Discerner is specified (`mSharedId.mDiscerner` in `otJoinerInfo`).
 pub const otJoinerInfoType_OT_JOINER_INFO_TYPE_DISCERNER: otJoinerInfoType = 2;
 /// Defines a Joiner Info Type.
-pub type otJoinerInfoType = ::core::ffi::c_uint;
+pub type otJoinerInfoType = ::core::ffi::c_uchar;
 /// Represents a Joiner Info.
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -7740,7 +7740,7 @@ pub const otMacFilterAddressMode_OT_MAC_FILTER_ADDRESS_MODE_ALLOWLIST: otMacFilt
 ///< Denylist address filter mode is enabled.
 pub const otMacFilterAddressMode_OT_MAC_FILTER_ADDRESS_MODE_DENYLIST: otMacFilterAddressMode = 2;
 /// Defines address mode of the mac filter.
-pub type otMacFilterAddressMode = ::core::ffi::c_uint;
+pub type otMacFilterAddressMode = ::core::ffi::c_uchar;
 /// Represents a Mac Filter entry.
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -8833,7 +8833,7 @@ pub const otDeviceRole_OT_DEVICE_ROLE_ROUTER: otDeviceRole = 3;
 ///< The Thread Leader role.
 pub const otDeviceRole_OT_DEVICE_ROLE_LEADER: otDeviceRole = 4;
 /// Represents a Thread device role.
-pub type otDeviceRole = ::core::ffi::c_uint;
+pub type otDeviceRole = ::core::ffi::c_uchar;
 /// Represents an MLE Link Mode configuration.
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -10435,7 +10435,7 @@ pub const otPlatResetReason_OT_PLAT_RESET_REASON_COUNT: otPlatResetReason = 9;
 /// Enumeration of possible reset reason codes.
 ///
 /// These are in the same order as the Spinel reset reason codes.
-pub type otPlatResetReason = ::core::ffi::c_uint;
+pub type otPlatResetReason = ::core::ffi::c_uchar;
 unsafe extern "C" {
     /// Returns the reason for the last platform reset.
     ///
@@ -10492,7 +10492,7 @@ pub const otPlatMcuPowerState_OT_PLAT_MCU_POWER_STATE_OFF: otPlatMcuPowerState =
 /// external trigger (a "poke") to NCP before it can communicate with the NCP or not.
 ///
 /// After a reset, the MCU power state MUST be `OT_PLAT_POWER_STATE_ON`.
-pub type otPlatMcuPowerState = ::core::ffi::c_uint;
+pub type otPlatMcuPowerState = ::core::ffi::c_uchar;
 unsafe extern "C" {
     /// Sets the desired MCU power state.
     ///
@@ -10578,7 +10578,7 @@ pub const OT_SETTINGS_KEY_VENDOR_RESERVED_MAX: _bindgen_ty_10 = 65535;
 /// Note: When adding a new settings key, if the settings corresponding to the key contains security sensitive
 ///       information, the developer MUST add the key to the array `aSensitiveKeys` which is passed in
 ///       `otPlatSettingsInit()`.
-pub type _bindgen_ty_10 = ::core::ffi::c_uint;
+pub type _bindgen_ty_10 = ::core::ffi::c_ushort;
 unsafe extern "C" {
     /// Performs any initialization for the settings subsystem, if necessary.
     ///
@@ -10881,7 +10881,7 @@ pub const otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_REGISTERED: otSrpClientI
 ///< Item is removed.
 pub const otSrpClientItemState_OT_SRP_CLIENT_ITEM_STATE_REMOVED: otSrpClientItemState = 7;
 /// Specifies an SRP client item (service or host info) state.
-pub type otSrpClientItemState = ::core::ffi::c_uint;
+pub type otSrpClientItemState = ::core::ffi::c_uchar;
 /// Represents an SRP client host info.
 #[repr(C)]
 #[derive(Copy, Clone)]

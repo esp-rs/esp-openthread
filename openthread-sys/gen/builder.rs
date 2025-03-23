@@ -110,6 +110,10 @@ impl OpenThreadBuilder {
                 canon(&self.crate_root_path.join("openthread").join("include"))
             )]);
 
+        if self.short_enums() {
+            builder = builder.clang_arg("-fshort-enums");
+        }
+
         if let Some(sysroot_path) = self
             .clang_sysroot_path
             .clone()
@@ -205,6 +209,17 @@ impl OpenThreadBuilder {
     #[allow(unused)]
     pub fn track(file_or_dir: &Path) {
         println!("cargo:rerun-if-changed={}", file_or_dir.display())
+    }
+
+    /// A heuristics (we don't have anything better) to signal to `bindgen` whether the GCC toolchain
+    /// for the target emits short enums or not.
+    ///
+    /// This is necessary for `bindgen` to generate correct bindings for OpenThread.
+    /// See https://github.com/rust-lang/rust-bindgen/issues/711
+    fn short_enums(&self) -> bool {
+        let target = std::env::var("TARGET").unwrap();
+
+        target.ends_with("-eabi") || target.ends_with("-eabihf")
     }
 }
 
