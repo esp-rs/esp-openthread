@@ -20,9 +20,7 @@ use esp_ieee802154::Ieee802154;
 use log::info;
 
 use openthread::esp::EspRadio;
-use openthread::{
-    OpenThread, OperationalDataset, OtResources, OtUdpResources, ThreadTimestamp, UdpSocket,
-};
+use openthread::{OpenThread, OtResources, OtUdpResources, UdpSocket};
 
 use rand_core::RngCore;
 
@@ -47,6 +45,12 @@ const BOUND_PORT: u16 = 1212;
 
 const UDP_SOCKETS_BUF: usize = 1280;
 const UDP_MAX_SOCKETS: usize = 2;
+
+const THREAD_DATASET: &str = if let Some(dataset) = option_env!("THREAD_DATASET") {
+    dataset
+} else {
+    "0e080000000000010000000300000b35060004001fffe002083a90e3a319a904940708fd1fa298dbd1e3290510fe0458f7db96354eaa6041b880ea9c0f030f4f70656e5468726561642d35386431010258d10410888f813c61972446ab616ee3c556a5910c0402a0f7f8"
+};
 
 #[esp_hal_embassy::main]
 async fn main(spawner: Spawner) {
@@ -81,26 +85,9 @@ async fn main(spawner: Spawner) {
 
     spawner.spawn(run_ot_ip_info(ot)).unwrap();
 
-    let dataset = OperationalDataset {
-        active_timestamp: Some(ThreadTimestamp {
-            seconds: 1,
-            ticks: 0,
-            authoritative: false,
-        }),
-        network_key: Some([
-            0xfe, 0x04, 0x58, 0xf7, 0xdb, 0x96, 0x35, 0x4e, 0xaa, 0x60, 0x41, 0xb8, 0x80, 0xea,
-            0x9c, 0x0f,
-        ]),
-        network_name: Some("OpenThread-58d1"),
-        extended_pan_id: Some([0x3a, 0x90, 0xe3, 0xa3, 0x19, 0xa9, 0x04, 0x94]),
-        pan_id: Some(0x58d1),
-        channel: Some(11),
-        channel_mask: Some(0x07fff800),
-        ..OperationalDataset::default()
-    };
-    info!("Dataset: {:?}", dataset);
+    info!("Dataset: {THREAD_DATASET}");
 
-    ot.set_active_dataset(&dataset).unwrap();
+    ot.set_active_dataset_tlv_hexstr(THREAD_DATASET).unwrap();
     ot.enable_ipv6(true).unwrap();
     ot.enable_thread(true).unwrap();
 
