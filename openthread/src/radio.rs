@@ -2,6 +2,7 @@
 //!
 //! `openthread` operates the radio in terms of this trait, which is implemented by the actual radio driver.
 
+use core::cell::Cell;
 use core::fmt::Debug;
 use core::future::Future;
 use core::mem::MaybeUninit;
@@ -417,11 +418,18 @@ where
         psdu: &[u8],
         ack_psdu_buf: Option<&mut [u8]>,
     ) -> Result<Option<PsduMeta>, Self::Error> {
+        trace!("MacRadio, about to transmit");
+
         if self.radio.mac_caps().contains(MacCapabilities::TX_ACK) {
-            self.radio
+            let result = self
+                .radio
                 .transmit(psdu, ack_psdu_buf)
                 .await
-                .map_err(Self::Error::Io)
+                .map_err(Self::Error::Io);
+
+            trace!("MacRadio, transmitted");
+
+            result
         } else {
             self.radio
                 .transmit(psdu, None)
@@ -435,7 +443,7 @@ where
             if self.mac_header.needs_ack() {
                 let psdu_seq = self.mac_header.seq;
 
-                debug!("MacRadio, about to receive transmit ACK");
+                trace!("MacRadio, about to receive transmit ACK");
 
                 let result = {
                     let mut ack = pin!(self.radio.receive(&mut self.ack_psdu_buf));
@@ -447,7 +455,7 @@ where
                 let ack_meta = match result {
                     Either::First(result) => result.map_err(Self::Error::RxAckFailed)?,
                     Either::Second(_) => {
-                        debug!("MacRadio, transmit ACK timeout");
+                        trace!("MacRadio, transmit ACK timeout");
 
                         Err(Self::Error::RxAckTimeout)?
                     }
@@ -466,12 +474,12 @@ where
                     ack_psdu_buf[..ack_psdu.len()].copy_from_slice(ack_psdu);
                 }
 
-                debug!("MacRadio, transmitted with ACK");
+                trace!("MacRadio, transmitted with ACK");
 
                 //Ok(Some(ack_meta)) TODO
                 Ok(None)
             } else {
-                debug!("MacRadio, transmitted");
+                trace!("MacRadio, transmitted without ACK");
 
                 Ok(None)
             }
@@ -480,7 +488,7 @@ where
 
     async fn receive(&mut self, psdu_buf: &mut [u8]) -> Result<PsduMeta, Self::Error> {
         loop {
-            debug!("MacRadio, about to receive");
+            trace!("MacRadio, about to receive");
 
             let psdu_meta = self
                 .radio
@@ -492,13 +500,13 @@ where
 
             let psdu = &psdu_buf[..psdu_meta.len];
 
-            debug!("MacRadio, received: {psdu:02x?}, meta: {psdu_meta:?}");
+            trace!("MacRadio, received: {psdu:02x?}, meta: {psdu_meta:?}");
 
             let mac_caps = self.radio.mac_caps();
 
             if mac_caps != MacCapabilities::all() {
                 if self.mac_header.load(psdu).is_none() {
-                    debug!(
+                    trace!(
                         "MacRadio, received frame with invalid MAC header, dropping: {psdu:02x?}"
                     );
                     continue;
@@ -509,7 +517,7 @@ where
                         && self.mac_header.pan_id != MacHeader::BROADCAST_PAN_ID
                         && self.mac_header.pan_id != self.pan_id
                     {
-                        debug!("MacRadio, filtering out frame: {psdu:02x?}, PAN ID does not match");
+                        trace!("MacRadio, filtering out frame: {psdu:02x?}, PAN ID does not match");
                         continue;
                     }
 
@@ -517,7 +525,7 @@ where
                         && self.mac_header.dst_short_addr != MacHeader::BROADCAST_SHORT_ADDR
                         && self.mac_header.dst_short_addr != self.short_addr
                     {
-                        debug!("MacRadio, filtering out frame: {psdu:02x?}, short address does not match");
+                        trace!("MacRadio, filtering out frame: {psdu:02x?}, short address does not match");
                         continue;
                     }
 
@@ -525,7 +533,7 @@ where
                         && self.mac_header.dst_ext_addr != MacHeader::BROADCAST_EXT_ADDR
                         && self.mac_header.dst_ext_addr != self.ext_addr
                     {
-                        debug!("MacRadio, filtering out frame: {psdu:02x?}, extended address does not match");
+                        trace!("MacRadio, filtering out frame: {psdu:02x?}, extended address does not match");
                         continue;
                     }
 
@@ -533,7 +541,7 @@ where
                         let ack_len = self.mac_header.prep_ack(&mut self.ack_psdu_buf);
                         let ack_psdu = &mut self.ack_psdu_buf[..ack_len];
 
-                        debug!("MacRadio, about to transmit ACK: {ack_psdu:02x?}");
+                        trace!("MacRadio, about to transmit ACK: {ack_psdu:02x?}");
 
                         if self.timer.now() < ack_at {
                             self.timer.wait(ack_at).await;
@@ -547,7 +555,7 @@ where
                 }
             }
 
-            debug!("MacRadio, received frame: {psdu:02x?}");
+            trace!("MacRadio, received frame: {psdu:02x?}");
 
             break Ok(psdu_meta);
         }
@@ -646,12 +654,12 @@ pub struct ProxyRadio<'a> {
     request: Sender<'a, CriticalSectionRawMutex, ProxyRadioRequest>,
     /// The response channel from the PHY radio
     response: Receiver<'a, CriticalSectionRawMutex, ProxyRadioResponse>,
+    /// Whether the current response was cancelled
+    /// If set to `true`, this means we have to drop the pending response from the driver
+    cancelled: Cell<bool>,
     /// The signal to indicate a new request to the PHY radio, so that
     /// the PHY radio can cancel the current request (if any) and start processing the new one
-    new_request: &'a Signal<CriticalSectionRawMutex, ()>,
-    /// The signal to indicate to us that the PHY radio has started processing the new request
-    /// so that we can fill the request and wait for the response
-    request_processing_started: &'a Signal<CriticalSectionRawMutex, ()>,
+    cancel: &'a Signal<CriticalSectionRawMutex, ()>,
     /// The current radio configuration
     config: Config,
 }
@@ -683,29 +691,15 @@ impl<'a> ProxyRadio<'a> {
         state.split(caps)
     }
 
-    /// Indicate to the driver that the current requerst (if any) should be cancelled
-    /// and start a new one.
-    async fn initiate_new_request(&mut self) {
-        // NOTE: The sequence of signals amd waits is important here
-        // so as not to deadlock
+    /// Clear any cancelled response from the driver
+    async fn process_cancelled(&mut self) {
+        if self.cancelled.get() {
+            self.response.receive().await;
 
-        // Start clean
-        self.request_processing_started.reset();
-
-        // Indicate cancellation to the driver
-        self.new_request.signal(());
-
-        // Wait for the driver to indicate that the request processing has started
-        // The driver should be waiting for the new request at its channel at this point,
-        // which is empty because it had cleared it before notifying us
-        self.request_processing_started.wait().await;
-
-        // Clear the response channel; the PHY runner is async-locking the request channel
-        // first, and only after that - the response channel, so we can be sure that the driver
-        // is not waiting on the response channel at this point
-        let resp = self.response.try_receive();
-        if resp.is_some() {
+            self.cancelled.set(false);
             self.response.receive_done();
+
+            trace!("ProxyRadio, cancelled response cleared");
         }
     }
 }
@@ -737,7 +731,7 @@ impl Radio for ProxyRadio<'_> {
     ) -> Result<Option<PsduMeta>, Self::Error> {
         trace!("ProxyRadio, about to transmit: {psdu:02x?}");
 
-        self.initiate_new_request().await;
+        self.process_cancelled().await;
 
         {
             let req = self.request.send().await;
@@ -751,6 +745,14 @@ impl Radio for ProxyRadio<'_> {
 
             self.request.send_done();
         }
+
+        self.cancelled.set(true);
+        let _guard = scopeguard::guard((), |_| {
+            if self.cancelled.get() {
+                trace!("ProxyRadio, transmit request cancelled");
+                self.cancel.signal(())
+            }
+        });
 
         trace!("ProxyRadio, waiting for transmit response");
 
@@ -774,7 +776,10 @@ impl Radio for ProxyRadio<'_> {
 
         let result = resp.result.map(|_| psdu_meta);
 
+        self.cancelled.set(false);
         self.response.receive_done();
+
+        trace!("ProxyRadio, transmit response done");
 
         result
     }
@@ -782,7 +787,7 @@ impl Radio for ProxyRadio<'_> {
     async fn receive(&mut self, psdu_buf: &mut [u8]) -> Result<PsduMeta, Self::Error> {
         trace!("ProxyRadio, about to receive");
 
-        self.initiate_new_request().await;
+        self.process_cancelled().await;
 
         {
             let req = self.request.send().await;
@@ -795,6 +800,14 @@ impl Radio for ProxyRadio<'_> {
 
             self.request.send_done();
         }
+
+        self.cancelled.set(true);
+        let _guard = scopeguard::guard((), |_| {
+            if self.cancelled.get() {
+                trace!("ProxyRadio, receive request cancelled");
+                self.cancel.signal(());
+            }
+        });
 
         trace!("ProxyRadio, waiting for receive response");
 
@@ -813,11 +826,13 @@ impl Radio for ProxyRadio<'_> {
                     rssi: resp.psdu_rssi,
                 };
 
+                self.cancelled.set(false);
                 self.response.receive_done();
 
                 Ok(psdu_meta)
             }
             Err(e) => {
+                self.cancelled.set(false);
                 self.response.receive_done();
                 Err(e)
             }
@@ -833,10 +848,7 @@ pub struct PhyRadioRunner<'a> {
     response: Sender<'a, CriticalSectionRawMutex, ProxyRadioResponse>,
     /// The signal to indicate a new request from the proxy radio
     /// which means we have to cancel processing the current request (if any)
-    new_request: &'a Signal<CriticalSectionRawMutex, ()>,
-    /// The signal to indicate the start of a new request processing
-    /// to the proxy radio, so that it can fill the request and wait for the response
-    request_processing_started: &'a Signal<CriticalSectionRawMutex, ()>,
+    cancel: &'a Signal<CriticalSectionRawMutex, ()>,
 }
 
 impl PhyRadioRunner<'_> {
@@ -854,30 +866,32 @@ impl PhyRadioRunner<'_> {
 
         debug!("PhyRadioRunner, running");
 
-        self.new_request.wait().await;
-
         loop {
-            debug!("PhyRadioRunner, new request received");
+            {
+                let request = self.request.receive().await;
 
-            let req = self.request.try_receive();
-            if req.is_some() {
-                // Make room for the new request
+                if Self::process(&mut radio, request, &mut self.response, self.cancel)
+                    .await
+                    .is_some()
+                {
+                    trace!("PhyRadioRunner, processing done");
+                } else {
+                    // Processing was cancelled by a new request, need to send an "interrupted" response
+
+                    let response = self.response.send().await;
+
+                    response.psdu.clear();
+                    response.result = Err(RadioErrorKind::Other);
+                    response.psdu_channel = 0;
+                    response.psdu_rssi = None;
+
+                    self.response.send_done();
+
+                    trace!("PhyRadioRunner, processing cancelled");
+                }
+
                 self.request.receive_done();
             }
-
-            // Indicate to the other end of the pipe the start of a new request processing
-            self.request_processing_started.signal(());
-
-            if self.process(&mut radio).await.is_none() {
-                // Processing was cancelled by a new request,
-                // no need to wait for the next one
-                debug!("PhyRadioRunner, processing cancelled");
-                continue;
-            }
-
-            // Processing was done successfully (meaning, the request was processed and not cancelled)
-            // wait for a new one to arrive
-            self.new_request.wait().await;
         }
     }
 
@@ -887,21 +901,27 @@ impl PhyRadioRunner<'_> {
     //
     // Updating the configuration, as well as the TX/RX operation might be cancelled at
     // any moment, if a new request arrives.
-    async fn process<T>(&mut self, mut radio: T) -> Option<()>
+    async fn process<T>(
+        mut radio: T,
+        request: &mut ProxyRadioRequest,
+        response_sender: &mut Sender<'_, impl RawMutex, ProxyRadioResponse>,
+        cancel: &Signal<impl RawMutex, ()>,
+    ) -> Option<()>
     where
         T: Radio,
     {
-        // Always lock the request first; see `cancel_current_request`
-        let request = Self::with_cancel(self.request.receive(), self.new_request).await?;
+        let response = Self::with_cancel(response_sender.send(), cancel).await?;
 
-        let response = Self::with_cancel(self.response.send(), self.new_request).await?;
+        response.psdu.clear();
+        response.psdu_channel = 0;
+        response.psdu_rssi = None;
 
-        debug!("PhyRadioRunner, processing request: {request:?}");
+        trace!("PhyRadioRunner, processing request: {request:?}");
 
         // Always first set the configuration relevant for the current TX/RX request
         // The PHY driver should have intelligence to skip the configuration update if the new
         // configuration is the same as the current one
-        let result = Self::with_cancel(radio.set_config(&request.config), self.new_request)
+        let result = Self::with_cancel(radio.set_config(&request.config), cancel)
             .await?
             .map_err(|e| e.kind());
 
@@ -911,7 +931,6 @@ impl PhyRadioRunner<'_> {
             // Setting driver configuration resulted in an error, so skip the rest of the processing
             result
         } else {
-            response.psdu.clear();
             response
                 .psdu
                 .resize_default(response.psdu.capacity())
@@ -920,12 +939,12 @@ impl PhyRadioRunner<'_> {
             let result = if request.tx {
                 Self::with_cancel(
                     radio.transmit(&request.psdu, Some(&mut response.psdu)),
-                    self.new_request,
+                    cancel,
                 )
                 .await?
                 .map_err(|e| e.kind())
             } else {
-                Self::with_cancel(radio.receive(&mut response.psdu), self.new_request)
+                Self::with_cancel(radio.receive(&mut response.psdu), cancel)
                     .await?
                     .map_err(|e| e.kind())
                     .map(Some)
@@ -938,8 +957,6 @@ impl PhyRadioRunner<'_> {
             } else {
                 // No frame returned, so clear the response fields
                 response.psdu.clear();
-                response.psdu_channel = 0;
-                response.psdu_rssi = None;
             }
 
             result.map(|_| ())
@@ -949,8 +966,7 @@ impl PhyRadioRunner<'_> {
 
         debug!("PhyRadioRunner, processed response: {response:?}");
 
-        self.request.receive_done();
-        self.response.send_done();
+        response_sender.send_done();
 
         Some(())
     }
@@ -986,9 +1002,7 @@ struct ProxyRadioState<'a> {
     /// The response channel from the PHY radio
     response: Channel<'a, CriticalSectionRawMutex, ProxyRadioResponse>,
     /// The signal to indicate a new request to the PHY radio
-    new_request: Signal<CriticalSectionRawMutex, ()>,
-    /// The signal of the PHY radio to indicate the start of a new request processing
-    request_processing_started: Signal<CriticalSectionRawMutex, ()>,
+    cancel: Signal<CriticalSectionRawMutex, ()>,
 }
 
 impl<'a> ProxyRadioState<'a> {
@@ -1004,8 +1018,7 @@ impl<'a> ProxyRadioState<'a> {
         Self {
             request: Channel::new(request_buf),
             response: Channel::new(response_buf),
-            new_request: Signal::new(),
-            request_processing_started: Signal::new(),
+            cancel: Signal::new(),
         }
     }
 
@@ -1019,15 +1032,14 @@ impl<'a> ProxyRadioState<'a> {
                 caps,
                 request: request_sender,
                 response: response_receiver,
-                new_request: &self.new_request,
-                request_processing_started: &self.request_processing_started,
+                cancelled: Cell::new(false),
+                cancel: &self.cancel,
                 config: Config::new(),
             },
             PhyRadioRunner {
                 request: request_receiver,
                 response: response_sender,
-                new_request: &self.new_request,
-                request_processing_started: &self.request_processing_started,
+                cancel: &self.cancel,
             },
         )
     }

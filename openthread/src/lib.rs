@@ -55,15 +55,15 @@ use sys::{
     otChangedFlags, otDeviceRole, otDeviceRole_OT_DEVICE_ROLE_CHILD,
     otDeviceRole_OT_DEVICE_ROLE_DETACHED, otDeviceRole_OT_DEVICE_ROLE_DISABLED,
     otDeviceRole_OT_DEVICE_ROLE_LEADER, otDeviceRole_OT_DEVICE_ROLE_ROUTER, otError,
-    otError_OT_ERROR_DROP, otError_OT_ERROR_FAILED, otError_OT_ERROR_NONE,
-    otError_OT_ERROR_NO_BUFS, otInstance, otInstanceFinalize, otInstanceInitSingle, otIp6Address,
-    otIp6GetUnicastAddresses, otIp6IsEnabled, otIp6NewMessageFromBuffer, otIp6Send,
-    otIp6SetEnabled, otIp6SetReceiveCallback, otMessage, otMessageFree,
-    otMessagePriority_OT_MESSAGE_PRIORITY_NORMAL, otMessageRead, otMessageSettings,
-    otOperationalDataset, otOperationalDatasetTlvs, otPlatAlarmMilliFired, otPlatRadioReceiveDone,
-    otPlatRadioTxDone, otPlatRadioTxStarted, otRadioFrame, otSetStateChangedCallback,
-    otTaskletsProcess, otThreadGetDeviceRole, otThreadGetExtendedPanId, otThreadSetEnabled,
-    OT_RADIO_FRAME_MAX_SIZE,
+    otError_OT_ERROR_ABORT, otError_OT_ERROR_CHANNEL_ACCESS_FAILURE, otError_OT_ERROR_DROP,
+    otError_OT_ERROR_NONE, otError_OT_ERROR_NO_ACK, otError_OT_ERROR_NO_BUFS, otInstance,
+    otInstanceFinalize, otInstanceInitSingle, otIp6Address, otIp6GetUnicastAddresses,
+    otIp6IsEnabled, otIp6NewMessageFromBuffer, otIp6Send, otIp6SetEnabled, otIp6SetReceiveCallback,
+    otMessage, otMessageFree, otMessagePriority_OT_MESSAGE_PRIORITY_NORMAL, otMessageRead,
+    otMessageSettings, otOperationalDataset, otOperationalDatasetTlvs, otPlatAlarmMilliFired,
+    otPlatRadioReceiveDone, otPlatRadioTxDone, otPlatRadioTxStarted, otRadioFrame,
+    otSetStateChangedCallback, otTaskletsProcess, otThreadGetDeviceRole, otThreadGetExtendedPanId,
+    otThreadSetEnabled, OT_RADIO_FRAME_MAX_SIZE,
 };
 
 /// A newtype wrapper over the native OpenThread error type (`otError`).
@@ -640,6 +640,8 @@ impl<'a> OpenThread<'a> {
                                 let mut ot = self.activate();
                                 let state = ot.state();
 
+                                info!("!!! Tx interrupted by new command: {new_cmd:?}");
+
                                 // Reporting send failure because we got interrupted
                                 // by a new command
                                 unsafe {
@@ -647,7 +649,7 @@ impl<'a> OpenThread<'a> {
                                         state.ot.instance,
                                         &mut state.ot.radio_resources.snd_frame,
                                         core::ptr::null_mut(),
-                                        otError_OT_ERROR_FAILED,
+                                        otError_OT_ERROR_ABORT,
                                     );
                                 }
 
@@ -660,35 +662,48 @@ impl<'a> OpenThread<'a> {
                                 let state = ot.state();
                                 let radio_resources = &mut state.ot.radio_resources;
 
-                                let ack_frame_ptr = if let Ok(Some(ack_psdu_meta)) = &result {
-                                    let ack_psdu = &ack_psdu_buf[..ack_psdu_meta.len];
+                                match result {
+                                    Ok(maybe_ack_psdu_meta) => {
+                                        debug!("Tx done, ack frame: {maybe_ack_psdu_meta:?}");
 
-                                    fill_frame(
-                                        &mut radio_resources.ack_frame,
-                                        &mut radio_resources.ack_psdu,
-                                        *ack_psdu_meta,
-                                        ack_psdu,
-                                    );
+                                        let ack_frame_ptr =
+                                            if let Some(ack_psdu_meta) = maybe_ack_psdu_meta {
+                                                let ack_psdu = &ack_psdu_buf[..ack_psdu_meta.len];
 
-                                    &mut radio_resources.ack_frame
-                                } else {
-                                    core::ptr::null_mut()
-                                };
+                                                fill_frame(
+                                                    &mut radio_resources.ack_frame,
+                                                    &mut radio_resources.ack_psdu,
+                                                    ack_psdu_meta,
+                                                    ack_psdu,
+                                                );
 
-                                unsafe {
-                                    otPlatRadioTxDone(
-                                        state.ot.instance,
-                                        &mut state.ot.radio_resources.snd_frame,
-                                        ack_frame_ptr,
-                                        if result.is_ok() {
-                                            otError_OT_ERROR_NONE
-                                        } else {
-                                            otError_OT_ERROR_FAILED
-                                        },
-                                    );
+                                                &mut radio_resources.ack_frame
+                                            } else {
+                                                core::ptr::null_mut()
+                                            };
+
+                                        unsafe {
+                                            otPlatRadioTxDone(
+                                                state.ot.instance,
+                                                &mut state.ot.radio_resources.snd_frame,
+                                                ack_frame_ptr,
+                                                otError_OT_ERROR_NONE,
+                                            );
+                                        }
+                                    }
+                                    Err(err) => {
+                                        warn!("Tx failed: {err:?}");
+
+                                        unsafe {
+                                            otPlatRadioTxDone(
+                                                state.ot.instance,
+                                                &mut state.ot.radio_resources.snd_frame,
+                                                core::ptr::null_mut(),
+                                                Self::to_ot_err(err),
+                                            );
+                                        }
+                                    }
                                 }
-
-                                debug!("Tx done: {result:?}");
 
                                 break;
                             }
@@ -714,41 +729,42 @@ impl<'a> OpenThread<'a> {
                                 let mut ot = self.activate();
                                 let state = ot.state();
 
-                                let Ok(rcv_psdu_meta) = result else {
-                                    warn!("Rx failed: {result:?}");
+                                match result {
+                                    Ok(rcv_psdu_meta) => {
+                                        let rcv_psdu = &psdu_buf[..rcv_psdu_meta.len];
 
-                                    // Reporting receive failure because we got a driver error
-                                    unsafe {
-                                        otPlatRadioReceiveDone(
-                                            state.ot.instance,
-                                            core::ptr::null_mut(),
-                                            otError_OT_ERROR_FAILED,
+                                        debug!("Rx done, got frame: {rcv_psdu_meta:?}, {rcv_psdu:02x?}");
+
+                                        let instance = state.ot.instance;
+                                        let radio_resources = &mut state.ot.radio_resources;
+
+                                        fill_frame(
+                                            &mut radio_resources.rcv_frame,
+                                            &mut radio_resources.rcv_psdu,
+                                            rcv_psdu_meta,
+                                            rcv_psdu,
                                         );
+
+                                        unsafe {
+                                            otPlatRadioReceiveDone(
+                                                instance,
+                                                &mut radio_resources.rcv_frame,
+                                                otError_OT_ERROR_NONE,
+                                            );
+                                        }
                                     }
+                                    Err(err) => {
+                                        warn!("Rx failed: {err:?}");
 
-                                    break;
-                                };
-
-                                let rcv_psdu = &psdu_buf[..rcv_psdu_meta.len];
-
-                                debug!("Rx done, got frame: {rcv_psdu_meta:?}, {rcv_psdu:02x?}");
-
-                                let instance = state.ot.instance;
-                                let radio_resources = &mut state.ot.radio_resources;
-
-                                fill_frame(
-                                    &mut radio_resources.rcv_frame,
-                                    &mut radio_resources.rcv_psdu,
-                                    rcv_psdu_meta,
-                                    rcv_psdu,
-                                );
-
-                                unsafe {
-                                    otPlatRadioReceiveDone(
-                                        instance,
-                                        &mut radio_resources.rcv_frame,
-                                        otError_OT_ERROR_NONE,
-                                    );
+                                        // Reporting receive failure because we got a driver error
+                                        unsafe {
+                                            otPlatRadioReceiveDone(
+                                                state.ot.instance,
+                                                core::ptr::null_mut(),
+                                                Self::to_ot_err(err),
+                                            );
+                                        }
+                                    }
                                 }
 
                                 break;
@@ -788,6 +804,17 @@ impl<'a> OpenThread<'a> {
     /// - While the returned `OpenThread` instance is in scope, the data of `OtState` stays mutably borrowed
     fn activate(&self) -> OtContext<'_> {
         OtContext::activate_for(self)
+    }
+
+    fn to_ot_err<E>(err: E) -> otError
+    where
+        E: RadioError,
+    {
+        match err.kind() {
+            RadioErrorKind::TxFailed => otError_OT_ERROR_CHANNEL_ACCESS_FAILURE,
+            RadioErrorKind::TxAckFailed => otError_OT_ERROR_NO_ACK,
+            _ => otError_OT_ERROR_ABORT,
+        }
     }
 }
 
@@ -942,7 +969,7 @@ impl OtActiveState<'_> {
         let udp = self
             .udp
             .as_mut()
-            .ok_or(OtError::new(otError_OT_ERROR_FAILED))?;
+            .ok_or(OtError::new(crate::sys::otError_OT_ERROR_FAILED))?;
 
         Ok(udp)
     }
@@ -956,7 +983,7 @@ impl OtActiveState<'_> {
         let srp = self
             .srp
             .as_mut()
-            .ok_or(OtError::new(otError_OT_ERROR_FAILED))?;
+            .ok_or(OtError::new(crate::sys::otError_OT_ERROR_FAILED))?;
 
         Ok(srp)
     }

@@ -387,10 +387,10 @@ impl OpenThread<'_> {
             .step_by(2)
             .zip(dataset.chars().skip(1).step_by(2))
         {
-            let byte = chf
+            let byte = (chf
                 .to_digit(16)
                 .ok_or(OtError::new(otError_OT_ERROR_INVALID_ARGS))?
-                << 4
+                << 4)
                 | chs
                     .to_digit(16)
                     .ok_or(OtError::new(otError_OT_ERROR_INVALID_ARGS))?;
