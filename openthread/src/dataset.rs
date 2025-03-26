@@ -6,8 +6,7 @@ use crate::sys::{
     otDatasetParseTlvs, otDatasetSetActive, otDatasetSetActiveTlvs, otDatasetSetPending,
     otDatasetSetPendingTlvs, otError_OT_ERROR_INVALID_ARGS, otError_OT_ERROR_NO_BUFS,
     otExtendedPanId, otMeshLocalPrefix, otNetworkKey, otOperationalDataset,
-    otOperationalDatasetTlvs, otPskc,
-    otTimestamp,
+    otOperationalDatasetTlvs, otPskc, otTimestamp,
 };
 use crate::{ot, OpenThread, OtActiveState, OtError};
 

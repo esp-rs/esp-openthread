@@ -8,10 +8,10 @@ use log::{debug, info, trace};
 
 use crate::signal::Signal;
 use crate::sys::{
-    otError_OT_ERROR_DROP, otError_OT_ERROR_NO_BUFS, otIp6Address,
-    otIp6Address__bindgen_ty_1, otMessage, otMessageAppend, otMessageGetLength, otMessageInfo,
-    otMessageRead, otNetifIdentifier_OT_NETIF_THREAD, otSockAddr, otUdpBind, otUdpClose,
-    otUdpConnect, otUdpNewMessage, otUdpOpen, otUdpSend, otUdpSocket,
+    otError_OT_ERROR_DROP, otError_OT_ERROR_NO_BUFS, otIp6Address, otIp6Address__bindgen_ty_1,
+    otMessage, otMessageAppend, otMessageGetLength, otMessageInfo, otMessageRead,
+    otNetifIdentifier_OT_NETIF_THREAD, otSockAddr, otUdpBind, otUdpClose, otUdpConnect,
+    otUdpNewMessage, otUdpOpen, otUdpSend, otUdpSocket,
 };
 use crate::{ot, to_ot_addr, to_sock_addr, OpenThread, OtContext, OtError};
 
@@ -186,7 +186,7 @@ impl<'a> UdpSocket<'a> {
             assert!(socket.taken);
 
             let mut message_info = otMessageInfo::default();
-            
+
             message_info.mSockAddr = socket.ot_socket.mSockName.mAddress;
             message_info.mSockPort = socket.ot_socket.mSockName.mPort;
             message_info.mPeerPort = dst.port();

@@ -16,7 +16,7 @@ use embassy_futures::select::{Either, Either3};
 
 use embassy_time::Instant;
 
-use log::{debug, info, trace, warn};
+use log::{debug, info, trace};
 
 use platform::OT_ACTIVE_STATE;
 
@@ -640,8 +640,6 @@ impl<'a> OpenThread<'a> {
                                 let mut ot = self.activate();
                                 let state = ot.state();
 
-                                info!("!!! Tx interrupted by new command: {new_cmd:?}");
-
                                 // Reporting send failure because we got interrupted
                                 // by a new command
                                 unsafe {
@@ -692,7 +690,7 @@ impl<'a> OpenThread<'a> {
                                         }
                                     }
                                     Err(err) => {
-                                        warn!("Tx failed: {err:?}");
+                                        debug!("Tx failed: {err:?}");
 
                                         unsafe {
                                             otPlatRadioTxDone(
@@ -754,7 +752,7 @@ impl<'a> OpenThread<'a> {
                                         }
                                     }
                                     Err(err) => {
-                                        warn!("Rx failed: {err:?}");
+                                        debug!("Rx failed: {err:?}");
 
                                         // Reporting receive failure because we got a driver error
                                         unsafe {
