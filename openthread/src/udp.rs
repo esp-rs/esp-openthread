@@ -8,7 +8,7 @@ use log::{debug, info, trace};
 
 use crate::signal::Signal;
 use crate::sys::{
-    __BindgenBitfieldUnit, otError_OT_ERROR_DROP, otError_OT_ERROR_NO_BUFS, otIp6Address,
+    otError_OT_ERROR_DROP, otError_OT_ERROR_NO_BUFS, otIp6Address,
     otIp6Address__bindgen_ty_1, otMessage, otMessageAppend, otMessageGetLength, otMessageInfo,
     otMessageRead, otNetifIdentifier_OT_NETIF_THREAD, otSockAddr, otUdpBind, otUdpClose,
     otUdpConnect, otUdpNewMessage, otUdpOpen, otUdpSend, otUdpSocket,
@@ -185,17 +185,12 @@ impl<'a> UdpSocket<'a> {
             let socket = &mut udp.sockets[self.slot];
             assert!(socket.taken);
 
-            let mut message_info = otMessageInfo {
-                mSockAddr: socket.ot_socket.mSockName.mAddress,
-                mPeerAddr: otIp6Address {
-                    mFields: otIp6Address__bindgen_ty_1 { m32: [0, 0, 0, 0] },
-                },
-                mSockPort: socket.ot_socket.mSockName.mPort,
-                mPeerPort: dst.port(),
-                mHopLimit: 0,
-                _bitfield_align_1: [0u8; 0],
-                _bitfield_1: __BindgenBitfieldUnit::new([0u8; 1]),
-            };
+            let mut message_info = otMessageInfo::default();
+            
+            message_info.mSockAddr = socket.ot_socket.mSockName.mAddress;
+            message_info.mSockPort = socket.ot_socket.mSockName.mPort;
+            message_info.mPeerPort = dst.port();
+            message_info.mHopLimit = 0;
 
             if let Some(src) = src {
                 message_info.mSockAddr.mFields.m8 = src.ip().octets();

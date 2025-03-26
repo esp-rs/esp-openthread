@@ -6,7 +6,7 @@ use crate::sys::{
     otDatasetParseTlvs, otDatasetSetActive, otDatasetSetActiveTlvs, otDatasetSetPending,
     otDatasetSetPendingTlvs, otError_OT_ERROR_INVALID_ARGS, otError_OT_ERROR_NO_BUFS,
     otExtendedPanId, otMeshLocalPrefix, otNetworkKey, otOperationalDataset,
-    otOperationalDatasetComponents, otOperationalDatasetTlvs, otPskc, otSecurityPolicy,
+    otOperationalDatasetTlvs, otPskc,
     otTimestamp,
 };
 use crate::{ot, OpenThread, OtActiveState, OtError};
@@ -140,22 +140,21 @@ impl OperationalDataset<'_> {
         }
 
         if let Some(security_policy) = &dataset.security_policy {
-            raw_dataset.mSecurityPolicy = otSecurityPolicy {
-                mRotationTime: security_policy.rotation_time,
-                _bitfield_align_1: [0u8; 0],
-                _bitfield_1: otSecurityPolicy::new_bitfield_1(
-                    security_policy.obtain_network_key_enabled,
-                    security_policy.native_commissioning_enabled,
-                    security_policy.routers_enabled,
-                    security_policy.external_commissioning_enabled,
-                    security_policy.commercial_commissioning_enabled,
-                    security_policy.autonomous_enrollment_enabled,
-                    security_policy.network_key_provisioning_enabled,
-                    security_policy.toble_link_enabled,
-                    security_policy.non_ccm_routers_enabled,
-                    security_policy.version_threshold_for_routing,
-                ),
-            };
+            raw_dataset.mSecurityPolicy = Default::default();
+
+            let s = &mut raw_dataset.mSecurityPolicy;
+            s.mRotationTime = security_policy.rotation_time;
+            s.set_mObtainNetworkKeyEnabled(security_policy.obtain_network_key_enabled);
+            s.set_mNativeCommissioningEnabled(security_policy.native_commissioning_enabled);
+            s.set_mRoutersEnabled(security_policy.routers_enabled);
+            s.set_mExternalCommissioningEnabled(security_policy.external_commissioning_enabled);
+            s.set_mCommercialCommissioningEnabled(security_policy.commercial_commissioning_enabled);
+            s.set_mAutonomousEnrollmentEnabled(security_policy.autonomous_enrollment_enabled);
+            s.set_mNetworkKeyProvisioningEnabled(security_policy.network_key_provisioning_enabled);
+            s.set_mTobleLinkEnabled(security_policy.toble_link_enabled);
+            s.set_mNonCcmRoutersEnabled(security_policy.non_ccm_routers_enabled);
+            s.set_mVersionThresholdForRouting(security_policy.version_threshold_for_routing);
+
             security_policy_present = true;
         }
 
@@ -164,21 +163,21 @@ impl OperationalDataset<'_> {
             channel_mask_present = true;
         }
 
-        raw_dataset.mComponents = otOperationalDatasetComponents {
-            mIsActiveTimestampPresent: active_timestamp_present,
-            mIsPendingTimestampPresent: pending_timestamp_present,
-            mIsNetworkKeyPresent: network_key_present,
-            mIsNetworkNamePresent: network_name_present,
-            mIsExtendedPanIdPresent: extended_pan_present,
-            mIsMeshLocalPrefixPresent: mesh_local_prefix_present,
-            mIsDelayPresent: delay_present,
-            mIsPanIdPresent: pan_id_present,
-            mIsChannelPresent: channel_present,
-            mIsPskcPresent: pskc_present,
-            mIsSecurityPolicyPresent: security_policy_present,
-            mIsChannelMaskPresent: channel_mask_present,
-            mIsWakeupChannelPresent: false, // we are not supporting Thread in Mobile in this lib right now
-        };
+        raw_dataset.mComponents = Default::default();
+
+        let c = &mut raw_dataset.mComponents;
+        c.set_mIsActiveTimestampPresent(active_timestamp_present);
+        c.set_mIsPendingTimestampPresent(pending_timestamp_present);
+        c.set_mIsNetworkKeyPresent(network_key_present);
+        c.set_mIsNetworkNamePresent(network_name_present);
+        c.set_mIsExtendedPanIdPresent(extended_pan_present);
+        c.set_mIsMeshLocalPrefixPresent(mesh_local_prefix_present);
+        c.set_mIsDelayPresent(delay_present);
+        c.set_mIsPanIdPresent(pan_id_present);
+        c.set_mIsChannelPresent(channel_present);
+        c.set_mIsPskcPresent(pskc_present);
+        c.set_mIsSecurityPolicyPresent(security_policy_present);
+        c.set_mIsChannelMaskPresent(channel_mask_present);
     }
 
     /// Extract the regular and extended PAN IDs from the raw dataset.
@@ -188,11 +187,11 @@ impl OperationalDataset<'_> {
         (
             raw_dataset
                 .mComponents
-                .mIsPanIdPresent
+                .mIsPanIdPresent()
                 .then_some(raw_dataset.mPanId),
             raw_dataset
                 .mComponents
-                .mIsExtendedPanIdPresent
+                .mIsExtendedPanIdPresent()
                 .then_some(raw_dataset.mExtendedPanId.m8),
         )
     }

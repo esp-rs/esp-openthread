@@ -229,9 +229,9 @@ pub const __CC_SUPPORTS_DYNAMIC_ARRAY_INIT: u32 = 1;
 pub const EXIT_FAILURE: u32 = 1;
 pub const EXIT_SUCCESS: u32 = 0;
 pub const RAND_MAX: u32 = 2147483647;
+pub const __bool_true_false_are_defined: u32 = 1;
 pub const true_: u32 = 1;
 pub const false_: u32 = 0;
-pub const __bool_true_false_are_defined: u32 = 1;
 pub const __int20: u32 = 2;
 pub const __int20__: u32 = 2;
 pub const __INT8: &[u8; 3] = b"hh\0";
@@ -256,14 +256,13 @@ pub const __int_fast16_t_defined: u32 = 1;
 pub const __int_fast32_t_defined: u32 = 1;
 pub const __int_fast64_t_defined: u32 = 1;
 pub const WINT_MIN: u32 = 0;
-pub const __GNUC_VA_LIST: u32 = 1;
 pub const OT_LOG_LEVEL_NONE: u32 = 0;
 pub const OT_LOG_LEVEL_CRIT: u32 = 1;
 pub const OT_LOG_LEVEL_WARN: u32 = 2;
 pub const OT_LOG_LEVEL_NOTE: u32 = 3;
 pub const OT_LOG_LEVEL_INFO: u32 = 4;
 pub const OT_LOG_LEVEL_DEBG: u32 = 5;
-pub const OPENTHREAD_API_VERSION: u32 = 450;
+pub const OPENTHREAD_API_VERSION: u32 = 340;
 pub const OT_UPTIME_STRING_SIZE: u32 = 24;
 pub const OT_CHANGED_IP6_ADDRESS_ADDED: u32 = 1;
 pub const OT_CHANGED_IP6_ADDRESS_REMOVED: u32 = 2;
@@ -311,7 +310,6 @@ pub const OT_IP6_PREFIX_SIZE: u32 = 8;
 pub const OT_IP6_PREFIX_BITSIZE: u32 = 64;
 pub const OT_IP6_IID_SIZE: u32 = 8;
 pub const OT_IP6_ADDRESS_SIZE: u32 = 16;
-pub const OT_IP6_ADDRESS_BITSIZE: u32 = 128;
 pub const OT_IP6_HEADER_SIZE: u32 = 40;
 pub const OT_IP6_HEADER_PROTO_OFFSET: u32 = 6;
 pub const OT_IP6_ADDRESS_STRING_SIZE: u32 = 40;
@@ -358,13 +356,6 @@ pub const OT_STEERING_DATA_MAX_LENGTH: u32 = 16;
 pub const OT_JOINER_MAX_PSKD_LENGTH: u32 = 32;
 pub const OT_MAC_FILTER_FIXED_RSS_DISABLED: u32 = 127;
 pub const OT_MAC_FILTER_ITERATOR_INIT: u32 = 0;
-pub const OT_LINK_CSL_PERIOD_TEN_SYMBOLS_UNIT_IN_USEC: u32 = 160;
-pub const OT_THREAD_VERSION_INVALID: u32 = 0;
-pub const OT_THREAD_VERSION_1_1: u32 = 2;
-pub const OT_THREAD_VERSION_1_2: u32 = 3;
-pub const OT_THREAD_VERSION_1_3: u32 = 4;
-pub const OT_THREAD_VERSION_1_3_1: u32 = 5;
-pub const OT_THREAD_VERSION_1_4: u32 = 5;
 pub const OT_NETWORK_BASE_TLV_MAX_LENGTH: u32 = 254;
 pub const OT_NETWORK_MAX_ROUTER_ID: u32 = 62;
 pub const OT_NEIGHBOR_INFO_ITERATOR_INIT: u32 = 0;
@@ -374,12 +365,11 @@ pub const OT_DNS_MAX_NAME_SIZE: u32 = 255;
 pub const OT_DNS_MAX_LABEL_SIZE: u32 = 64;
 pub const OT_DNS_TXT_KEY_MIN_LENGTH: u32 = 1;
 pub const OT_DNS_TXT_KEY_MAX_LENGTH: u32 = 9;
-pub const OT_DNS_TXT_KEY_ITER_MAX_LENGTH: u32 = 64;
 pub const OPENTHREAD_CONFIG_SRP_CLIENT_AUTO_START_API_ENABLE: u32 = 1;
 pub type wchar_t = ::core::ffi::c_int;
 #[repr(C)]
 #[repr(align(16))]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct max_align_t {
     pub __clang_max_align_nonce1: ::core::ffi::c_longlong,
     pub __bindgen_padding_0: u64,
@@ -437,6 +427,24 @@ pub struct _mbstate_t {
 pub union _mbstate_t__bindgen_ty_1 {
     pub __wch: wint_t,
     pub __wchb: [::core::ffi::c_uchar; 4usize],
+}
+impl Default for _mbstate_t__bindgen_ty_1 {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
+impl Default for _mbstate_t {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
 }
 pub type _iconv_t = *mut ::core::ffi::c_void;
 pub type __clock_t = ::core::ffi::c_ulong;
@@ -504,8 +512,17 @@ pub struct _Bigint {
     pub _wds: ::core::ffi::c_int,
     pub _x: [__ULong; 1usize],
 }
+impl Default for _Bigint {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct __tm {
     pub __tm_sec: ::core::ffi::c_int,
     pub __tm_min: ::core::ffi::c_int,
@@ -525,6 +542,15 @@ pub struct _on_exit_args {
     pub _fntypes: __ULong,
     pub _is_cxa: __ULong,
 }
+impl Default for _on_exit_args {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct _atexit {
@@ -533,11 +559,29 @@ pub struct _atexit {
     pub _fns: [::core::option::Option<unsafe extern "C" fn()>; 32usize],
     pub _on_exit_args_ptr: *mut _on_exit_args,
 }
+impl Default for _atexit {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct __sbuf {
     pub _base: *mut ::core::ffi::c_uchar,
     pub _size: ::core::ffi::c_int,
+}
+impl Default for __sbuf {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
 }
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -593,6 +637,15 @@ pub struct __sFILE {
     pub _mbstate: _mbstate_t,
     pub _flags2: ::core::ffi::c_int,
 }
+impl Default for __sFILE {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
 pub type __FILE = __sFILE;
 unsafe extern "C" {
     pub static mut __sf: [__FILE; 3usize];
@@ -604,11 +657,20 @@ pub struct _glue {
     pub _niobs: ::core::ffi::c_int,
     pub _iobs: *mut __FILE,
 }
+impl Default for _glue {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
 unsafe extern "C" {
     pub static mut __sglue: _glue;
 }
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct _rand48 {
     pub _seed: [::core::ffi::c_ushort; 3usize],
     pub _mult: [::core::ffi::c_ushort; 3usize],
@@ -622,6 +684,15 @@ pub struct _mprec {
     pub _result_k: ::core::ffi::c_int,
     pub _p5s: *mut _Bigint,
     pub _freelist: *mut *mut _Bigint,
+}
+impl Default for _mprec {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
 }
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -637,6 +708,15 @@ pub struct _misc_reent {
     pub _mbsrtowcs_state: _mbstate_t,
     pub _wcrtomb_state: _mbstate_t,
     pub _wcsrtombs_state: _mbstate_t,
+}
+impl Default for _misc_reent {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
 }
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -665,6 +745,15 @@ pub struct _reent {
     pub __sf: *mut __FILE,
     pub _misc: *mut _misc_reent,
     pub _signal_buf: *mut ::core::ffi::c_char,
+}
+impl Default for _reent {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
 }
 unsafe extern "C" {
     pub fn __assert(
@@ -712,19 +801,19 @@ unsafe extern "C" {
     ) -> ::core::ffi::c_int;
 }
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct div_t {
     pub quot: ::core::ffi::c_int,
     pub rem: ::core::ffi::c_int,
 }
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct ldiv_t {
     pub quot: ::core::ffi::c_long,
     pub rem: ::core::ffi::c_long,
 }
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct lldiv_t {
     pub quot: ::core::ffi::c_longlong,
     pub rem: ::core::ffi::c_longlong,
@@ -1328,24 +1417,6 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub fn quick_exit(arg1: ::core::ffi::c_int) -> !;
 }
-pub type intmax_t = __intmax_t;
-pub type uintmax_t = __uintmax_t;
-pub type int_least8_t = __int_least8_t;
-pub type uint_least8_t = __uint_least8_t;
-pub type int_least16_t = __int_least16_t;
-pub type uint_least16_t = __uint_least16_t;
-pub type int_least32_t = __int_least32_t;
-pub type uint_least32_t = __uint_least32_t;
-pub type int_least64_t = __int_least64_t;
-pub type uint_least64_t = __uint_least64_t;
-pub type int_fast8_t = ::core::ffi::c_schar;
-pub type uint_fast8_t = ::core::ffi::c_uchar;
-pub type int_fast16_t = ::core::ffi::c_short;
-pub type uint_fast16_t = ::core::ffi::c_ushort;
-pub type int_fast32_t = ::core::ffi::c_int;
-pub type uint_fast32_t = ::core::ffi::c_uint;
-pub type int_fast64_t = ::core::ffi::c_longlong;
-pub type uint_fast64_t = ::core::ffi::c_ulonglong;
 /// No error.
 pub const otError_OT_ERROR_NONE: otError = 0;
 /// Operational failed.
@@ -1433,8 +1504,26 @@ unsafe extern "C" {
     /// @returns  A string representation of an otError.
     pub fn otThreadErrorToString(aError: otError) -> *const ::core::ffi::c_char;
 }
-pub type va_list = __builtin_va_list;
 pub type __gnuc_va_list = __builtin_va_list;
+pub type va_list = __builtin_va_list;
+pub type intmax_t = __intmax_t;
+pub type uintmax_t = __uintmax_t;
+pub type int_least8_t = __int_least8_t;
+pub type uint_least8_t = __uint_least8_t;
+pub type int_least16_t = __int_least16_t;
+pub type uint_least16_t = __uint_least16_t;
+pub type int_least32_t = __int_least32_t;
+pub type uint_least32_t = __uint_least32_t;
+pub type int_least64_t = __int_least64_t;
+pub type uint_least64_t = __uint_least64_t;
+pub type int_fast8_t = ::core::ffi::c_schar;
+pub type uint_fast8_t = ::core::ffi::c_uchar;
+pub type int_fast16_t = ::core::ffi::c_short;
+pub type uint_fast16_t = ::core::ffi::c_ushort;
+pub type int_fast32_t = ::core::ffi::c_int;
+pub type uint_fast32_t = ::core::ffi::c_uint;
+pub type int_fast64_t = ::core::ffi::c_longlong;
+pub type uint_fast64_t = ::core::ffi::c_ulonglong;
 /// Represents the log level.
 pub type otLogLevel = ::core::ffi::c_int;
 ///< OpenThread API
@@ -1554,21 +1643,6 @@ unsafe extern "C" {
     pub fn otInstanceInitSingle() -> *mut otInstance;
 }
 unsafe extern "C" {
-    /// Initializes the OpenThread instance.
-    ///
-    /// This function initializes OpenThread and prepares it for subsequent OpenThread API calls. This function must be
-    /// called before any other calls to OpenThread. This method utilizes static buffer to initialize the OpenThread
-    /// instance.
-    ///
-    /// This function is available and can only be used when support for multiple OpenThread static instances is
-    /// enabled (`OPENTHREAD_CONFIG_MULTIPLE_STATIC_INSTANCE_ENABLE`)
-    ///
-    /// @param[in] aIdx The index of the OpenThread instance to initialize.
-    ///
-    /// @returns  A pointer to the new OpenThread instance.
-    pub fn otInstanceInitMultiple(aIdx: u8) -> *mut otInstance;
-}
-unsafe extern "C" {
     /// Gets the instance identifier.
     ///
     /// The instance identifier is set to a random value when the instance is constructed, and then its value will not
@@ -1677,18 +1751,6 @@ unsafe extern "C" {
     pub fn otInstanceReset(aInstance: *mut otInstance);
 }
 unsafe extern "C" {
-    /// Triggers a platform reset to bootloader mode, if supported.
-    ///
-    /// Requires `OPENTHREAD_CONFIG_PLATFORM_BOOTLOADER_MODE_ENABLE`.
-    ///
-    /// @param[in]  aInstance  A pointer to an OpenThread instance.
-    ///
-    /// @retval OT_ERROR_NONE         Reset to bootloader successfully.
-    /// @retval OT_ERROR_BUSY         Failed due to another operation is ongoing.
-    /// @retval OT_ERROR_NOT_CAPABLE  Not capable of resetting to bootloader.
-    pub fn otInstanceResetToBootloader(aInstance: *mut otInstance) -> otError;
-}
-unsafe extern "C" {
     /// Deletes all the settings stored on non-volatile memory, and then triggers a platform reset.
     ///
     /// @param[in]  aInstance  A pointer to an OpenThread instance.
@@ -1741,127 +1803,14 @@ pub const otMessagePriority_OT_MESSAGE_PRIORITY_NORMAL: otMessagePriority = 1;
 pub const otMessagePriority_OT_MESSAGE_PRIORITY_HIGH: otMessagePriority = 2;
 /// Defines the OpenThread message priority levels.
 pub type otMessagePriority = ::core::ffi::c_uint;
-///< Message from Thread Netif.
-pub const otMessageOrigin_OT_MESSAGE_ORIGIN_THREAD_NETIF: otMessageOrigin = 0;
-///< Message from a trusted source on host.
-pub const otMessageOrigin_OT_MESSAGE_ORIGIN_HOST_TRUSTED: otMessageOrigin = 1;
-///< Message from an untrusted source on host.
-pub const otMessageOrigin_OT_MESSAGE_ORIGIN_HOST_UNTRUSTED: otMessageOrigin = 2;
-/// Defines the OpenThread message origins.
-pub type otMessageOrigin = ::core::ffi::c_uint;
 /// Represents a message settings.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otMessageSettings {
     ///< TRUE if the message should be secured at Layer 2.
     pub mLinkSecurityEnabled: bool,
     ///< Priority level (MUST be a `OT_MESSAGE_PRIORITY_*` from `otMessagePriority`).
     pub mPriority: u8,
-}
-/// Represents link-specific information for messages received from the Thread radio.
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct otThreadLinkInfo {
-    ///< Source PAN ID
-    pub mPanId: u16,
-    ///< 802.15.4 Channel
-    pub mChannel: u8,
-    ///< Received Signal Strength in dBm (averaged over fragments)
-    pub mRss: i8,
-    ///< Average Link Quality Indicator (averaged over fragments)
-    pub mLqi: u8,
-    pub _bitfield_align_1: [u8; 0],
-    pub _bitfield_1: __BindgenBitfieldUnit<[u8; 1usize]>,
-    ///< The time sync sequence.
-    pub mTimeSyncSeq: u8,
-    ///< The time offset to the Thread network time, in microseconds.
-    pub mNetworkTimeOffset: i64,
-    ///< Radio link type.
-    pub mRadioType: u8,
-}
-impl otThreadLinkInfo {
-    #[inline]
-    pub fn mLinkSecurity(&self) -> bool {
-        unsafe { ::core::mem::transmute(self._bitfield_1.get(0usize, 1u8) as u8) }
-    }
-    #[inline]
-    pub fn set_mLinkSecurity(&mut self, val: bool) {
-        unsafe {
-            let val: u8 = ::core::mem::transmute(val);
-            self._bitfield_1.set(0usize, 1u8, val as u64)
-        }
-    }
-    #[inline]
-    pub unsafe fn mLinkSecurity_raw(this: *const Self) -> bool {
-        unsafe {
-            ::core::mem::transmute(<__BindgenBitfieldUnit<[u8; 1usize]>>::raw_get(
-                ::core::ptr::addr_of!((*this)._bitfield_1),
-                0usize,
-                1u8,
-            ) as u8)
-        }
-    }
-    #[inline]
-    pub unsafe fn set_mLinkSecurity_raw(this: *mut Self, val: bool) {
-        unsafe {
-            let val: u8 = ::core::mem::transmute(val);
-            <__BindgenBitfieldUnit<[u8; 1usize]>>::raw_set(
-                ::core::ptr::addr_of_mut!((*this)._bitfield_1),
-                0usize,
-                1u8,
-                val as u64,
-            )
-        }
-    }
-    #[inline]
-    pub fn mIsDstPanIdBroadcast(&self) -> bool {
-        unsafe { ::core::mem::transmute(self._bitfield_1.get(1usize, 1u8) as u8) }
-    }
-    #[inline]
-    pub fn set_mIsDstPanIdBroadcast(&mut self, val: bool) {
-        unsafe {
-            let val: u8 = ::core::mem::transmute(val);
-            self._bitfield_1.set(1usize, 1u8, val as u64)
-        }
-    }
-    #[inline]
-    pub unsafe fn mIsDstPanIdBroadcast_raw(this: *const Self) -> bool {
-        unsafe {
-            ::core::mem::transmute(<__BindgenBitfieldUnit<[u8; 1usize]>>::raw_get(
-                ::core::ptr::addr_of!((*this)._bitfield_1),
-                1usize,
-                1u8,
-            ) as u8)
-        }
-    }
-    #[inline]
-    pub unsafe fn set_mIsDstPanIdBroadcast_raw(this: *mut Self, val: bool) {
-        unsafe {
-            let val: u8 = ::core::mem::transmute(val);
-            <__BindgenBitfieldUnit<[u8; 1usize]>>::raw_set(
-                ::core::ptr::addr_of_mut!((*this)._bitfield_1),
-                1usize,
-                1u8,
-                val as u64,
-            )
-        }
-    }
-    #[inline]
-    pub fn new_bitfield_1(
-        mLinkSecurity: bool,
-        mIsDstPanIdBroadcast: bool,
-    ) -> __BindgenBitfieldUnit<[u8; 1usize]> {
-        let mut __bindgen_bitfield_unit: __BindgenBitfieldUnit<[u8; 1usize]> = Default::default();
-        __bindgen_bitfield_unit.set(0usize, 1u8, {
-            let mLinkSecurity: u8 = unsafe { ::core::mem::transmute(mLinkSecurity) };
-            mLinkSecurity as u64
-        });
-        __bindgen_bitfield_unit.set(1usize, 1u8, {
-            let mIsDstPanIdBroadcast: u8 = unsafe { ::core::mem::transmute(mIsDstPanIdBroadcast) };
-            mIsDstPanIdBroadcast as u64
-        });
-        __bindgen_bitfield_unit
-    }
 }
 unsafe extern "C" {
     /// Free an allocated message buffer.
@@ -1953,55 +1902,6 @@ unsafe extern "C" {
     pub fn otMessageIsLinkSecurityEnabled(aMessage: *const otMessage) -> bool;
 }
 unsafe extern "C" {
-    /// Indicates whether or not the message is allowed to be looped back to host.
-    ///
-    /// @param[in]  aMessage  A pointer to a message buffer.
-    ///
-    /// @retval TRUE   If the message is allowed to be looped back to host.
-    /// @retval FALSE  If the message is not allowed to be looped back to host.
-    pub fn otMessageIsLoopbackToHostAllowed(aMessage: *const otMessage) -> bool;
-}
-unsafe extern "C" {
-    /// Sets whether or not the message is allowed to be looped back to host.
-    ///
-    /// @param[in]  aMessage              A pointer to a message buffer.
-    /// @param[in]  aAllowLoopbackToHost  Whether to allow the message to be looped back to host.
-    pub fn otMessageSetLoopbackToHostAllowed(aMessage: *mut otMessage, aAllowLoopbackToHost: bool);
-}
-unsafe extern "C" {
-    /// Indicates whether the given message may be looped back in a case of a multicast destination address.
-    ///
-    /// If @p aMessage is used along with an `otMessageInfo`, the `mMulticastLoop` field from `otMessageInfo` structure
-    /// takes precedence and will be used instead of the the value set on @p aMessage.
-    ///
-    /// This API is mainly intended for use along with `otIp6Send()` which expects an already prepared IPv6 message.
-    ///
-    /// @param[in]  aMessage A pointer to the message.
-    pub fn otMessageIsMulticastLoopEnabled(aMessage: *mut otMessage) -> bool;
-}
-unsafe extern "C" {
-    /// Controls whether the given message may be looped back in a case of a multicast destination address.
-    ///
-    /// @param[in]  aMessage  A pointer to the message.
-    /// @param[in]  aEnabled  The configuration value.
-    pub fn otMessageSetMulticastLoopEnabled(aMessage: *mut otMessage, aEnabled: bool);
-}
-unsafe extern "C" {
-    /// Gets the message origin.
-    ///
-    /// @param[in]  aMessage  A pointer to a message buffer.
-    ///
-    /// @returns The message origin.
-    pub fn otMessageGetOrigin(aMessage: *const otMessage) -> otMessageOrigin;
-}
-unsafe extern "C" {
-    /// Sets the message origin.
-    ///
-    /// @param[in]  aMessage  A pointer to a message buffer.
-    /// @param[in]  aOrigin   The message origin.
-    pub fn otMessageSetOrigin(aMessage: *mut otMessage, aOrigin: otMessageOrigin);
-}
-unsafe extern "C" {
     /// Sets/forces the message to be forwarded using direct transmission.
     /// Default setting for a new message is `false`.
     ///
@@ -2013,23 +1913,8 @@ unsafe extern "C" {
 unsafe extern "C" {
     /// Returns the average RSS (received signal strength) associated with the message.
     ///
-    /// @param[in]  aMessage  A pointer to a message buffer.
-    ///
     /// @returns The average RSS value (in dBm) or OT_RADIO_RSSI_INVALID if no average RSS is available.
     pub fn otMessageGetRss(aMessage: *const otMessage) -> i8;
-}
-unsafe extern "C" {
-    /// Retrieves the link-specific information for a message received over Thread radio.
-    ///
-    /// @param[in] aMessage    The message from which to retrieve `otThreadLinkInfo`.
-    /// @pram[out] aLinkInfo   A pointer to an `otThreadLinkInfo` to populate.
-    ///
-    /// @retval OT_ERROR_NONE       Successfully retrieved the link info, @p `aLinkInfo` is updated.
-    /// @retval OT_ERROR_NOT_FOUND  Message origin is not `OT_MESSAGE_ORIGIN_THREAD_NETIF`.
-    pub fn otMessageGetThreadLinkInfo(
-        aMessage: *const otMessage,
-        aLinkInfo: *mut otThreadLinkInfo,
-    ) -> otError;
 }
 unsafe extern "C" {
     /// Append bytes to a message.
@@ -2109,9 +1994,18 @@ pub struct otMessageQueue {
     ///< Opaque data used by the implementation.
     pub mData: *mut ::core::ffi::c_void,
 }
+impl Default for otMessageQueue {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
 /// Represents information about a message queue.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otMessageQueueInfo {
     ///< Number of messages in the queue.
     pub mNumMessages: u16,
@@ -2122,7 +2016,7 @@ pub struct otMessageQueueInfo {
 }
 /// Represents the message buffer information for different queues used by OpenThread stack.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otBufferInfo {
     ///< The total number of buffers in the messages pool (0xffff if unknown).
     pub mTotalBuffers: u16,
@@ -2270,6 +2164,15 @@ pub struct otCryptoKey {
     ///< The PSA key ref (requires `mKey` to be NULL).
     pub mKeyRef: u32,
 }
+impl Default for otCryptoKey {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
 /// @struct otCryptoContext
 ///
 /// Stores the context object for platform APIs.
@@ -2281,11 +2184,20 @@ pub struct otCryptoContext {
     ///< The length of the context in bytes.
     pub mContextSize: u16,
 }
+impl Default for otCryptoContext {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
 /// @struct otPlatCryptoSha256Hash
 ///
 /// Represents a SHA-256 hash.
 #[repr(C, packed)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otPlatCryptoSha256Hash {
     ///< Hash bytes.
     pub m8: [u8; 32usize],
@@ -2301,6 +2213,15 @@ pub struct otPlatCryptoEcdsaKeyPair {
     pub mDerBytes: [u8; 125usize],
     pub mDerLength: u8,
 }
+impl Default for otPlatCryptoEcdsaKeyPair {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
 /// @struct otPlatCryptoEcdsaPublicKey
 ///
 /// Represents a ECDSA public key.
@@ -2310,6 +2231,15 @@ pub struct otPlatCryptoEcdsaKeyPair {
 #[derive(Copy, Clone)]
 pub struct otPlatCryptoEcdsaPublicKey {
     pub m8: [u8; 64usize],
+}
+impl Default for otPlatCryptoEcdsaPublicKey {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
 }
 /// @struct otPlatCryptoEcdsaSignature
 ///
@@ -2321,6 +2251,15 @@ pub struct otPlatCryptoEcdsaPublicKey {
 #[derive(Copy, Clone)]
 pub struct otPlatCryptoEcdsaSignature {
     pub m8: [u8; 64usize],
+}
+impl Default for otPlatCryptoEcdsaSignature {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
 }
 unsafe extern "C" {
     /// Initialize the Crypto module.
@@ -2820,11 +2759,6 @@ unsafe extern "C" {
     /// @param[in]     aIterationCounter  Iteration count.
     /// @param[in]     aKeyLen            Length of generated key in bytes.
     /// @param[out]    aKey               A pointer to the generated key.
-    ///
-    /// @retval OT_ERROR_NONE          A new key-pair was generated successfully.
-    /// @retval OT_ERROR_NO_BUFS       Failed to allocate buffer for key generation.
-    /// @retval OT_ERROR_NOT_CAPABLE   Feature not supported.
-    /// @retval OT_ERROR_FAILED        Failed to generate key.
     pub fn otPlatCryptoPbkdf2GenerateKey(
         aPassword: *const u8,
         aPasswordLen: u16,
@@ -2833,7 +2767,7 @@ unsafe extern "C" {
         aIterationCounter: u32,
         aKeyLen: u16,
         aKey: *mut u8,
-    ) -> otError;
+    );
 }
 ///< aMaxPHYPacketSize (IEEE 802.15.4-2006)
 pub const OT_RADIO_FRAME_MAX_SIZE: _bindgen_ty_2 = 127;
@@ -2891,7 +2825,7 @@ pub type _bindgen_ty_4 = ::core::ffi::c_uint;
 /// Represents radio capabilities.
 ///
 /// The value is a bit-field indicating the capabilities supported by the radio. See `OT_RADIO_CAPS_*` definitions.
-pub type otRadioCaps = u16;
+pub type otRadioCaps = u8;
 ///< Radio supports no capability.
 pub const OT_RADIO_CAPS_NONE: _bindgen_ty_5 = 0;
 ///< Radio supports AckTime event.
@@ -2910,10 +2844,6 @@ pub const OT_RADIO_CAPS_TRANSMIT_SEC: _bindgen_ty_5 = 32;
 pub const OT_RADIO_CAPS_TRANSMIT_TIMING: _bindgen_ty_5 = 64;
 ///< Radio supports rx at specific time.
 pub const OT_RADIO_CAPS_RECEIVE_TIMING: _bindgen_ty_5 = 128;
-///< Radio supports RxOnWhenIdle handling.
-pub const OT_RADIO_CAPS_RX_ON_WHEN_IDLE: _bindgen_ty_5 = 256;
-///< Radio supports setting per-frame transmit power.
-pub const OT_RADIO_CAPS_TRANSMIT_FRAME_POWER: _bindgen_ty_5 = 512;
 /// Defines constants that are used to indicate different radio capabilities. See `otRadioCaps`.
 pub type _bindgen_ty_5 = ::core::ffi::c_uint;
 /// Represents the IEEE 802.15.4 PAN ID.
@@ -2934,7 +2864,7 @@ pub type _bindgen_ty_6 = ::core::ffi::c_uint;
 ///
 /// Represents the IEEE 802.15.4 Extended Address.
 #[repr(C, packed)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otExtAddress {
     ///< IEEE 802.15.4 Extended Address bytes
     pub m8: [u8; 8usize],
@@ -2943,7 +2873,7 @@ pub struct otExtAddress {
 ///
 /// Represents a MAC Key.
 #[repr(C, packed)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otMacKey {
     ///< MAC Key bytes.
     pub m8: [u8; 16usize],
@@ -2966,6 +2896,24 @@ pub union otMacKeyMaterial__bindgen_ty_1 {
     ///< Key stored as literal.
     pub mKey: otMacKey,
 }
+impl Default for otMacKeyMaterial__bindgen_ty_1 {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
+impl Default for otMacKeyMaterial {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
 ///< Use Literal Keys.
 pub const otRadioKeyType_OT_KEY_TYPE_LITERAL_KEY: otRadioKeyType = 0;
 ///< Use Reference to Key.
@@ -2974,7 +2922,7 @@ pub const otRadioKeyType_OT_KEY_TYPE_KEY_REF: otRadioKeyType = 1;
 pub type otRadioKeyType = ::core::ffi::c_uint;
 /// Represents the IEEE 802.15.4 Header IE (Information Element) related information of a radio frame.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otRadioIeInfo {
     ///< The time offset to the Thread network time.
     pub mNetworkTimeOffset: i64,
@@ -3012,17 +2960,10 @@ pub struct otRadioFrame__bindgen_ty_1__bindgen_ty_1 {
     pub mAesKey: *const otMacKeyMaterial,
     ///< The pointer to the Header IE(s) related information.
     pub mIeInfo: *mut otRadioIeInfo,
-    /// The base time in microseconds for scheduled transmissions
-    /// relative to the local radio clock, see `otPlatRadioGetNow` and
-    /// `mTxDelay`.
-    pub mTxDelayBaseTime: u32,
-    /// The delay time in microseconds for this transmission referenced
-    /// to `mTxDelayBaseTime`.
-    ///
-    /// Note: `mTxDelayBaseTime` + `mTxDelay` SHALL point to the point in
-    /// time when the end of the SFD will be present at the local
-    /// antenna, relative to the local radio clock.
+    ///< The delay time for this transmission (based on `mTxDelayBaseTime`).
     pub mTxDelay: u32,
+    ///< The base time for the transmission delay.
+    pub mTxDelayBaseTime: u32,
     ///< Maximum number of backoffs attempts before declaring CCA failure.
     pub mMaxCsmaBackoffs: u8,
     ///< Maximum number of retries allowed after a transmission failure.
@@ -3044,28 +2985,17 @@ pub struct otRadioFrame__bindgen_ty_1__bindgen_ty_1 {
     /// when ack is received (when "Ack Request" flag is set on the TX frame) or ack timeout. Note that ack is
     /// expected on the same channel that frame is sent on.
     pub mRxChannelAfterTxDone: u8,
-    /// The transmit power in dBm.
-    ///
-    /// If the platform layer does not provide `OT_RADIO_CAPS_TRANSMIT_FRAME_POWER` capability, it can ignore
-    /// this value.
-    ///
-    /// If the value is OT_RADIO_POWER_INVALID, then the platform should ignore this value and transmit the frame
-    /// with its default transmit power.
-    ///
-    /// Otherwise, the platform should transmit this frame with the maximum power no larger than minimal of the
-    /// following values:
-    ///     1. mTxPower,
-    ///     2. The power limit set by otPlatRadioSetChannelTargetPower(),
-    ///     3. The power limit set by otPlatRadioSetChannelMaxTransmitPower(),
-    ///     4. The power limit set by otPlatRadioSetRegion().
-    pub mTxPower: i8,
     pub _bitfield_align_1: [u8; 0],
     pub _bitfield_1: __BindgenBitfieldUnit<[u8; 1usize]>,
-    /// The time of the local radio clock in microseconds when the end of
-    /// the SFD was present at the local antenna.
-    ///
-    /// The platform should update this field before otPlatRadioTxStarted() is fired for each transmit attempt.
-    pub mTimestamp: u64,
+}
+impl Default for otRadioFrame__bindgen_ty_1__bindgen_ty_1 {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
 }
 impl otRadioFrame__bindgen_ty_1__bindgen_ty_1 {
     #[inline]
@@ -3267,10 +3197,11 @@ impl otRadioFrame__bindgen_ty_1__bindgen_ty_1 {
 }
 /// Structure representing radio frame receive information.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otRadioFrame__bindgen_ty_1__bindgen_ty_2 {
-    /// The time of the local radio clock in microseconds when the end of
-    /// the SFD was present at the local antenna.
+    /// The timestamp when the frame was received in microseconds.
+    ///
+    /// The value SHALL be the time when the SFD was received.
     pub mTimestamp: u64,
     ///< ACK security frame counter (applicable when `mAckedWithSecEnhAck` is set).
     pub mAckFrameCounter: u32,
@@ -3368,6 +3299,24 @@ impl otRadioFrame__bindgen_ty_1__bindgen_ty_2 {
         __bindgen_bitfield_unit
     }
 }
+impl Default for otRadioFrame__bindgen_ty_1 {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
+impl Default for otRadioFrame {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
 pub const otRadioState_OT_RADIO_STATE_DISABLED: otRadioState = 0;
 pub const otRadioState_OT_RADIO_STATE_SLEEP: otRadioState = 1;
 pub const otRadioState_OT_RADIO_STATE_RECEIVE: otRadioState = 2;
@@ -3378,7 +3327,7 @@ pub const otRadioState_OT_RADIO_STATE_INVALID: otRadioState = 255;
 pub type otRadioState = ::core::ffi::c_uint;
 /// Represents radio coexistence metrics.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otRadioCoexMetrics {
     ///< Number of grant glitches.
     pub mNumGrantGlitch: u32,
@@ -3421,7 +3370,7 @@ pub struct otRadioCoexMetrics {
 }
 /// Represents what metrics are specified to query.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otLinkMetrics {
     pub _bitfield_align_1: [u8; 0],
     pub _bitfield_1: __BindgenBitfieldUnit<[u8; 1usize]>,
@@ -3670,6 +3619,7 @@ unsafe extern "C" {
     ///
     /// @param[in] aInstance    The OpenThread instance structure.
     /// @param[in] aExtAddress  A pointer to the IEEE 802.15.4 Extended Address stored in little-endian byte order.
+    ///
     pub fn otPlatRadioSetExtendedAddress(
         aInstance: *mut otInstance,
         aExtAddress: *const otExtAddress,
@@ -3775,40 +3725,6 @@ unsafe extern "C" {
     pub fn otPlatRadioSetPromiscuous(aInstance: *mut otInstance, aEnable: bool);
 }
 unsafe extern "C" {
-    /// Sets the rx-on-when-idle state to the radio platform.
-    ///
-    /// There are a few situations that the radio can enter sleep state if the device is in rx-off-when-idle state but
-    /// it's hard and costly for the SubMac to identify these situations and instruct the radio to enter sleep:
-    ///
-    /// - Finalization of a regular frame reception task, provided that:
-    ///   - The frame is received without errors and passes the filtering and it's not an spurious ACK.
-    ///   - ACK is not requested or transmission of ACK is not possible due to internal conditions.
-    /// - Finalization of a frame transmission or transmission of an ACK frame, when ACK is not requested in the transmitted
-    ///   frame.
-    /// - Finalization of the reception operation of a requested ACK due to:
-    ///   - ACK timeout expiration.
-    ///   - Reception of an invalid ACK or not an ACK frame.
-    ///   - Reception of the proper ACK, unless the transmitted frame was a Data Request Command and the frame pending bit
-    ///     on the received ACK is set to true. In this case the radio platform implementation SHOULD keep the receiver on
-    ///     until a determined timeout which triggers an idle period start.`OPENTHREAD_CONFIG_MAC_DATA_POLL_TIMEOUT` can be
-    ///     taken as a reference for this.
-    /// - Finalization of a stand alone CCA task.
-    /// - Finalization of a CCA operation with busy result during CSMA/CA procedure.
-    /// - Finalization of an Energy Detection task.
-    /// - Finalization of a radio reception window scheduled with `otPlatRadioReceiveAt`.
-    ///
-    /// If a platform supports `OT_RADIO_CAPS_RX_ON_WHEN_IDLE` it must also support `OT_RADIO_CAPS_CSMA_BACKOFF` and handle
-    /// idle periods after CCA as described above.
-    ///
-    /// Upon the transition of the "RxOnWhenIdle" flag from TRUE to FALSE, the radio platform should enter sleep mode.
-    /// If the radio is currently in receive mode, it should enter sleep mode immediately. Otherwise, it should enter sleep
-    /// mode after the current operation is completed.
-    ///
-    /// @param[in]  aInstance    The OpenThread instance structure.
-    /// @param[in]  aEnable      TRUE to keep radio in Receive state, FALSE to put to Sleep state during idle periods.
-    pub fn otPlatRadioSetRxOnWhenIdle(aInstance: *mut otInstance, aEnable: bool);
-}
-unsafe extern "C" {
     /// Update MAC keys and key index
     ///
     /// Is used when radio provides OT_RADIO_CAPS_TRANSMIT_SEC capability.
@@ -3849,25 +3765,14 @@ unsafe extern "C" {
     pub fn otPlatRadioSetMacFrameCounterIfLarger(aInstance: *mut otInstance, aMacFrameCounter: u32);
 }
 unsafe extern "C" {
-    /// Get the current time in microseconds referenced to a continuous monotonic
-    /// local radio clock (64 bits width).
+    /// Get the current estimated time (in microseconds) of the radio chip.
     ///
-    /// The radio clock SHALL NOT wrap during the device's uptime. Implementations
-    /// SHALL therefore identify and compensate for internal counter overflows. The
-    /// clock does not have a defined epoch and it SHALL NOT introduce any continuous
-    /// or discontinuous adjustments (e.g. leap seconds). Implementations SHALL
-    /// compensate for any sleep times of the device.
-    ///
-    /// Implementations MAY choose to discipline the radio clock and compensate for
-    /// sleep times by any means (e.g. by combining a high precision/low power RTC
-    /// with a high resolution counter) as long as the exposed combined clock
-    /// provides continuous monotonic microsecond resolution ticks within the
-    /// accuracy limits announced by @ref otPlatRadioGetCslAccuracy.
+    /// This microsecond timer must be a free-running timer. The timer must continue to advance with microsecond precision
+    /// even when the radio is in the sleep state.
     ///
     /// @param[in]   aInstance    A pointer to an OpenThread instance.
     ///
-    /// @returns The current time in microseconds. UINT64_MAX when platform does not
-    /// support or radio time is not ready.
+    /// @returns The current time in microseconds. UINT64_MAX when platform does not support or radio time is not ready.
     pub fn otPlatRadioGetNow(aInstance: *mut otInstance) -> u64;
 }
 unsafe extern "C" {
@@ -3878,15 +3783,6 @@ unsafe extern "C" {
     /// @returns The bus speed in bits/second between the host and the radio chip.
     ///          Return 0 when the MAC and above layer and Radio layer resides on the same chip.
     pub fn otPlatRadioGetBusSpeed(aInstance: *mut otInstance) -> u32;
-}
-unsafe extern "C" {
-    /// Get the bus latency in microseconds between the host and the radio chip.
-    ///
-    /// @param[in]   aInstance    A pointer to an OpenThread instance.
-    ///
-    /// @returns The bus latency in microseconds between the host and the radio chip.
-    ///          Return 0 when the MAC and above layer and Radio layer resides on the same chip.
-    pub fn otPlatRadioGetBusLatency(aInstance: *mut otInstance) -> u32;
 }
 unsafe extern "C" {
     /// Get current state of the radio.
@@ -3950,17 +3846,8 @@ unsafe extern "C" {
     /// Schedule a radio reception window at a specific time and duration.
     ///
     /// @param[in]  aChannel   The radio channel on which to receive.
-    /// @param[in]  aStart     The receive window start time relative to the local
-    ///                        radio clock, see `otPlatRadioGetNow`. The radio
-    ///                        receiver SHALL be on and ready to receive the first
-    ///                        symbol of a frame's SHR at the window start time.
-    /// @param[in]  aDuration  The receive window duration, in microseconds, as
-    ///                        measured by the local radio clock. The radio SHOULD be
-    ///                        turned off (or switched to TX mode if an ACK frame
-    ///                        needs to be sent) after that duration unless it is
-    ///                        still actively receiving a frame. In the latter case
-    ///                        the radio SHALL be kept in reception mode until frame
-    ///                        reception has either succeeded or failed.
+    /// @param[in]  aStart     The receive window start time, in microseconds.
+    /// @param[in]  aDuration  The receive window duration, in microseconds
     ///
     /// @retval OT_ERROR_NONE    Successfully scheduled receive window.
     /// @retval OT_ERROR_FAILED  The receive window could not be scheduled.
@@ -4113,12 +4000,6 @@ unsafe extern "C" {
     pub fn otPlatRadioEnergyScanDone(aInstance: *mut otInstance, aEnergyScanMaxRssi: i8);
 }
 unsafe extern "C" {
-    /// The radio driver calls this method to notify OpenThread that the spinel bus latency has been changed.
-    ///
-    /// @param[in]  aInstance  The OpenThread instance structure.
-    pub fn otPlatRadioBusLatencyChanged(aInstance: *mut otInstance);
-}
-unsafe extern "C" {
     /// Enable/Disable source address match feature.
     ///
     /// The source address match feature controls how the radio layer decides the "frame pending" bit for acks sent in
@@ -4257,15 +4138,15 @@ unsafe extern "C" {
     /// Enable or disable CSL receiver.
     ///
     /// @param[in]  aInstance     The OpenThread instance structure.
-    /// @param[in]  aCslPeriod    CSL period, 0 for disabling CSL. CSL period is in unit of 10 symbols.
+    /// @param[in]  aCslPeriod    CSL period, 0 for disabling CSL.
     /// @param[in]  aShortAddr    The short source address of CSL receiver's peer.
     /// @param[in]  aExtAddr      The extended source address of CSL receiver's peer.
     ///
     /// @note Platforms should use CSL peer addresses to include CSL IE when generating enhanced acks.
     ///
-    /// @retval  OT_ERROR_NOT_IMPLEMENTED Radio driver doesn't support CSL.
-    /// @retval  OT_ERROR_FAILED          Other platform specific errors.
-    /// @retval  OT_ERROR_NONE            Successfully enabled or disabled CSL.
+    /// @retval  kErrorNotImplemented Radio driver doesn't support CSL.
+    /// @retval  kErrorFailed         Other platform specific errors.
+    /// @retval  kErrorNone           Successfully enabled or disabled CSL.
     pub fn otPlatRadioEnableCsl(
         aInstance: *mut otInstance,
         aCslPeriod: u32,
@@ -4274,61 +4155,26 @@ unsafe extern "C" {
     ) -> otError;
 }
 unsafe extern "C" {
-    /// Reset CSL receiver in the platform.
-    ///
-    /// @note Defaults to `otPlatRadioEnableCsl(aInstance,0, Mac::kShortAddrInvalid, nullptr);`
-    ///
-    /// @param[in]  aInstance     The OpenThread instance structure.
-    ///
-    /// @retval  OT_ERROR_NOT_IMPLEMENTED Radio driver doesn't support CSL.
-    /// @retval  OT_ERROR_FAILED          Other platform specific errors.
-    /// @retval  OT_ERROR_NONE            Successfully disabled CSL.
-    pub fn otPlatRadioResetCsl(aInstance: *mut otInstance) -> otError;
-}
-unsafe extern "C" {
     /// Update CSL sample time in radio driver.
     ///
-    /// Sample time is stored in radio driver as a copy to calculate phase when
-    /// sending ACK with CSL IE. The CSL sample (window) of the CSL receiver extends
-    /// before and after the sample time. The CSL sample time marks a timestamp in
-    /// the CSL sample window when a frame should be received in "ideal conditions"
-    /// if there would be no inaccuracy/clock-drift.
+    /// Sample time is stored in radio driver as a copy to calculate phase when sending ACK with CSL IE.
     ///
     /// @param[in]  aInstance         The OpenThread instance structure.
-    /// @param[in]  aCslSampleTime    The next sample time, in microseconds. It is
-    ///                               the time when the first symbol of the MHR of
-    ///                               the frame is expected.
+    /// @param[in]  aCslSampleTime    The latest sample time.
     pub fn otPlatRadioUpdateCslSampleTime(aInstance: *mut otInstance, aCslSampleTime: u32);
 }
 unsafe extern "C" {
-    /// Get the current estimated worst case accuracy (maximum ± deviation from the
-    /// nominal frequency) of the local radio clock in units of PPM. This is the
-    /// clock used to schedule CSL operations.
+    /// Get the current accuracy, in units of ± ppm, of the clock used for scheduling CSL operations.
     ///
-    /// @note Implementations MAY estimate this value based on current operating
-    /// conditions (e.g. temperature).
-    ///
-    /// In case the implementation does not estimate the current value but returns a
-    /// fixed value, this value MUST be the worst-case accuracy over all possible
-    /// foreseen operating conditions (temperature, pressure, etc) of the
-    /// implementation.
+    /// @note Platforms may optimize this value based on operational conditions (i.e.: temperature).
     ///
     /// @param[in]   aInstance    A pointer to an OpenThread instance.
     ///
-    /// @returns The current CSL rx/tx scheduling drift, in PPM.
+    /// @returns The current CSL rx/tx scheduling drift, in units of ± ppm.
     pub fn otPlatRadioGetCslAccuracy(aInstance: *mut otInstance) -> u8;
 }
 unsafe extern "C" {
-    /// The fixed uncertainty (i.e. random jitter) of the arrival time of CSL
-    /// transmissions received by this device in units of 10 microseconds.
-    ///
-    /// This designates the worst case constant positive or negative deviation of
-    /// the actual arrival time of a transmission from the transmission time
-    /// calculated relative to the local radio clock independent of elapsed time. In
-    /// addition to uncertainty accumulated over elapsed time, the CSL channel sample
-    /// ("RX window") must be extended by twice this deviation such that an actual
-    /// transmission is guaranteed to be detected by the local receiver in the
-    /// presence of random arrival time jitter.
+    /// The fixed uncertainty of the Device for scheduling CSL Transmissions in units of 10 microseconds.
     ///
     /// @param[in]   aInstance    A pointer to an OpenThread instance.
     ///
@@ -4359,8 +4205,7 @@ unsafe extern "C" {
     /// ISO 3166 alpha-2 code.
     ///
     /// @param[in]  aInstance    The OpenThread instance structure.
-    /// @param[in]  aRegionCode  The radio region code. The `aRegionCode >> 8` is first ascii char
-    ///                          and the `aRegionCode & 0xff` is the second ascii char.
+    /// @param[in]  aRegionCode  The radio region.
     ///
     /// @retval  OT_ERROR_FAILED           Other platform specific errors.
     /// @retval  OT_ERROR_NONE             Successfully set region code.
@@ -4457,19 +4302,16 @@ unsafe extern "C" {
     /// @note This API is an optional radio platform API. It's up to the platform layer to implement it.
     ///       If this API is implemented, the function `otPlatRadioSetTransmitPower()` should be disabled.
     ///
-    /// The radio driver should set the actual output power to be less than or equal to the @p aTargetPower and as close
-    /// as possible to the @p aTargetPower. If the @p aTargetPower is lower than the minimum output power supported
-    /// by the platform, the output power should be set to the minimum output power supported by the platform.  If the
-    /// @p aTargetPower is higher than the maximum output power supported by the platform, the output power should be
-    /// set to the maximum output power supported by the platform. If the @p aTargetPower is set to `INT16_MAX`, the
-    /// corresponding channel is disabled.
+    /// The radio driver should set the actual output power to be less than or equal to the target power and as close
+    /// as possible to the target power.
     ///
     /// @param[in]  aInstance     The OpenThread instance structure.
     /// @param[in]  aChannel      The radio channel.
-    /// @param[in]  aTargetPower  The target power in 0.01dBm.
+    /// @param[in]  aTargetPower  The target power in 0.01dBm. Passing `INT16_MAX` will disable this channel to use the
+    ///                           target power.
     ///
     /// @retval  OT_ERROR_NONE             Successfully set the target power.
-    /// @retval  OT_ERROR_INVALID_ARGS     The @p aChannel is invalid.
+    /// @retval  OT_ERROR_INVALID_ARGS     The @p aChannel or @p aTargetPower is invalid.
     /// @retval  OT_ERROR_NOT_IMPLEMENTED  The feature is not implemented.
     pub fn otPlatRadioSetChannelTargetPower(
         aInstance: *mut otInstance,
@@ -4524,11 +4366,29 @@ pub union otIp6InterfaceIdentifier__bindgen_ty_1 {
     ///< 32-bit fields
     pub m32: [u32; 2usize],
 }
+impl Default for otIp6InterfaceIdentifier__bindgen_ty_1 {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
+impl Default for otIp6InterfaceIdentifier {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
 /// @struct otIp6NetworkPrefix
 ///
 /// Represents the Network Prefix of an IPv6 address (most significant 64 bits of the address).
 #[repr(C, packed)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otIp6NetworkPrefix {
     ///< The Network Prefix.
     pub m8: [u8; 8usize],
@@ -4543,6 +4403,15 @@ pub struct otIp6AddressComponents {
     pub mNetworkPrefix: otIp6NetworkPrefix,
     ///< The Interface Identifier (least significant 64 bits of the address)
     pub mIid: otIp6InterfaceIdentifier,
+}
+impl Default for otIp6AddressComponents {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
 }
 /// @struct otIp6Address
 ///
@@ -4565,8 +4434,24 @@ pub union otIp6Address__bindgen_ty_1 {
     ///< IPv6 address components
     pub mComponents: otIp6AddressComponents,
 }
-/// @struct otIp6Prefix
-///
+impl Default for otIp6Address__bindgen_ty_1 {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
+impl Default for otIp6Address {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
 /// Represents an IPv6 prefix.
 #[repr(C, packed)]
 #[derive(Copy, Clone)]
@@ -4575,6 +4460,15 @@ pub struct otIp6Prefix {
     pub mPrefix: otIp6Address,
     ///< The IPv6 prefix length (in bits).
     pub mLength: u8,
+}
+impl Default for otIp6Prefix {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
 }
 ///< Thread assigned address (ALOC, RLOC, MLEID, etc)
 pub const OT_ADDRESS_ORIGIN_THREAD: _bindgen_ty_7 = 0;
@@ -4597,9 +4491,18 @@ pub struct otNetifAddress {
     ///< The IPv6 address origin.
     pub mAddressOrigin: u8,
     pub _bitfield_align_1: [u8; 0],
-    pub _bitfield_1: __BindgenBitfieldUnit<[u8; 2usize]>,
+    pub _bitfield_1: __BindgenBitfieldUnit<[u8; 1usize]>,
     ///< A pointer to the next network interface address.
-    pub mNext: *const otNetifAddress,
+    pub mNext: *mut otNetifAddress,
+}
+impl Default for otNetifAddress {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
 }
 impl otNetifAddress {
     #[inline]
@@ -4616,7 +4519,7 @@ impl otNetifAddress {
     #[inline]
     pub unsafe fn mPreferred_raw(this: *const Self) -> bool {
         unsafe {
-            ::core::mem::transmute(<__BindgenBitfieldUnit<[u8; 2usize]>>::raw_get(
+            ::core::mem::transmute(<__BindgenBitfieldUnit<[u8; 1usize]>>::raw_get(
                 ::core::ptr::addr_of!((*this)._bitfield_1),
                 0usize,
                 1u8,
@@ -4627,7 +4530,7 @@ impl otNetifAddress {
     pub unsafe fn set_mPreferred_raw(this: *mut Self, val: bool) {
         unsafe {
             let val: u8 = ::core::mem::transmute(val);
-            <__BindgenBitfieldUnit<[u8; 2usize]>>::raw_set(
+            <__BindgenBitfieldUnit<[u8; 1usize]>>::raw_set(
                 ::core::ptr::addr_of_mut!((*this)._bitfield_1),
                 0usize,
                 1u8,
@@ -4649,7 +4552,7 @@ impl otNetifAddress {
     #[inline]
     pub unsafe fn mValid_raw(this: *const Self) -> bool {
         unsafe {
-            ::core::mem::transmute(<__BindgenBitfieldUnit<[u8; 2usize]>>::raw_get(
+            ::core::mem::transmute(<__BindgenBitfieldUnit<[u8; 1usize]>>::raw_get(
                 ::core::ptr::addr_of!((*this)._bitfield_1),
                 1usize,
                 1u8,
@@ -4660,7 +4563,7 @@ impl otNetifAddress {
     pub unsafe fn set_mValid_raw(this: *mut Self, val: bool) {
         unsafe {
             let val: u8 = ::core::mem::transmute(val);
-            <__BindgenBitfieldUnit<[u8; 2usize]>>::raw_set(
+            <__BindgenBitfieldUnit<[u8; 1usize]>>::raw_set(
                 ::core::ptr::addr_of_mut!((*this)._bitfield_1),
                 1usize,
                 1u8,
@@ -4682,7 +4585,7 @@ impl otNetifAddress {
     #[inline]
     pub unsafe fn mScopeOverrideValid_raw(this: *const Self) -> bool {
         unsafe {
-            ::core::mem::transmute(<__BindgenBitfieldUnit<[u8; 2usize]>>::raw_get(
+            ::core::mem::transmute(<__BindgenBitfieldUnit<[u8; 1usize]>>::raw_get(
                 ::core::ptr::addr_of!((*this)._bitfield_1),
                 2usize,
                 1u8,
@@ -4693,7 +4596,7 @@ impl otNetifAddress {
     pub unsafe fn set_mScopeOverrideValid_raw(this: *mut Self, val: bool) {
         unsafe {
             let val: u8 = ::core::mem::transmute(val);
-            <__BindgenBitfieldUnit<[u8; 2usize]>>::raw_set(
+            <__BindgenBitfieldUnit<[u8; 1usize]>>::raw_set(
                 ::core::ptr::addr_of_mut!((*this)._bitfield_1),
                 2usize,
                 1u8,
@@ -4715,7 +4618,7 @@ impl otNetifAddress {
     #[inline]
     pub unsafe fn mScopeOverride_raw(this: *const Self) -> ::core::ffi::c_uint {
         unsafe {
-            ::core::mem::transmute(<__BindgenBitfieldUnit<[u8; 2usize]>>::raw_get(
+            ::core::mem::transmute(<__BindgenBitfieldUnit<[u8; 1usize]>>::raw_get(
                 ::core::ptr::addr_of!((*this)._bitfield_1),
                 3usize,
                 4u8,
@@ -4726,7 +4629,7 @@ impl otNetifAddress {
     pub unsafe fn set_mScopeOverride_raw(this: *mut Self, val: ::core::ffi::c_uint) {
         unsafe {
             let val: u32 = ::core::mem::transmute(val);
-            <__BindgenBitfieldUnit<[u8; 2usize]>>::raw_set(
+            <__BindgenBitfieldUnit<[u8; 1usize]>>::raw_set(
                 ::core::ptr::addr_of_mut!((*this)._bitfield_1),
                 3usize,
                 4u8,
@@ -4748,7 +4651,7 @@ impl otNetifAddress {
     #[inline]
     pub unsafe fn mRloc_raw(this: *const Self) -> bool {
         unsafe {
-            ::core::mem::transmute(<__BindgenBitfieldUnit<[u8; 2usize]>>::raw_get(
+            ::core::mem::transmute(<__BindgenBitfieldUnit<[u8; 1usize]>>::raw_get(
                 ::core::ptr::addr_of!((*this)._bitfield_1),
                 7usize,
                 1u8,
@@ -4759,75 +4662,9 @@ impl otNetifAddress {
     pub unsafe fn set_mRloc_raw(this: *mut Self, val: bool) {
         unsafe {
             let val: u8 = ::core::mem::transmute(val);
-            <__BindgenBitfieldUnit<[u8; 2usize]>>::raw_set(
+            <__BindgenBitfieldUnit<[u8; 1usize]>>::raw_set(
                 ::core::ptr::addr_of_mut!((*this)._bitfield_1),
                 7usize,
-                1u8,
-                val as u64,
-            )
-        }
-    }
-    #[inline]
-    pub fn mMeshLocal(&self) -> bool {
-        unsafe { ::core::mem::transmute(self._bitfield_1.get(8usize, 1u8) as u8) }
-    }
-    #[inline]
-    pub fn set_mMeshLocal(&mut self, val: bool) {
-        unsafe {
-            let val: u8 = ::core::mem::transmute(val);
-            self._bitfield_1.set(8usize, 1u8, val as u64)
-        }
-    }
-    #[inline]
-    pub unsafe fn mMeshLocal_raw(this: *const Self) -> bool {
-        unsafe {
-            ::core::mem::transmute(<__BindgenBitfieldUnit<[u8; 2usize]>>::raw_get(
-                ::core::ptr::addr_of!((*this)._bitfield_1),
-                8usize,
-                1u8,
-            ) as u8)
-        }
-    }
-    #[inline]
-    pub unsafe fn set_mMeshLocal_raw(this: *mut Self, val: bool) {
-        unsafe {
-            let val: u8 = ::core::mem::transmute(val);
-            <__BindgenBitfieldUnit<[u8; 2usize]>>::raw_set(
-                ::core::ptr::addr_of_mut!((*this)._bitfield_1),
-                8usize,
-                1u8,
-                val as u64,
-            )
-        }
-    }
-    #[inline]
-    pub fn mSrpRegistered(&self) -> bool {
-        unsafe { ::core::mem::transmute(self._bitfield_1.get(9usize, 1u8) as u8) }
-    }
-    #[inline]
-    pub fn set_mSrpRegistered(&mut self, val: bool) {
-        unsafe {
-            let val: u8 = ::core::mem::transmute(val);
-            self._bitfield_1.set(9usize, 1u8, val as u64)
-        }
-    }
-    #[inline]
-    pub unsafe fn mSrpRegistered_raw(this: *const Self) -> bool {
-        unsafe {
-            ::core::mem::transmute(<__BindgenBitfieldUnit<[u8; 2usize]>>::raw_get(
-                ::core::ptr::addr_of!((*this)._bitfield_1),
-                9usize,
-                1u8,
-            ) as u8)
-        }
-    }
-    #[inline]
-    pub unsafe fn set_mSrpRegistered_raw(this: *mut Self, val: bool) {
-        unsafe {
-            let val: u8 = ::core::mem::transmute(val);
-            <__BindgenBitfieldUnit<[u8; 2usize]>>::raw_set(
-                ::core::ptr::addr_of_mut!((*this)._bitfield_1),
-                9usize,
                 1u8,
                 val as u64,
             )
@@ -4840,10 +4677,8 @@ impl otNetifAddress {
         mScopeOverrideValid: bool,
         mScopeOverride: ::core::ffi::c_uint,
         mRloc: bool,
-        mMeshLocal: bool,
-        mSrpRegistered: bool,
-    ) -> __BindgenBitfieldUnit<[u8; 2usize]> {
-        let mut __bindgen_bitfield_unit: __BindgenBitfieldUnit<[u8; 2usize]> = Default::default();
+    ) -> __BindgenBitfieldUnit<[u8; 1usize]> {
+        let mut __bindgen_bitfield_unit: __BindgenBitfieldUnit<[u8; 1usize]> = Default::default();
         __bindgen_bitfield_unit.set(0usize, 1u8, {
             let mPreferred: u8 = unsafe { ::core::mem::transmute(mPreferred) };
             mPreferred as u64
@@ -4864,14 +4699,6 @@ impl otNetifAddress {
             let mRloc: u8 = unsafe { ::core::mem::transmute(mRloc) };
             mRloc as u64
         });
-        __bindgen_bitfield_unit.set(8usize, 1u8, {
-            let mMeshLocal: u8 = unsafe { ::core::mem::transmute(mMeshLocal) };
-            mMeshLocal as u64
-        });
-        __bindgen_bitfield_unit.set(9usize, 1u8, {
-            let mSrpRegistered: u8 = unsafe { ::core::mem::transmute(mSrpRegistered) };
-            mSrpRegistered as u64
-        });
         __bindgen_bitfield_unit
     }
 }
@@ -4884,6 +4711,15 @@ pub struct otNetifMulticastAddress {
     ///< A pointer to the next network interface multicast address.
     pub mNext: *const otNetifMulticastAddress,
 }
+impl Default for otNetifMulticastAddress {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
 /// Represents an IPv6 socket address.
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -4892,6 +4728,15 @@ pub struct otSockAddr {
     pub mAddress: otIp6Address,
     ///< A transport-layer port.
     pub mPort: u16,
+}
+impl Default for otSockAddr {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
 }
 ///< Non-ECT
 pub const OT_ECN_NOT_CAPABLE: _bindgen_ty_8 = 0;
@@ -4915,12 +4760,24 @@ pub struct otMessageInfo {
     pub mSockPort: u16,
     ///< The peer transport-layer port.
     pub mPeerPort: u16,
+    ///< A pointer to link-specific information.
+    pub mLinkInfo: *const ::core::ffi::c_void,
     ///< The IPv6 Hop Limit value. Only applies if `mAllowZeroHopLimit` is FALSE.
     ///< If `0`, IPv6 Hop Limit is default value `OPENTHREAD_CONFIG_IP6_HOP_LIMIT_DEFAULT`.
     ///< Otherwise, specifies the IPv6 Hop Limit.
     pub mHopLimit: u8,
     pub _bitfield_align_1: [u8; 0],
     pub _bitfield_1: __BindgenBitfieldUnit<[u8; 1usize]>,
+    pub __bindgen_padding_0: u16,
+}
+impl Default for otMessageInfo {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
 }
 impl otMessageInfo {
     #[inline]
@@ -5164,19 +5021,6 @@ unsafe extern "C" {
     pub fn otIp6GetUnicastAddresses(aInstance: *mut otInstance) -> *const otNetifAddress;
 }
 unsafe extern "C" {
-    /// Indicates whether or not a unicast IPv6 address is assigned to the Thread interface.
-    ///
-    /// @param[in]  aInstance A pointer to an OpenThread instance.
-    /// @param[in]  aAddress  A pointer to the unicast address.
-    ///
-    /// @retval TRUE   If @p aAddress is assigned to the Thread interface.
-    /// @retval FALSE  If @p aAddress is not assigned to the Thread interface.
-    pub fn otIp6HasUnicastAddress(
-        aInstance: *mut otInstance,
-        aAddress: *const otIp6Address,
-    ) -> bool;
-}
-unsafe extern "C" {
     /// Subscribes the Thread interface to a Network Interface Multicast Address.
     ///
     /// The passed in instance @p aAddress will be copied by the Thread interface. The Thread interface only
@@ -5218,6 +5062,23 @@ unsafe extern "C" {
     /// @returns A pointer to the first Network Interface Multicast Address.
     pub fn otIp6GetMulticastAddresses(aInstance: *mut otInstance)
         -> *const otNetifMulticastAddress;
+}
+unsafe extern "C" {
+    /// Checks if multicast promiscuous mode is enabled on the Thread interface.
+    ///
+    /// @param[in]  aInstance A pointer to an OpenThread instance.
+    ///
+    /// @sa otIp6SetMulticastPromiscuousEnabled
+    pub fn otIp6IsMulticastPromiscuousEnabled(aInstance: *mut otInstance) -> bool;
+}
+unsafe extern "C" {
+    /// Enables or disables multicast promiscuous mode on the Thread interface.
+    ///
+    /// @param[in]  aInstance  A pointer to an OpenThread instance.
+    /// @param[in]  aEnabled   TRUE to enable Multicast Promiscuous mode, FALSE otherwise.
+    ///
+    /// @sa otIp6IsMulticastPromiscuousEnabled
+    pub fn otIp6SetMulticastPromiscuousEnabled(aInstance: *mut otInstance, aEnabled: bool);
 }
 unsafe extern "C" {
     /// Allocate a new message buffer for sending an IPv6 message.
@@ -5286,6 +5147,8 @@ unsafe extern "C" {
         aCallbackContext: *mut ::core::ffi::c_void,
     );
 }
+/// @struct otIp6AddressInfo
+///
 /// Represents IPv6 address information.
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -5297,6 +5160,15 @@ pub struct otIp6AddressInfo {
     pub _bitfield_align_1: [u8; 0],
     pub _bitfield_1: __BindgenBitfieldUnit<[u8; 1usize]>,
     pub __bindgen_padding_0: u16,
+}
+impl Default for otIp6AddressInfo {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
 }
 impl otIp6AddressInfo {
     #[inline]
@@ -5366,44 +5238,7 @@ impl otIp6AddressInfo {
         }
     }
     #[inline]
-    pub fn mMeshLocal(&self) -> bool {
-        unsafe { ::core::mem::transmute(self._bitfield_1.get(5usize, 1u8) as u8) }
-    }
-    #[inline]
-    pub fn set_mMeshLocal(&mut self, val: bool) {
-        unsafe {
-            let val: u8 = ::core::mem::transmute(val);
-            self._bitfield_1.set(5usize, 1u8, val as u64)
-        }
-    }
-    #[inline]
-    pub unsafe fn mMeshLocal_raw(this: *const Self) -> bool {
-        unsafe {
-            ::core::mem::transmute(<__BindgenBitfieldUnit<[u8; 1usize]>>::raw_get(
-                ::core::ptr::addr_of!((*this)._bitfield_1),
-                5usize,
-                1u8,
-            ) as u8)
-        }
-    }
-    #[inline]
-    pub unsafe fn set_mMeshLocal_raw(this: *mut Self, val: bool) {
-        unsafe {
-            let val: u8 = ::core::mem::transmute(val);
-            <__BindgenBitfieldUnit<[u8; 1usize]>>::raw_set(
-                ::core::ptr::addr_of_mut!((*this)._bitfield_1),
-                5usize,
-                1u8,
-                val as u64,
-            )
-        }
-    }
-    #[inline]
-    pub fn new_bitfield_1(
-        mScope: u8,
-        mPreferred: bool,
-        mMeshLocal: bool,
-    ) -> __BindgenBitfieldUnit<[u8; 1usize]> {
+    pub fn new_bitfield_1(mScope: u8, mPreferred: bool) -> __BindgenBitfieldUnit<[u8; 1usize]> {
         let mut __bindgen_bitfield_unit: __BindgenBitfieldUnit<[u8; 1usize]> = Default::default();
         __bindgen_bitfield_unit.set(0usize, 4u8, {
             let mScope: u8 = unsafe { ::core::mem::transmute(mScope) };
@@ -5412,10 +5247,6 @@ impl otIp6AddressInfo {
         __bindgen_bitfield_unit.set(4usize, 1u8, {
             let mPreferred: u8 = unsafe { ::core::mem::transmute(mPreferred) };
             mPreferred as u64
-        });
-        __bindgen_bitfield_unit.set(5usize, 1u8, {
-            let mMeshLocal: u8 = unsafe { ::core::mem::transmute(mMeshLocal) };
-            mMeshLocal as u64
         });
         __bindgen_bitfield_unit
     }
@@ -5484,8 +5315,6 @@ unsafe extern "C" {
     /// @retval OT_ERROR_NO_ROUTE                No route to host.
     /// @retval OT_ERROR_INVALID_SOURCE_ADDRESS  Source address is invalid, e.g. an anycast address or a multicast address.
     /// @retval OT_ERROR_PARSE                   Encountered a malformed header when processing the message.
-    /// @retval OT_ERROR_INVALID_ARGS            The message's metadata is invalid, e.g. the message uses
-    ///                                          `OT_MESSAGE_ORIGIN_THREAD_NETIF` as the origin.
     pub fn otIp6Send(aInstance: *mut otInstance, aMessage: *mut otMessage) -> otError;
 }
 unsafe extern "C" {
@@ -5779,7 +5608,7 @@ unsafe extern "C" {
 unsafe extern "C" {
     /// Sets the Mesh Local IID (for test purpose).
     ///
-    /// Requires `OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE`.
+    /// `OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE` must be enabled.
     ///
     /// @param[in]   aInstance   A pointer to an OpenThread instance.
     /// @param[in]   aIid        A pointer to the Mesh Local IID to set.
@@ -5801,7 +5630,7 @@ unsafe extern "C" {
 }
 /// Represents the counters for packets and bytes.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otPacketsAndBytes {
     ///< The number of packets.
     pub mPackets: u64,
@@ -5810,7 +5639,7 @@ pub struct otPacketsAndBytes {
 }
 /// Represents the counters of packets forwarded via Border Routing.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otBorderRoutingCounters {
     ///< The counters for inbound unicast.
     pub mInboundUnicast: otPacketsAndBytes,
@@ -5820,10 +5649,6 @@ pub struct otBorderRoutingCounters {
     pub mOutboundUnicast: otPacketsAndBytes,
     ///< The counters for outbound multicast.
     pub mOutboundMulticast: otPacketsAndBytes,
-    ///< The counters for inbound Internet when DHCPv6 PD enabled.
-    pub mInboundInternet: otPacketsAndBytes,
-    ///< The counters for outbound Internet when DHCPv6 PD enabled.
-    pub mOutboundInternet: otPacketsAndBytes,
     ///< The number of received RA packets.
     pub mRaRx: u32,
     ///< The number of RA packets successfully transmitted.
@@ -5877,6 +5702,15 @@ pub struct otUdpReceiver {
     ///< A pointer to application-specific context.
     pub mContext: *mut ::core::ffi::c_void,
 }
+impl Default for otUdpReceiver {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
 unsafe extern "C" {
     /// Adds a UDP receiver.
     ///
@@ -5910,9 +5744,8 @@ unsafe extern "C" {
     /// @param[in]  aMessage      A pointer to a message without UDP header.
     /// @param[in]  aMessageInfo  A pointer to a message info associated with @p aMessage.
     ///
-    /// @retval OT_ERROR_NONE          Successfully enqueued the message into an output interface.
-    /// @retval OT_ERROR_NO_BUFS       Insufficient available buffer to add the IPv6 headers.
-    /// @retval OT_ERROR_INVALID_ARGS  Invalid arguments are given.
+    /// @retval OT_ERROR_NONE     Successfully enqueued the message into an output interface.
+    /// @retval OT_ERROR_NO_BUFS  Insufficient available buffer to add the IPv6 headers.
     pub fn otUdpSendDatagram(
         aInstance: *mut otInstance,
         aMessage: *mut otMessage,
@@ -5943,6 +5776,15 @@ pub struct otUdpSocket {
     pub mHandle: *mut ::core::ffi::c_void,
     ///< A pointer to the next UDP socket (internal use only).
     pub mNext: *mut otUdpSocket,
+}
+impl Default for otUdpSocket {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
 }
 ///< Unspecified network interface.
 pub const otNetifIdentifier_OT_NETIF_UNSPECIFIED: otNetifIdentifier = 0;
@@ -6127,7 +5969,7 @@ unsafe extern "C" {
 ///
 /// Represents a Thread Network Key.
 #[repr(C, packed)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otNetworkKey {
     ///< Byte values
     pub m8: [u8; 16usize],
@@ -6138,14 +5980,14 @@ pub type otNetworkKeyRef = otCryptoKeyRef;
 ///
 /// The `otNetworkName` is a null terminated C string (i.e., `m8` char array MUST end with null char `\0`).
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otNetworkName {
     ///< Byte values. The `+ 1` is for null char.
     pub m8: [::core::ffi::c_char; 17usize],
 }
 /// Represents an Extended PAN ID.
 #[repr(C, packed)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otExtendedPanId {
     ///< Byte values
     pub m8: [u8; 8usize],
@@ -6154,7 +5996,7 @@ pub struct otExtendedPanId {
 pub type otMeshLocalPrefix = otIp6NetworkPrefix;
 /// Represents PSKc.
 #[repr(C, packed)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otPskc {
     ///< Byte values
     pub m8: [u8; 16usize],
@@ -6163,7 +6005,7 @@ pub struct otPskc {
 pub type otPskcRef = otCryptoKeyRef;
 /// Represent Security Policy.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otSecurityPolicy {
     ///< The value for thrKeyRotation in units of hours.
     pub mRotationTime: u16,
@@ -6570,38 +6412,485 @@ impl otSecurityPolicy {
 pub type otChannelMask = u32;
 /// Represents presence of different components in Active or Pending Operational Dataset.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otOperationalDatasetComponents {
-    ///< TRUE if Active Timestamp is present, FALSE otherwise.
-    pub mIsActiveTimestampPresent: bool,
-    ///< TRUE if Pending Timestamp is present, FALSE otherwise.
-    pub mIsPendingTimestampPresent: bool,
-    ///< TRUE if Network Key is present, FALSE otherwise.
-    pub mIsNetworkKeyPresent: bool,
-    ///< TRUE if Network Name is present, FALSE otherwise.
-    pub mIsNetworkNamePresent: bool,
-    ///< TRUE if Extended PAN ID is present, FALSE otherwise.
-    pub mIsExtendedPanIdPresent: bool,
-    ///< TRUE if Mesh Local Prefix is present, FALSE otherwise.
-    pub mIsMeshLocalPrefixPresent: bool,
-    ///< TRUE if Delay Timer is present, FALSE otherwise.
-    pub mIsDelayPresent: bool,
-    ///< TRUE if PAN ID is present, FALSE otherwise.
-    pub mIsPanIdPresent: bool,
-    ///< TRUE if Channel is present, FALSE otherwise.
-    pub mIsChannelPresent: bool,
-    ///< TRUE if PSKc is present, FALSE otherwise.
-    pub mIsPskcPresent: bool,
-    ///< TRUE if Security Policy is present, FALSE otherwise.
-    pub mIsSecurityPolicyPresent: bool,
-    ///< TRUE if Channel Mask is present, FALSE otherwise.
-    pub mIsChannelMaskPresent: bool,
-    ///< TRUE if Wake-up Channel is present, FALSE otherwise.
-    pub mIsWakeupChannelPresent: bool,
+    pub _bitfield_align_1: [u8; 0],
+    pub _bitfield_1: __BindgenBitfieldUnit<[u8; 2usize]>,
+}
+impl otOperationalDatasetComponents {
+    #[inline]
+    pub fn mIsActiveTimestampPresent(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(0usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_mIsActiveTimestampPresent(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(0usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub unsafe fn mIsActiveTimestampPresent_raw(this: *const Self) -> bool {
+        unsafe {
+            ::core::mem::transmute(<__BindgenBitfieldUnit<[u8; 2usize]>>::raw_get(
+                ::core::ptr::addr_of!((*this)._bitfield_1),
+                0usize,
+                1u8,
+            ) as u8)
+        }
+    }
+    #[inline]
+    pub unsafe fn set_mIsActiveTimestampPresent_raw(this: *mut Self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            <__BindgenBitfieldUnit<[u8; 2usize]>>::raw_set(
+                ::core::ptr::addr_of_mut!((*this)._bitfield_1),
+                0usize,
+                1u8,
+                val as u64,
+            )
+        }
+    }
+    #[inline]
+    pub fn mIsPendingTimestampPresent(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(1usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_mIsPendingTimestampPresent(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(1usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub unsafe fn mIsPendingTimestampPresent_raw(this: *const Self) -> bool {
+        unsafe {
+            ::core::mem::transmute(<__BindgenBitfieldUnit<[u8; 2usize]>>::raw_get(
+                ::core::ptr::addr_of!((*this)._bitfield_1),
+                1usize,
+                1u8,
+            ) as u8)
+        }
+    }
+    #[inline]
+    pub unsafe fn set_mIsPendingTimestampPresent_raw(this: *mut Self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            <__BindgenBitfieldUnit<[u8; 2usize]>>::raw_set(
+                ::core::ptr::addr_of_mut!((*this)._bitfield_1),
+                1usize,
+                1u8,
+                val as u64,
+            )
+        }
+    }
+    #[inline]
+    pub fn mIsNetworkKeyPresent(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(2usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_mIsNetworkKeyPresent(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(2usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub unsafe fn mIsNetworkKeyPresent_raw(this: *const Self) -> bool {
+        unsafe {
+            ::core::mem::transmute(<__BindgenBitfieldUnit<[u8; 2usize]>>::raw_get(
+                ::core::ptr::addr_of!((*this)._bitfield_1),
+                2usize,
+                1u8,
+            ) as u8)
+        }
+    }
+    #[inline]
+    pub unsafe fn set_mIsNetworkKeyPresent_raw(this: *mut Self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            <__BindgenBitfieldUnit<[u8; 2usize]>>::raw_set(
+                ::core::ptr::addr_of_mut!((*this)._bitfield_1),
+                2usize,
+                1u8,
+                val as u64,
+            )
+        }
+    }
+    #[inline]
+    pub fn mIsNetworkNamePresent(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(3usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_mIsNetworkNamePresent(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(3usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub unsafe fn mIsNetworkNamePresent_raw(this: *const Self) -> bool {
+        unsafe {
+            ::core::mem::transmute(<__BindgenBitfieldUnit<[u8; 2usize]>>::raw_get(
+                ::core::ptr::addr_of!((*this)._bitfield_1),
+                3usize,
+                1u8,
+            ) as u8)
+        }
+    }
+    #[inline]
+    pub unsafe fn set_mIsNetworkNamePresent_raw(this: *mut Self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            <__BindgenBitfieldUnit<[u8; 2usize]>>::raw_set(
+                ::core::ptr::addr_of_mut!((*this)._bitfield_1),
+                3usize,
+                1u8,
+                val as u64,
+            )
+        }
+    }
+    #[inline]
+    pub fn mIsExtendedPanIdPresent(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(4usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_mIsExtendedPanIdPresent(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(4usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub unsafe fn mIsExtendedPanIdPresent_raw(this: *const Self) -> bool {
+        unsafe {
+            ::core::mem::transmute(<__BindgenBitfieldUnit<[u8; 2usize]>>::raw_get(
+                ::core::ptr::addr_of!((*this)._bitfield_1),
+                4usize,
+                1u8,
+            ) as u8)
+        }
+    }
+    #[inline]
+    pub unsafe fn set_mIsExtendedPanIdPresent_raw(this: *mut Self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            <__BindgenBitfieldUnit<[u8; 2usize]>>::raw_set(
+                ::core::ptr::addr_of_mut!((*this)._bitfield_1),
+                4usize,
+                1u8,
+                val as u64,
+            )
+        }
+    }
+    #[inline]
+    pub fn mIsMeshLocalPrefixPresent(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(5usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_mIsMeshLocalPrefixPresent(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(5usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub unsafe fn mIsMeshLocalPrefixPresent_raw(this: *const Self) -> bool {
+        unsafe {
+            ::core::mem::transmute(<__BindgenBitfieldUnit<[u8; 2usize]>>::raw_get(
+                ::core::ptr::addr_of!((*this)._bitfield_1),
+                5usize,
+                1u8,
+            ) as u8)
+        }
+    }
+    #[inline]
+    pub unsafe fn set_mIsMeshLocalPrefixPresent_raw(this: *mut Self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            <__BindgenBitfieldUnit<[u8; 2usize]>>::raw_set(
+                ::core::ptr::addr_of_mut!((*this)._bitfield_1),
+                5usize,
+                1u8,
+                val as u64,
+            )
+        }
+    }
+    #[inline]
+    pub fn mIsDelayPresent(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(6usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_mIsDelayPresent(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(6usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub unsafe fn mIsDelayPresent_raw(this: *const Self) -> bool {
+        unsafe {
+            ::core::mem::transmute(<__BindgenBitfieldUnit<[u8; 2usize]>>::raw_get(
+                ::core::ptr::addr_of!((*this)._bitfield_1),
+                6usize,
+                1u8,
+            ) as u8)
+        }
+    }
+    #[inline]
+    pub unsafe fn set_mIsDelayPresent_raw(this: *mut Self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            <__BindgenBitfieldUnit<[u8; 2usize]>>::raw_set(
+                ::core::ptr::addr_of_mut!((*this)._bitfield_1),
+                6usize,
+                1u8,
+                val as u64,
+            )
+        }
+    }
+    #[inline]
+    pub fn mIsPanIdPresent(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(7usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_mIsPanIdPresent(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(7usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub unsafe fn mIsPanIdPresent_raw(this: *const Self) -> bool {
+        unsafe {
+            ::core::mem::transmute(<__BindgenBitfieldUnit<[u8; 2usize]>>::raw_get(
+                ::core::ptr::addr_of!((*this)._bitfield_1),
+                7usize,
+                1u8,
+            ) as u8)
+        }
+    }
+    #[inline]
+    pub unsafe fn set_mIsPanIdPresent_raw(this: *mut Self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            <__BindgenBitfieldUnit<[u8; 2usize]>>::raw_set(
+                ::core::ptr::addr_of_mut!((*this)._bitfield_1),
+                7usize,
+                1u8,
+                val as u64,
+            )
+        }
+    }
+    #[inline]
+    pub fn mIsChannelPresent(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(8usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_mIsChannelPresent(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(8usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub unsafe fn mIsChannelPresent_raw(this: *const Self) -> bool {
+        unsafe {
+            ::core::mem::transmute(<__BindgenBitfieldUnit<[u8; 2usize]>>::raw_get(
+                ::core::ptr::addr_of!((*this)._bitfield_1),
+                8usize,
+                1u8,
+            ) as u8)
+        }
+    }
+    #[inline]
+    pub unsafe fn set_mIsChannelPresent_raw(this: *mut Self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            <__BindgenBitfieldUnit<[u8; 2usize]>>::raw_set(
+                ::core::ptr::addr_of_mut!((*this)._bitfield_1),
+                8usize,
+                1u8,
+                val as u64,
+            )
+        }
+    }
+    #[inline]
+    pub fn mIsPskcPresent(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(9usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_mIsPskcPresent(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(9usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub unsafe fn mIsPskcPresent_raw(this: *const Self) -> bool {
+        unsafe {
+            ::core::mem::transmute(<__BindgenBitfieldUnit<[u8; 2usize]>>::raw_get(
+                ::core::ptr::addr_of!((*this)._bitfield_1),
+                9usize,
+                1u8,
+            ) as u8)
+        }
+    }
+    #[inline]
+    pub unsafe fn set_mIsPskcPresent_raw(this: *mut Self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            <__BindgenBitfieldUnit<[u8; 2usize]>>::raw_set(
+                ::core::ptr::addr_of_mut!((*this)._bitfield_1),
+                9usize,
+                1u8,
+                val as u64,
+            )
+        }
+    }
+    #[inline]
+    pub fn mIsSecurityPolicyPresent(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(10usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_mIsSecurityPolicyPresent(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(10usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub unsafe fn mIsSecurityPolicyPresent_raw(this: *const Self) -> bool {
+        unsafe {
+            ::core::mem::transmute(<__BindgenBitfieldUnit<[u8; 2usize]>>::raw_get(
+                ::core::ptr::addr_of!((*this)._bitfield_1),
+                10usize,
+                1u8,
+            ) as u8)
+        }
+    }
+    #[inline]
+    pub unsafe fn set_mIsSecurityPolicyPresent_raw(this: *mut Self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            <__BindgenBitfieldUnit<[u8; 2usize]>>::raw_set(
+                ::core::ptr::addr_of_mut!((*this)._bitfield_1),
+                10usize,
+                1u8,
+                val as u64,
+            )
+        }
+    }
+    #[inline]
+    pub fn mIsChannelMaskPresent(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(11usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_mIsChannelMaskPresent(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(11usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub unsafe fn mIsChannelMaskPresent_raw(this: *const Self) -> bool {
+        unsafe {
+            ::core::mem::transmute(<__BindgenBitfieldUnit<[u8; 2usize]>>::raw_get(
+                ::core::ptr::addr_of!((*this)._bitfield_1),
+                11usize,
+                1u8,
+            ) as u8)
+        }
+    }
+    #[inline]
+    pub unsafe fn set_mIsChannelMaskPresent_raw(this: *mut Self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            <__BindgenBitfieldUnit<[u8; 2usize]>>::raw_set(
+                ::core::ptr::addr_of_mut!((*this)._bitfield_1),
+                11usize,
+                1u8,
+                val as u64,
+            )
+        }
+    }
+    #[inline]
+    pub fn new_bitfield_1(
+        mIsActiveTimestampPresent: bool,
+        mIsPendingTimestampPresent: bool,
+        mIsNetworkKeyPresent: bool,
+        mIsNetworkNamePresent: bool,
+        mIsExtendedPanIdPresent: bool,
+        mIsMeshLocalPrefixPresent: bool,
+        mIsDelayPresent: bool,
+        mIsPanIdPresent: bool,
+        mIsChannelPresent: bool,
+        mIsPskcPresent: bool,
+        mIsSecurityPolicyPresent: bool,
+        mIsChannelMaskPresent: bool,
+    ) -> __BindgenBitfieldUnit<[u8; 2usize]> {
+        let mut __bindgen_bitfield_unit: __BindgenBitfieldUnit<[u8; 2usize]> = Default::default();
+        __bindgen_bitfield_unit.set(0usize, 1u8, {
+            let mIsActiveTimestampPresent: u8 =
+                unsafe { ::core::mem::transmute(mIsActiveTimestampPresent) };
+            mIsActiveTimestampPresent as u64
+        });
+        __bindgen_bitfield_unit.set(1usize, 1u8, {
+            let mIsPendingTimestampPresent: u8 =
+                unsafe { ::core::mem::transmute(mIsPendingTimestampPresent) };
+            mIsPendingTimestampPresent as u64
+        });
+        __bindgen_bitfield_unit.set(2usize, 1u8, {
+            let mIsNetworkKeyPresent: u8 = unsafe { ::core::mem::transmute(mIsNetworkKeyPresent) };
+            mIsNetworkKeyPresent as u64
+        });
+        __bindgen_bitfield_unit.set(3usize, 1u8, {
+            let mIsNetworkNamePresent: u8 =
+                unsafe { ::core::mem::transmute(mIsNetworkNamePresent) };
+            mIsNetworkNamePresent as u64
+        });
+        __bindgen_bitfield_unit.set(4usize, 1u8, {
+            let mIsExtendedPanIdPresent: u8 =
+                unsafe { ::core::mem::transmute(mIsExtendedPanIdPresent) };
+            mIsExtendedPanIdPresent as u64
+        });
+        __bindgen_bitfield_unit.set(5usize, 1u8, {
+            let mIsMeshLocalPrefixPresent: u8 =
+                unsafe { ::core::mem::transmute(mIsMeshLocalPrefixPresent) };
+            mIsMeshLocalPrefixPresent as u64
+        });
+        __bindgen_bitfield_unit.set(6usize, 1u8, {
+            let mIsDelayPresent: u8 = unsafe { ::core::mem::transmute(mIsDelayPresent) };
+            mIsDelayPresent as u64
+        });
+        __bindgen_bitfield_unit.set(7usize, 1u8, {
+            let mIsPanIdPresent: u8 = unsafe { ::core::mem::transmute(mIsPanIdPresent) };
+            mIsPanIdPresent as u64
+        });
+        __bindgen_bitfield_unit.set(8usize, 1u8, {
+            let mIsChannelPresent: u8 = unsafe { ::core::mem::transmute(mIsChannelPresent) };
+            mIsChannelPresent as u64
+        });
+        __bindgen_bitfield_unit.set(9usize, 1u8, {
+            let mIsPskcPresent: u8 = unsafe { ::core::mem::transmute(mIsPskcPresent) };
+            mIsPskcPresent as u64
+        });
+        __bindgen_bitfield_unit.set(10usize, 1u8, {
+            let mIsSecurityPolicyPresent: u8 =
+                unsafe { ::core::mem::transmute(mIsSecurityPolicyPresent) };
+            mIsSecurityPolicyPresent as u64
+        });
+        __bindgen_bitfield_unit.set(11usize, 1u8, {
+            let mIsChannelMaskPresent: u8 =
+                unsafe { ::core::mem::transmute(mIsChannelMaskPresent) };
+            mIsChannelMaskPresent as u64
+        });
+        __bindgen_bitfield_unit
+    }
 }
 /// Represents a Thread Dataset timestamp component.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otTimestamp {
     pub mSeconds: u64,
     pub mTicks: u16,
@@ -6611,7 +6900,7 @@ pub struct otTimestamp {
 ///
 /// Components in Dataset are optional. `mComponents` structure specifies which components are present in the Dataset.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otOperationalDataset {
     ///< Active Timestamp
     pub mActiveTimestamp: otTimestamp,
@@ -6631,8 +6920,6 @@ pub struct otOperationalDataset {
     pub mPanId: otPanId,
     ///< Channel
     pub mChannel: u16,
-    ///< Wake-up Channel
-    pub mWakeupChannel: u16,
     ///< PSKc
     pub mPskc: otPskc,
     ///< Security Policy
@@ -6652,6 +6939,15 @@ pub struct otOperationalDatasetTlvs {
     pub mTlvs: [u8; 254usize],
     ///< Size of Operational Dataset in bytes.
     pub mLength: u8,
+}
+impl Default for otOperationalDatasetTlvs {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
 }
 ///< meshcop Channel TLV
 pub const otMeshcopTlvType_OT_MESHCOP_TLV_CHANNEL: otMeshcopTlvType = 0;
@@ -6727,10 +7023,6 @@ pub const otMeshcopTlvType_OT_MESHCOP_TLV_PERIOD: otMeshcopTlvType = 55;
 pub const otMeshcopTlvType_OT_MESHCOP_TLV_SCAN_DURATION: otMeshcopTlvType = 56;
 ///< meshcop Energy List TLV
 pub const otMeshcopTlvType_OT_MESHCOP_TLV_ENERGY_LIST: otMeshcopTlvType = 57;
-///< meshcop Thread Domain Name TLV
-pub const otMeshcopTlvType_OT_MESHCOP_TLV_THREAD_DOMAIN_NAME: otMeshcopTlvType = 59;
-///< meshcop Wake-up Channel TLV
-pub const otMeshcopTlvType_OT_MESHCOP_TLV_WAKEUP_CHANNEL: otMeshcopTlvType = 74;
 ///< meshcop Discovery Request TLV
 pub const otMeshcopTlvType_OT_MESHCOP_TLV_DISCOVERYREQUEST: otMeshcopTlvType = 128;
 ///< meshcop Discovery Response TLV
@@ -6802,15 +7094,12 @@ unsafe extern "C" {
     /// its Parent. Note that a router-capable device will not transition to the Router or Leader roles until it has a
     /// complete Active Dataset.
     ///
-    /// This function consistently returns `OT_ERROR_NONE` and can effectively be treated as having a `void` return type.
-    /// Previously, other errors (e.g., `OT_ERROR_NOT_IMPLEMENTED`) were allowed for legacy reasons. However, as
-    /// non-volatile storage is now mandatory for Thread operation, any failure to save the dataset will trigger an
-    /// assertion. The `otError` return type is retained for backward compatibility.
-    ///
     /// @param[in]  aInstance A pointer to an OpenThread instance.
     /// @param[in]  aDataset  A pointer to the Active Operational Dataset.
     ///
-    /// @retval OT_ERROR_NONE    Successfully set the Active Operational Dataset.
+    /// @retval OT_ERROR_NONE             Successfully set the Active Operational Dataset.
+    /// @retval OT_ERROR_NO_BUFS          Insufficient buffer space to set the Active Operational Dataset.
+    /// @retval OT_ERROR_NOT_IMPLEMENTED  The platform does not implement settings functionality.
     pub fn otDatasetSetActive(
         aInstance: *mut otInstance,
         aDataset: *const otOperationalDataset,
@@ -6835,8 +7124,9 @@ unsafe extern "C" {
     /// @param[in]  aInstance A pointer to an OpenThread instance.
     /// @param[in]  aDataset  A pointer to the Active Operational Dataset.
     ///
-    /// @retval OT_ERROR_NONE          Successfully set the Active Operational Dataset.
-    /// @retval OT_ERROR_INVALID_ARGS  The @p aDataset is invalid. It is too long or contains incorrect TLV formatting.
+    /// @retval OT_ERROR_NONE             Successfully set the Active Operational Dataset.
+    /// @retval OT_ERROR_NO_BUFS          Insufficient buffer space to set the Active Operational Dataset.
+    /// @retval OT_ERROR_NOT_IMPLEMENTED  The platform does not implement settings functionality.
     pub fn otDatasetSetActiveTlvs(
         aInstance: *mut otInstance,
         aDataset: *const otOperationalDatasetTlvs,
@@ -6871,15 +7161,12 @@ unsafe extern "C" {
 unsafe extern "C" {
     /// Sets the Pending Operational Dataset.
     ///
-    /// This function consistently returns `OT_ERROR_NONE` and can effectively be treated as having a `void` return type.
-    /// Previously, other errors (e.g., `OT_ERROR_NOT_IMPLEMENTED`) were allowed for legacy reasons. However, as
-    /// non-volatile storage is now mandatory for Thread operation, any failure to save the dataset will trigger an
-    /// assertion. The `otError` return type is retained for backward compatibility.
-    ///
     /// @param[in]  aInstance A pointer to an OpenThread instance.
     /// @param[in]  aDataset  A pointer to the Pending Operational Dataset.
     ///
-    /// @retval OT_ERROR_NONE    Successfully set the Pending Operational Dataset.
+    /// @retval OT_ERROR_NONE             Successfully set the Pending Operational Dataset.
+    /// @retval OT_ERROR_NO_BUFS          Insufficient buffer space to set the Pending Operational Dataset.
+    /// @retval OT_ERROR_NOT_IMPLEMENTED  The platform does not implement settings functionality.
     pub fn otDatasetSetPending(
         aInstance: *mut otInstance,
         aDataset: *const otOperationalDataset,
@@ -6891,8 +7178,9 @@ unsafe extern "C" {
     /// @param[in]  aInstance A pointer to an OpenThread instance.
     /// @param[in]  aDataset  A pointer to the Pending Operational Dataset.
     ///
-    /// @retval OT_ERROR_NONE          Successfully set the Pending Operational Dataset.
-    /// @retval OT_ERROR_INVALID_ARGS  The @p aDataset is invalid. It is too long or contains incorrect TLV formatting.
+    /// @retval OT_ERROR_NONE             Successfully set the Pending Operational Dataset.
+    /// @retval OT_ERROR_NO_BUFS          Insufficient buffer space to set the Pending Operational Dataset.
+    /// @retval OT_ERROR_NOT_IMPLEMENTED  The platform does not implement settings functionality.
     pub fn otDatasetSetPendingTlvs(
         aInstance: *mut otInstance,
         aDataset: *const otOperationalDatasetTlvs,
@@ -7022,7 +7310,7 @@ unsafe extern "C" {
     /// @param[out] aDataset      A pointer to where the dataset will be placed.
     ///
     /// @retval OT_ERROR_NONE          Successfully set @p aDataset from @p aDatasetTlvs.
-    /// @retval OT_ERROR_INVALID_ARGS  @p aDatasetTlvs's length is longer than `OT_OPERATIONAL_DATASET_MAX_LENGTH`.
+    /// @retval OT_ERROR_INVALID_ARGS  @p aDatasetTlvs is invalid.
     pub fn otDatasetParseTlvs(
         aDatasetTlvs: *const otOperationalDatasetTlvs,
         aDataset: *mut otOperationalDataset,
@@ -7033,10 +7321,13 @@ unsafe extern "C" {
     ///
     /// @param[in]  aDataset      An Operational dataset to convert to TLVs.
     /// @param[out] aDatasetTlvs  A pointer to dataset TLVs to return the result.
+    ///
+    /// @retval OT_ERROR_NONE          Successfully converted @p aDataset and updated @p aDatasetTlvs.
+    /// @retval OT_ERROR_INVALID_ARGS  @p aDataset is invalid, does not contain active or pending timestamps.
     pub fn otDatasetConvertToTlvs(
         aDataset: *const otOperationalDataset,
         aDatasetTlvs: *mut otOperationalDatasetTlvs,
-    );
+    ) -> otError;
 }
 unsafe extern "C" {
     /// Updates a given Operational Dataset.
@@ -7064,7 +7355,7 @@ pub const otJoinerState_OT_JOINER_STATE_JOINED: otJoinerState = 5;
 pub type otJoinerState = ::core::ffi::c_uint;
 /// Represents a Joiner Discerner.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otJoinerDiscerner {
     ///< Discerner value (the lowest `mLength` bits specify the discerner).
     pub mValue: u64,
@@ -7121,7 +7412,12 @@ unsafe extern "C" {
     ///
     /// @param[in]  aInstance  A pointer to an OpenThread instance.
     ///
-    /// @returns The joiner state.
+    /// @retval OT_JOINER_STATE_IDLE
+    /// @retval OT_JOINER_STATE_DISCOVER
+    /// @retval OT_JOINER_STATE_CONNECT
+    /// @retval OT_JOINER_STATE_CONNECTED
+    /// @retval OT_JOINER_STATE_ENTRUST
+    /// @retval OT_JOINER_STATE_JOINED
     pub fn otJoinerGetState(aInstance: *mut otInstance) -> otJoinerState;
 }
 unsafe extern "C" {
@@ -7188,7 +7484,7 @@ pub const otCommissionerJoinerEvent_OT_COMMISSIONER_JOINER_REMOVED: otCommission
 pub type otCommissionerJoinerEvent = ::core::ffi::c_uint;
 /// Represents the steering data.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otSteeringData {
     ///< Length of steering data (bytes)
     pub mLength: u8,
@@ -7197,7 +7493,7 @@ pub struct otSteeringData {
 }
 /// Represents a Commissioning Dataset.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otCommissioningDataset {
     ///< Border Router RLOC16
     pub mLocator: u16,
@@ -7345,45 +7641,11 @@ impl otCommissioningDataset {
         }
     }
     #[inline]
-    pub fn mHasExtraTlv(&self) -> bool {
-        unsafe { ::core::mem::transmute(self._bitfield_1.get(4usize, 1u8) as u8) }
-    }
-    #[inline]
-    pub fn set_mHasExtraTlv(&mut self, val: bool) {
-        unsafe {
-            let val: u8 = ::core::mem::transmute(val);
-            self._bitfield_1.set(4usize, 1u8, val as u64)
-        }
-    }
-    #[inline]
-    pub unsafe fn mHasExtraTlv_raw(this: *const Self) -> bool {
-        unsafe {
-            ::core::mem::transmute(<__BindgenBitfieldUnit<[u8; 1usize]>>::raw_get(
-                ::core::ptr::addr_of!((*this)._bitfield_1),
-                4usize,
-                1u8,
-            ) as u8)
-        }
-    }
-    #[inline]
-    pub unsafe fn set_mHasExtraTlv_raw(this: *mut Self, val: bool) {
-        unsafe {
-            let val: u8 = ::core::mem::transmute(val);
-            <__BindgenBitfieldUnit<[u8; 1usize]>>::raw_set(
-                ::core::ptr::addr_of_mut!((*this)._bitfield_1),
-                4usize,
-                1u8,
-                val as u64,
-            )
-        }
-    }
-    #[inline]
     pub fn new_bitfield_1(
         mIsLocatorSet: bool,
         mIsSessionIdSet: bool,
         mIsSteeringDataSet: bool,
         mIsJoinerUdpPortSet: bool,
-        mHasExtraTlv: bool,
     ) -> __BindgenBitfieldUnit<[u8; 1usize]> {
         let mut __bindgen_bitfield_unit: __BindgenBitfieldUnit<[u8; 1usize]> = Default::default();
         __bindgen_bitfield_unit.set(0usize, 1u8, {
@@ -7402,10 +7664,6 @@ impl otCommissioningDataset {
             let mIsJoinerUdpPortSet: u8 = unsafe { ::core::mem::transmute(mIsJoinerUdpPortSet) };
             mIsJoinerUdpPortSet as u64
         });
-        __bindgen_bitfield_unit.set(4usize, 1u8, {
-            let mHasExtraTlv: u8 = unsafe { ::core::mem::transmute(mHasExtraTlv) };
-            mHasExtraTlv as u64
-        });
         __bindgen_bitfield_unit
     }
 }
@@ -7415,6 +7673,15 @@ impl otCommissioningDataset {
 pub struct otJoinerPskd {
     ///< Char string array (must be null terminated - +1 is for null char).
     pub m8: [::core::ffi::c_char; 33usize],
+}
+impl Default for otJoinerPskd {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
 }
 ///< Accept any Joiner (no EUI64 or Discerner is specified).
 pub const otJoinerInfoType_OT_JOINER_INFO_TYPE_ANY: otJoinerInfoType = 0;
@@ -7444,6 +7711,24 @@ pub union otJoinerInfo__bindgen_ty_1 {
     pub mEui64: otExtAddress,
     ///< Joiner Discerner (when `mType` is `OT_JOINER_INFO_TYPE_DISCERNER`)
     pub mDiscerner: otJoinerDiscerner,
+}
+impl Default for otJoinerInfo__bindgen_ty_1 {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
+impl Default for otJoinerInfo {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
 }
 /// Pointer is called whenever the commissioner state changes.
 ///
@@ -7777,6 +8062,111 @@ unsafe extern "C" {
     /// @retval OT_COMMISSIONER_STATE_ACTIVE    Commissioner enabled.
     pub fn otCommissionerGetState(aInstance: *mut otInstance) -> otCommissionerState;
 }
+/// Represents link-specific information for messages received from the Thread radio.
+#[repr(C)]
+#[derive(Default, Copy, Clone)]
+pub struct otThreadLinkInfo {
+    ///< Source PAN ID
+    pub mPanId: u16,
+    ///< 802.15.4 Channel
+    pub mChannel: u8,
+    ///< Received Signal Strength in dBm.
+    pub mRss: i8,
+    ///< Link Quality Indicator for a received message.
+    pub mLqi: u8,
+    pub _bitfield_align_1: [u8; 0],
+    pub _bitfield_1: __BindgenBitfieldUnit<[u8; 1usize]>,
+    ///< The time sync sequence.
+    pub mTimeSyncSeq: u8,
+    ///< The time offset to the Thread network time, in microseconds.
+    pub mNetworkTimeOffset: i64,
+    ///< Radio link type.
+    pub mRadioType: u8,
+}
+impl otThreadLinkInfo {
+    #[inline]
+    pub fn mLinkSecurity(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(0usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_mLinkSecurity(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(0usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub unsafe fn mLinkSecurity_raw(this: *const Self) -> bool {
+        unsafe {
+            ::core::mem::transmute(<__BindgenBitfieldUnit<[u8; 1usize]>>::raw_get(
+                ::core::ptr::addr_of!((*this)._bitfield_1),
+                0usize,
+                1u8,
+            ) as u8)
+        }
+    }
+    #[inline]
+    pub unsafe fn set_mLinkSecurity_raw(this: *mut Self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            <__BindgenBitfieldUnit<[u8; 1usize]>>::raw_set(
+                ::core::ptr::addr_of_mut!((*this)._bitfield_1),
+                0usize,
+                1u8,
+                val as u64,
+            )
+        }
+    }
+    #[inline]
+    pub fn mIsDstPanIdBroadcast(&self) -> bool {
+        unsafe { ::core::mem::transmute(self._bitfield_1.get(1usize, 1u8) as u8) }
+    }
+    #[inline]
+    pub fn set_mIsDstPanIdBroadcast(&mut self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            self._bitfield_1.set(1usize, 1u8, val as u64)
+        }
+    }
+    #[inline]
+    pub unsafe fn mIsDstPanIdBroadcast_raw(this: *const Self) -> bool {
+        unsafe {
+            ::core::mem::transmute(<__BindgenBitfieldUnit<[u8; 1usize]>>::raw_get(
+                ::core::ptr::addr_of!((*this)._bitfield_1),
+                1usize,
+                1u8,
+            ) as u8)
+        }
+    }
+    #[inline]
+    pub unsafe fn set_mIsDstPanIdBroadcast_raw(this: *mut Self, val: bool) {
+        unsafe {
+            let val: u8 = ::core::mem::transmute(val);
+            <__BindgenBitfieldUnit<[u8; 1usize]>>::raw_set(
+                ::core::ptr::addr_of_mut!((*this)._bitfield_1),
+                1usize,
+                1u8,
+                val as u64,
+            )
+        }
+    }
+    #[inline]
+    pub fn new_bitfield_1(
+        mLinkSecurity: bool,
+        mIsDstPanIdBroadcast: bool,
+    ) -> __BindgenBitfieldUnit<[u8; 1usize]> {
+        let mut __bindgen_bitfield_unit: __BindgenBitfieldUnit<[u8; 1usize]> = Default::default();
+        __bindgen_bitfield_unit.set(0usize, 1u8, {
+            let mLinkSecurity: u8 = unsafe { ::core::mem::transmute(mLinkSecurity) };
+            mLinkSecurity as u64
+        });
+        __bindgen_bitfield_unit.set(1usize, 1u8, {
+            let mIsDstPanIdBroadcast: u8 = unsafe { ::core::mem::transmute(mIsDstPanIdBroadcast) };
+            mIsDstPanIdBroadcast as u64
+        });
+        __bindgen_bitfield_unit
+    }
+}
 pub type otMacFilterIterator = u8;
 ///< Address filter is disabled.
 pub const otMacFilterAddressMode_OT_MAC_FILTER_ADDRESS_MODE_DISABLED: otMacFilterAddressMode = 0;
@@ -7788,7 +8178,7 @@ pub const otMacFilterAddressMode_OT_MAC_FILTER_ADDRESS_MODE_DENYLIST: otMacFilte
 pub type otMacFilterAddressMode = ::core::ffi::c_uint;
 /// Represents a Mac Filter entry.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otMacFilterEntry {
     ///< IEEE 802.15.4 Extended Address
     pub mExtAddress: otExtAddress,
@@ -7797,7 +8187,7 @@ pub struct otMacFilterEntry {
 }
 /// Represents the MAC layer counters.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otMacCounters {
     /// The total number of unique MAC frame transmission requests.
     ///
@@ -7927,7 +8317,7 @@ pub struct otMacCounters {
 /// Represents a received IEEE 802.15.4 Beacon.
 #[repr(C)]
 #[repr(align(4))]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otActiveScanResult {
     ///< IEEE 802.15.4 Extended Address
     pub mExtAddress: otExtAddress,
@@ -8113,7 +8503,7 @@ impl otActiveScanResult {
 }
 /// Represents an energy scan result.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otEnergyScanResult {
     ///< IEEE 802.15.4 Channel
     pub mChannel: u8,
@@ -8388,17 +8778,9 @@ unsafe extern "C" {
     );
 }
 unsafe extern "C" {
-    /// Gets the current MAC frame counter value.
-    ///
-    /// @param[in] aInstance    A pointer to the OpenThread instance.
-    ///
-    /// @returns The current MAC frame counter value.
-    pub fn otLinkGetFrameCounter(aInstance: *mut otInstance) -> u32;
-}
-unsafe extern "C" {
     /// Gets the address mode of MAC filter.
     ///
-    /// Is available when `OPENTHREAD_CONFIG_MAC_FILTER_ENABLE` configuration is enabled.
+    /// Is available when OPENTHREAD_CONFIG_MAC_FILTER_ENABLE configuration is enabled.
     ///
     /// @param[in]  aInstance  A pointer to an OpenThread instance.
     ///
@@ -8408,7 +8790,7 @@ unsafe extern "C" {
 unsafe extern "C" {
     /// Sets the address mode of MAC filter.
     ///
-    /// Is available when `OPENTHREAD_CONFIG_MAC_FILTER_ENABLE` configuration is enabled.
+    /// Is available when OPENTHREAD_CONFIG_MAC_FILTER_ENABLE configuration is enabled.
     ///
     /// @param[in]  aInstance  A pointer to an OpenThread instance.
     /// @param[in]  aMode      The address mode to set.
@@ -8417,7 +8799,7 @@ unsafe extern "C" {
 unsafe extern "C" {
     /// Adds an Extended Address to MAC filter.
     ///
-    /// Is available when `OPENTHREAD_CONFIG_MAC_FILTER_ENABLE` configuration is enabled.
+    /// Is available when OPENTHREAD_CONFIG_MAC_FILTER_ENABLE configuration is enabled.
     ///
     /// @param[in]  aInstance    A pointer to an OpenThread instance.
     /// @param[in]  aExtAddress  A pointer to the Extended Address (MUST NOT be NULL).
@@ -8432,7 +8814,7 @@ unsafe extern "C" {
 unsafe extern "C" {
     /// Removes an Extended Address from MAC filter.
     ///
-    /// Is available when `OPENTHREAD_CONFIG_MAC_FILTER_ENABLE` configuration is enabled.
+    /// Is available when OPENTHREAD_CONFIG_MAC_FILTER_ENABLE configuration is enabled.
     ///
     /// No action is performed if there is no existing entry in Filter matching the given Extended Address.
     ///
@@ -8443,7 +8825,7 @@ unsafe extern "C" {
 unsafe extern "C" {
     /// Clears all the Extended Addresses from MAC filter.
     ///
-    /// Is available when `OPENTHREAD_CONFIG_MAC_FILTER_ENABLE` configuration is enabled.
+    /// Is available when OPENTHREAD_CONFIG_MAC_FILTER_ENABLE configuration is enabled.
     ///
     /// @param[in]  aInstance  A pointer to an OpenThread instance.
     pub fn otLinkFilterClearAddresses(aInstance: *mut otInstance);
@@ -8451,7 +8833,7 @@ unsafe extern "C" {
 unsafe extern "C" {
     /// Gets an in-use address filter entry.
     ///
-    /// Is available when `OPENTHREAD_CONFIG_MAC_FILTER_ENABLE` configuration is enabled.
+    /// Is available when OPENTHREAD_CONFIG_MAC_FILTER_ENABLE configuration is enabled.
     ///
     /// @param[in]      aInstance  A pointer to an OpenThread instance.
     /// @param[in,out]  aIterator  A pointer to the MAC filter iterator context. To get the first in-use address filter
@@ -8467,14 +8849,10 @@ unsafe extern "C" {
     ) -> otError;
 }
 unsafe extern "C" {
-    /// Adds the specified Extended Address to the `RssIn` list (or modifies an existing
-    /// address in the `RssIn` list) and sets the received signal strength (in dBm) entry
-    /// for messages from that address. The Extended Address does not necessarily have
-    /// to be in the `address allowlist/denylist` filter to set the `rss`.
-    /// @note The `RssIn` list contains Extended Addresses whose `rss` or link quality indicator (`lqi`)
-    /// values have been set to be different from the defaults.
+    /// Adds a fixed received signal strength (in dBm) entry for the messages from a given Extended Address in
+    /// MAC Filter.
     ///
-    /// Is available when `OPENTHREAD_CONFIG_MAC_FILTER_ENABLE` configuration is enabled.
+    /// Is available when OPENTHREAD_CONFIG_MAC_FILTER_ENABLE configuration is enabled.
     ///
     /// @param[in]  aInstance    A pointer to an OpenThread instance.
     /// @param[in]  aExtAddress  A pointer to the IEEE 802.15.4 Extended Address. MUST NOT be NULL.
@@ -8489,14 +8867,11 @@ unsafe extern "C" {
     ) -> otError;
 }
 unsafe extern "C" {
-    /// Removes the specified Extended Address from the `RssIn` list. Once removed
-    /// from the `RssIn` list, this MAC address will instead use the default `rss`
-    /// and `lqi` settings, assuming defaults have been set.
-    /// (If no defaults have been set, the over-air signal is used.)
+    /// Removes a MAC Filter entry for fixed received signal strength setting for a given Extended Address.
     ///
-    /// Is available when `OPENTHREAD_CONFIG_MAC_FILTER_ENABLE` configuration is enabled.
+    /// Is available when OPENTHREAD_CONFIG_MAC_FILTER_ENABLE configuration is enabled.
     ///
-    /// No action is performed if there is no existing entry in the `RssIn` list matching the specified Extended Address.
+    /// No action is performed if there is no existing entry in Filter matching the given Extended Address.
     ///
     /// @param[in]  aInstance    A pointer to an OpenThread instance.
     /// @param[in]  aExtAddress  A pointer to the IEEE 802.15.4 Extended Address. MUST NOT be NULL.
@@ -8505,7 +8880,7 @@ unsafe extern "C" {
 unsafe extern "C" {
     /// Sets the default received signal strength (in dBm) on MAC Filter.
     ///
-    /// Is available when `OPENTHREAD_CONFIG_MAC_FILTER_ENABLE` configuration is enabled.
+    /// Is available when OPENTHREAD_CONFIG_MAC_FILTER_ENABLE configuration is enabled.
     ///
     /// The default RSS value is used for all received frames from addresses for which there is no explicit RSS-IN entry
     /// in the Filter list (added using `otLinkFilterAddRssIn()`).
@@ -8517,17 +8892,15 @@ unsafe extern "C" {
 unsafe extern "C" {
     /// Clears any previously set default received signal strength (in dBm) on MAC Filter.
     ///
-    /// Is available when `OPENTHREAD_CONFIG_MAC_FILTER_ENABLE` configuration is enabled.
+    /// Is available when OPENTHREAD_CONFIG_MAC_FILTER_ENABLE configuration is enabled.
     ///
     /// @param[in]  aInstance    A pointer to an OpenThread instance.
     pub fn otLinkFilterClearDefaultRssIn(aInstance: *mut otInstance);
 }
 unsafe extern "C" {
-    /// Clears all the received signal strength (`rss`) and link quality
-    /// indicator (`lqi`) entries (including defaults) from the `RssIn` list.
-    /// Performing this action means that all Extended Addresses will use the on-air signal.
+    /// Clears all the received signal strength entries (including default RSS-in) on MAC Filter.
     ///
-    /// Is available when `OPENTHREAD_CONFIG_MAC_FILTER_ENABLE` configuration is enabled.
+    /// Is available when OPENTHREAD_CONFIG_MAC_FILTER_ENABLE configuration is enabled.
     ///
     /// @param[in]  aInstance A pointer to an OpenThread instance.
     pub fn otLinkFilterClearAllRssIn(aInstance: *mut otInstance);
@@ -8535,7 +8908,7 @@ unsafe extern "C" {
 unsafe extern "C" {
     /// Gets an in-use RssIn filter entry.
     ///
-    /// Is available when `OPENTHREAD_CONFIG_MAC_FILTER_ENABLE` configuration is enabled.
+    /// Is available when OPENTHREAD_CONFIG_MAC_FILTER_ENABLE configuration is enabled.
     ///
     /// @param[in]      aInstance  A pointer to an OpenThread instance.
     /// @param[in,out]  aIterator  A pointer to the MAC filter iterator context. MUST NOT be NULL.
@@ -8555,7 +8928,7 @@ unsafe extern "C" {
 unsafe extern "C" {
     /// Enables/disables IEEE 802.15.4 radio filter mode.
     ///
-    /// Is available when `OPENTHREAD_CONFIG_MAC_FILTER_ENABLE` configuration is enabled.
+    /// Is available when OPENTHREAD_CONFIG_MAC_FILTER_ENABLE configuration is enabled.
     ///
     /// The radio filter is mainly intended for testing. It can be used to temporarily block all tx/rx on the 802.15.4 radio.
     /// When radio filter is enabled, radio is put to sleep instead of receive (to ensure device does not receive any frame
@@ -8569,7 +8942,7 @@ unsafe extern "C" {
 unsafe extern "C" {
     /// Indicates whether the IEEE 802.15.4 radio filter is enabled or not.
     ///
-    /// Is available when `OPENTHREAD_CONFIG_MAC_FILTER_ENABLE` configuration is enabled.
+    /// Is available when OPENTHREAD_CONFIG_MAC_FILTER_ENABLE configuration is enabled.
     ///
     /// @retval TRUE   If the radio filter is enabled.
     /// @retval FALSE  If the radio filter is disabled.
@@ -8702,7 +9075,7 @@ unsafe extern "C" {
     /// @param[in]  aInstance      A pointer to an OpenThread instance.
     ///
     /// @returns The CSL channel.
-    pub fn otLinkGetCslChannel(aInstance: *mut otInstance) -> u8;
+    pub fn otLinkCslGetChannel(aInstance: *mut otInstance) -> u8;
 }
 unsafe extern "C" {
     /// Sets the CSL channel.
@@ -8713,28 +9086,25 @@ unsafe extern "C" {
     ///
     /// @retval OT_ERROR_NONE           Successfully set the CSL parameters.
     /// @retval OT_ERROR_INVALID_ARGS   Invalid @p aChannel.
-    pub fn otLinkSetCslChannel(aInstance: *mut otInstance, aChannel: u8) -> otError;
+    pub fn otLinkCslSetChannel(aInstance: *mut otInstance, aChannel: u8) -> otError;
 }
 unsafe extern "C" {
-    /// Gets the CSL period in microseconds
+    /// Gets the CSL period.
     ///
     /// @param[in]  aInstance      A pointer to an OpenThread instance.
     ///
-    /// @returns The CSL period in microseconds.
-    pub fn otLinkGetCslPeriod(aInstance: *mut otInstance) -> u32;
+    /// @returns The CSL period in units of 10 symbols.
+    pub fn otLinkCslGetPeriod(aInstance: *mut otInstance) -> u16;
 }
 unsafe extern "C" {
-    /// Sets the CSL period in microseconds. Disable CSL by setting this parameter to `0`.
-    ///
-    /// The CSL period MUST be a multiple of `OT_LINK_CSL_PERIOD_TEN_SYMBOLS_UNIT_IN_USEC`, otherwise `OT_ERROR_INVALID_ARGS`
-    /// is returned.
+    /// Sets the CSL period in units of 10 symbols. Disable CSL by setting this parameter to `0`.
     ///
     /// @param[in]  aInstance      A pointer to an OpenThread instance.
-    /// @param[in]  aPeriod        The CSL period in microseconds.
+    /// @param[in]  aPeriod        The CSL period in units of 10 symbols.
     ///
     /// @retval OT_ERROR_NONE           Successfully set the CSL period.
-    /// @retval OT_ERROR_INVALID_ARGS   Invalid CSL period
-    pub fn otLinkSetCslPeriod(aInstance: *mut otInstance, aPeriod: u32) -> otError;
+    /// @retval OT_ERROR_INVALID_ARGS   Invalid CSL period.
+    pub fn otLinkCslSetPeriod(aInstance: *mut otInstance, aPeriod: u16) -> otError;
 }
 unsafe extern "C" {
     /// Gets the CSL timeout.
@@ -8742,7 +9112,7 @@ unsafe extern "C" {
     /// @param[in]  aInstance      A pointer to an OpenThread instance.
     ///
     /// @returns The CSL timeout in seconds.
-    pub fn otLinkGetCslTimeout(aInstance: *mut otInstance) -> u32;
+    pub fn otLinkCslGetTimeout(aInstance: *mut otInstance) -> u32;
 }
 unsafe extern "C" {
     /// Sets the CSL timeout in seconds.
@@ -8752,7 +9122,7 @@ unsafe extern "C" {
     ///
     /// @retval OT_ERROR_NONE           Successfully set the CSL timeout.
     /// @retval OT_ERROR_INVALID_ARGS   Invalid CSL timeout.
-    pub fn otLinkSetCslTimeout(aInstance: *mut otInstance, aTimeout: u32) -> otError;
+    pub fn otLinkCslSetTimeout(aInstance: *mut otInstance, aTimeout: u32) -> otError;
 }
 unsafe extern "C" {
     /// Returns the current CCA (Clear Channel Assessment) failure rate.
@@ -8814,59 +9184,6 @@ unsafe extern "C" {
     /// @retval OT_ERROR_NO_BUFS        Insufficient message buffers available.
     pub fn otLinkSendEmptyData(aInstance: *mut otInstance) -> otError;
 }
-unsafe extern "C" {
-    /// Sets the region code.
-    ///
-    /// The radio region format is the 2-bytes ascii representation of the ISO 3166 alpha-2 code.
-    ///
-    /// @param[in]  aInstance    The OpenThread instance structure.
-    /// @param[in]  aRegionCode  The radio region code. The `aRegionCode >> 8` is first ascii char
-    ///                          and the `aRegionCode & 0xff` is the second ascii char.
-    ///
-    /// @retval  OT_ERROR_FAILED           Other platform specific errors.
-    /// @retval  OT_ERROR_NONE             Successfully set region code.
-    /// @retval  OT_ERROR_NOT_IMPLEMENTED  The feature is not implemented.
-    pub fn otLinkSetRegion(aInstance: *mut otInstance, aRegionCode: u16) -> otError;
-}
-unsafe extern "C" {
-    /// Get the region code.
-    ///
-    /// The radio region format is the 2-bytes ascii representation of the ISO 3166 alpha-2 code.
-    ///
-    /// @param[in]  aInstance    The OpenThread instance structure.
-    /// @param[out] aRegionCode  The radio region code. The `aRegionCode >> 8` is first ascii char
-    ///                          and the `aRegionCode & 0xff` is the second ascii char.
-    ///
-    /// @retval  OT_ERROR_INVALID_ARGS     @p aRegionCode is nullptr.
-    /// @retval  OT_ERROR_FAILED           Other platform specific errors.
-    /// @retval  OT_ERROR_NONE             Successfully got region code.
-    /// @retval  OT_ERROR_NOT_IMPLEMENTED  The feature is not implemented.
-    pub fn otLinkGetRegion(aInstance: *mut otInstance, aRegionCode: *mut u16) -> otError;
-}
-unsafe extern "C" {
-    /// Gets the Wake-up channel.
-    ///
-    /// Requires `OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE` or `OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE`.
-    ///
-    /// @param[in]  aInstance  A pointer to an OpenThread instance.
-    ///
-    /// @returns The Wake-up channel.
-    pub fn otLinkGetWakeupChannel(aInstance: *mut otInstance) -> u8;
-}
-unsafe extern "C" {
-    /// Sets the Wake-up channel.
-    ///
-    /// Requires `OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE` or `OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE`.
-    ///
-    /// @param[in]  aInstance  A pointer to an OpenThread instance.
-    /// @param[in]  aChannel   The Wake-up sample channel. Channel value should be `0` (Set Wake-up Channel unspecified,
-    ///                        which means the device will use the PAN channel) or within the range [1, 10] (if 915-MHz
-    ///                        supported) and [11, 26] (if 2.4 GHz supported).
-    ///
-    /// @retval OT_ERROR_NONE           Successfully set the Wake-up channel.
-    /// @retval OT_ERROR_INVALID_ARGS   Invalid @p aChannel.
-    pub fn otLinkSetWakeupChannel(aInstance: *mut otInstance, aChannel: u8) -> otError;
-}
 ///< The Thread stack is disabled.
 pub const otDeviceRole_OT_DEVICE_ROLE_DISABLED: otDeviceRole = 0;
 ///< Not currently participating in a Thread network/partition.
@@ -8881,7 +9198,7 @@ pub const otDeviceRole_OT_DEVICE_ROLE_LEADER: otDeviceRole = 4;
 pub type otDeviceRole = ::core::ffi::c_uint;
 /// Represents an MLE Link Mode configuration.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otLinkModeConfig {
     pub _bitfield_align_1: [u8; 0],
     pub _bitfield_1: __BindgenBitfieldUnit<[u8; 1usize]>,
@@ -9010,7 +9327,7 @@ impl otLinkModeConfig {
 }
 /// Holds diagnostic information for a neighboring Thread node
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otNeighborInfo {
     ///< IEEE 802.15.4 Extended Address
     pub mExtAddress: otExtAddress,
@@ -9205,7 +9522,7 @@ impl otNeighborInfo {
 pub type otNeighborInfoIterator = i16;
 /// Represents the Thread Leader Data.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otLeaderData {
     ///< Partition ID
     pub mPartitionId: u32,
@@ -9220,7 +9537,7 @@ pub struct otLeaderData {
 }
 /// Holds diagnostic information for a Thread Router
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otRouterInfo {
     ///< IEEE 802.15.4 Extended Address
     pub mExtAddress: otExtAddress,
@@ -9333,7 +9650,7 @@ impl otRouterInfo {
 }
 /// Represents the IP level counters.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otIpCounters {
     ///< The number of IPv6 packets successfully transmitted.
     pub mTxSuccess: u32,
@@ -9346,7 +9663,7 @@ pub struct otIpCounters {
 }
 /// Represents the Thread MLE counters.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otMleCounters {
     ///< Number of times device entered OT_DEVICE_ROLE_DISABLED role.
     pub mDisabledRole: u16,
@@ -9385,7 +9702,7 @@ pub struct otMleCounters {
 }
 /// Represents the MLE Parent Response data.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otThreadParentResponseInfo {
     ///< IEEE 802.15.4 Extended Address of the Parent
     pub mExtAddr: otExtAddress,
@@ -9421,13 +9738,11 @@ unsafe extern "C" {
     /// @param[in] aEnabled  TRUE if Thread is enabled, FALSE otherwise.
     ///
     /// @retval OT_ERROR_NONE           Successfully started Thread protocol operation.
-    /// @retval OT_ERROR_INVALID_STATE  The network interface was not up.
+    /// @retval OT_ERROR_INVALID_STATE  The network interface was not not up.
     pub fn otThreadSetEnabled(aInstance: *mut otInstance, aEnabled: bool) -> otError;
 }
 unsafe extern "C" {
     /// Gets the Thread protocol version.
-    ///
-    /// The constants `OT_THREAD_VERSION_*` define the numerical version values.
     ///
     /// @returns the Thread protocol version.
     pub fn otThreadGetVersion() -> u16;
@@ -9861,7 +10176,7 @@ unsafe extern "C" {
     /// @returns The thrKeySwitchGuardTime value (in hours).
     ///
     /// @sa otThreadSetKeySwitchGuardTime
-    pub fn otThreadGetKeySwitchGuardTime(aInstance: *mut otInstance) -> u16;
+    pub fn otThreadGetKeySwitchGuardTime(aInstance: *mut otInstance) -> u32;
 }
 unsafe extern "C" {
     /// Sets the thrKeySwitchGuardTime (in hours).
@@ -9873,7 +10188,7 @@ unsafe extern "C" {
     /// @param[in]  aKeySwitchGuardTime  The thrKeySwitchGuardTime value (in hours).
     ///
     /// @sa otThreadGetKeySwitchGuardTime
-    pub fn otThreadSetKeySwitchGuardTime(aInstance: *mut otInstance, aKeySwitchGuardTime: u16);
+    pub fn otThreadSetKeySwitchGuardTime(aInstance: *mut otInstance, aKeySwitchGuardTime: u32);
 }
 unsafe extern "C" {
     /// Detach from the Thread network.
@@ -10034,61 +10349,6 @@ unsafe extern "C" {
     pub fn otThreadResetIp6Counters(aInstance: *mut otInstance);
 }
 unsafe extern "C" {
-    /// Gets the time-in-queue histogram for messages in the TX queue.
-    ///
-    /// Requires `OPENTHREAD_CONFIG_TX_QUEUE_STATISTICS_ENABLE`.
-    ///
-    /// Histogram of the time-in-queue of messages in the transmit queue is collected. The time-in-queue is tracked for
-    /// direct transmissions only and is measured as the duration from when a message is added to the transmit queue until
-    /// it is passed to the MAC layer for transmission or dropped.
-    ///
-    /// The histogram is returned as an array of `uint32_t` values with `aNumBins` entries. The first entry in the array
-    /// (at index 0) represents the number of messages with a time-in-queue less than `aBinInterval`. The second entry
-    /// represents the number of messages with a time-in-queue greater than or equal to `aBinInterval`, but less than
-    /// `2 * aBinInterval`. And so on. The last entry represents the number of messages with time-in-queue  greater than or
-    /// equal to `(aNumBins - 1) * aBinInterval`.
-    ///
-    /// The collected statistics can be reset by calling `otThreadResetTimeInQueueStat()`. The histogram information is
-    /// collected since the OpenThread instance was initialized or since the last time statistics collection was reset by
-    /// calling the `otThreadResetTimeInQueueStat()`.
-    ///
-    /// Pointers @p aNumBins and @p aBinInterval MUST NOT be NULL.
-    ///
-    /// @param[in]  aInstance      A pointer to an OpenThread instance.
-    /// @param[out] aNumBins       Pointer to return the number of bins in histogram (array length).
-    /// @param[out] aBinInterval   Pointer to return the histogram bin interval length in milliseconds.
-    ///
-    /// @returns A pointer to an array of @p aNumBins entries representing the collected histogram info.
-    pub fn otThreadGetTimeInQueueHistogram(
-        aInstance: *mut otInstance,
-        aNumBins: *mut u16,
-        aBinInterval: *mut u32,
-    ) -> *const u32;
-}
-unsafe extern "C" {
-    /// Gets the maximum time-in-queue for messages in the TX queue.
-    ///
-    /// Requires `OPENTHREAD_CONFIG_TX_QUEUE_STATISTICS_ENABLE`.
-    ///
-    /// The time-in-queue is tracked for direct transmissions only and is measured as the duration from when a message is
-    /// added to the transmit queue until it is passed to the MAC layer for transmission or dropped.
-    ///
-    /// The collected statistics can be reset by calling `otThreadResetTimeInQueueStat()`.
-    ///
-    /// @param[in]  aInstance      A pointer to an OpenThread instance.
-    ///
-    /// @returns The maximum time-in-queue in milliseconds for all messages in the TX queue (so far).
-    pub fn otThreadGetMaxTimeInQueue(aInstance: *mut otInstance) -> u32;
-}
-unsafe extern "C" {
-    /// Resets the TX queue time-in-queue statistics.
-    ///
-    /// Requires `OPENTHREAD_CONFIG_TX_QUEUE_STATISTICS_ENABLE`.
-    ///
-    /// @param[in]  aInstance      A pointer to an OpenThread instance.
-    pub fn otThreadResetTimeInQueueStat(aInstance: *mut otInstance);
-}
-unsafe extern "C" {
     /// Gets the Thread MLE counters.
     ///
     /// @param[in]  aInstance  A pointer to an OpenThread instance.
@@ -10130,7 +10390,7 @@ unsafe extern "C" {
 }
 /// Represents the Thread Discovery Request data.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct otThreadDiscoveryRequestInfo {
     ///< IEEE 802.15.4 Extended Address of the requester
     pub mExtAddress: otExtAddress,
@@ -10365,32 +10625,6 @@ unsafe extern "C" {
     );
 }
 unsafe extern "C" {
-    /// Sets the store frame counter ahead.
-    ///
-    /// Requires `OPENTHREAD_CONFIG_DYNAMIC_STORE_FRAME_AHEAD_COUNTER_ENABLE` to be enabled.
-    ///
-    /// The OpenThread stack stores the MLE and MAC security frame counter values in non-volatile storage,
-    /// ensuring they persist across device resets. These saved values are set to be ahead of their current
-    /// values by the "frame counter ahead" value.
-    ///
-    /// @param[in] aInstance                  A pointer to an OpenThread instance.
-    /// @param[in] aStoreFrameCounterAhead    The store frame counter ahead to set.
-    pub fn otThreadSetStoreFrameCounterAhead(
-        aInstance: *mut otInstance,
-        aStoreFrameCounterAhead: u32,
-    );
-}
-unsafe extern "C" {
-    /// Gets the store frame counter ahead.
-    ///
-    /// Requires `OPENTHREAD_CONFIG_DYNAMIC_STORE_FRAME_AHEAD_COUNTER_ENABLE` to be enabled.
-    ///
-    /// @param[in] aInstance A pointer to an OpenThread instance.
-    ///
-    /// @returns The current store frame counter ahead.
-    pub fn otThreadGetStoreFrameCounterAhead(aInstance: *mut otInstance) -> u32;
-}
-unsafe extern "C" {
     /// Run all queued OpenThread tasklets at the time this is called.
     ///
     /// @param[in] aInstance A pointer to an OpenThread instance.
@@ -10454,18 +10688,6 @@ unsafe extern "C" {
     ///
     /// @param[in] aInstance  The OpenThread instance structure.
     pub fn otPlatReset(aInstance: *mut otInstance);
-}
-unsafe extern "C" {
-    /// Performs a hardware reset on the platform to launch bootloader mode, if supported.
-    ///
-    /// Used when `OPENTHREAD_CONFIG_PLATFORM_BOOTLOADER_MODE_ENABLE` is enabled.
-    ///
-    /// @param[in] aInstance  The OpenThread instance structure.
-    ///
-    /// @retval OT_ERROR_NONE         Reset to bootloader successfully.
-    /// @retval OT_ERROR_BUSY         Failed due to another operation is ongoing.
-    /// @retval OT_ERROR_NOT_CAPABLE  Not capable of resetting to bootloader.
-    pub fn otPlatResetToBootloader(aInstance: *mut otInstance) -> otError;
 }
 pub const otPlatResetReason_OT_PLAT_RESET_REASON_POWER_ON: otPlatResetReason = 0;
 pub const otPlatResetReason_OT_PLAT_RESET_REASON_EXTERNAL: otPlatResetReason = 1;
@@ -10567,15 +10789,6 @@ unsafe extern "C" {
     ///
     /// @returns The current power state.
     pub fn otPlatGetMcuPowerState(aInstance: *mut otInstance) -> otPlatMcuPowerState;
-}
-unsafe extern "C" {
-    /// Logs a crash dump using OpenThread logging APIs
-    ///
-    /// @note This API is an optional logging platform API. It's up to the platform layer to implement it.
-    ///
-    /// @retval OT_ERROR_NONE            Crash dump was logged successfully
-    /// @retval OT_ERROR_NOT_CAPABLE     Platform is not capable of logging a crash dump
-    pub fn otPlatLogCrashDump() -> otError;
 }
 unsafe extern "C" {
     /// Fill buffer with entropy.
@@ -10822,6 +11035,15 @@ pub struct otDnsTxtEntry {
     ///< Number of bytes in `mValue` buffer.
     pub mValueLength: u16,
 }
+impl Default for otDnsTxtEntry {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
 /// Represents an iterator for TXT record entries (key/value pairs).
 ///
 /// The data fields in this structure are intended for use by OpenThread core and caller should not read or change them.
@@ -10830,7 +11052,16 @@ pub struct otDnsTxtEntry {
 pub struct otDnsTxtEntryIterator {
     pub mPtr: *const ::core::ffi::c_void,
     pub mData: [u16; 2usize],
-    pub mChar: [::core::ffi::c_char; 65usize],
+    pub mChar: [::core::ffi::c_char; 10usize],
+}
+impl Default for otDnsTxtEntryIterator {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
 }
 unsafe extern "C" {
     /// Initializes a TXT record iterator.
@@ -10854,9 +11085,9 @@ unsafe extern "C" {
     /// data buffer used to initialize the iterator MUST persist and remain unchanged. Otherwise the behavior of this
     /// function is undefined.
     ///
-    /// If the parsed key string length is smaller than or equal to `OT_DNS_TXT_KEY_ITER_MAX_LENGTH` the key string is
-    /// returned in `mKey` in @p aEntry. But if the key is longer, then `mKey` is set to NULL and the entire encoded TXT
-    /// entry string is returned in `mValue` and `mValueLength`.
+    /// If the parsed key string length is smaller than or equal to `OT_DNS_TXT_KEY_MAX_LENGTH` (recommended max key length)
+    /// the key string is returned in `mKey` in @p aEntry. But if the key is longer, then `mKey` is set to NULL and the
+    /// entire encoded TXT entry string is returned in `mValue` and `mValueLength`.
     ///
     /// @param[in]  aIterator   A pointer to the iterator (MUST NOT be NULL).
     /// @param[out] aEntry      A pointer to a `otDnsTxtEntry` structure to output the parsed/read entry (MUST NOT be NULL).
@@ -10942,6 +11173,15 @@ pub struct otSrpClientHostInfo {
     ///< Host info state.
     pub mState: otSrpClientItemState,
 }
+impl Default for otSrpClientHostInfo {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
 /// Represents an SRP client service.
 ///
 /// The values in this structure, including the string buffers for the names and the TXT record entries, MUST persist
@@ -10988,6 +11228,15 @@ pub struct otSrpClientService {
     pub mLease: u32,
     ///< Desired key lease interval in sec - zero to use default.
     pub mKeyLease: u32,
+}
+impl Default for otSrpClientService {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
 }
 /// Pointer type defines the callback used by SRP client to notify user of changes/events/errors.
 ///
@@ -11070,7 +11319,7 @@ unsafe extern "C" {
     ///
     ///  - The SRP client is started - `otSrpClientStart()` is called.
     ///  - Host name is set - `otSrpClientSetHostName()` is called.
-    ///  - At least one host IPv6 address is set - `otSrpClientSetHostAddresses()` is called.
+    ///  - At least one host IPv6 address is set - `otSrpClientSetHostName()` is called.
     ///  - At least one service is added - `otSrpClientAddService()` is called.
     ///
     /// It does not matter in which order these functions are called. When all conditions are met, the SRP client will
@@ -11311,10 +11560,10 @@ unsafe extern "C" {
 unsafe extern "C" {
     /// Enables auto host address mode.
     ///
-    /// When enabled host IPv6 addresses are automatically set by SRP client using all the preferred unicast addresses on
-    /// Thread netif excluding all link-local and mesh-local addresses. If there is no preferred address, then Mesh Local
-    /// EID address is added. The SRP client will automatically re-register when/if addresses on Thread netif are updated
-    /// (new addresses are added or existing addresses are removed or marked as non-preferred).
+    /// When enabled host IPv6 addresses are automatically set by SRP client using all the unicast addresses on Thread netif
+    /// excluding all link-local and mesh-local addresses. If there is no valid address, then Mesh Local EID address is
+    /// added. The SRP client will automatically re-register when/if addresses on Thread netif are updated (new addresses
+    /// are added or existing addresses are removed).
     ///
     /// The auto host address mode can be enabled before start or during operation of SRP client except when the host info
     /// is being removed (client is busy handling a remove request from an call to `otSrpClientRemoveHostAndServices()` and
@@ -11560,6 +11809,15 @@ pub struct otSrpClientBuffersServiceEntry {
     pub mService: otSrpClientService,
     ///< The SRP client TXT entry.
     pub mTxtEntry: otDnsTxtEntry,
+}
+impl Default for otSrpClientBuffersServiceEntry {
+    fn default() -> Self {
+        let mut s = ::core::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::core::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
 }
 unsafe extern "C" {
     /// Gets the string buffer to use for SRP client host name.

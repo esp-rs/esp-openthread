@@ -89,6 +89,7 @@ impl OpenThreadBuilder {
             .use_core()
             .enable_function_attribute_detection()
             .derive_debug(false)
+            .derive_default(true)
             .layout_tests(false)
             .blocklist_function("strtold")
             .blocklist_function("_strtold_r")
