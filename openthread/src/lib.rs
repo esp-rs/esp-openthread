@@ -16,7 +16,7 @@ use embassy_futures::select::{Either, Either3};
 
 use embassy_time::Instant;
 
-use log::{debug, info, trace};
+use log::{debug, info, trace, warn};
 
 use platform::OT_ACTIVE_STATE;
 
@@ -299,6 +299,25 @@ impl<'a> OpenThread<'a> {
         let state = ot.state();
 
         ot!(unsafe { otIp6SetEnabled(state.ot.instance, enable) })
+    }
+
+    /// Enable or disable the reception of IPv6 packets.
+    ///
+    /// If not necessary, reception should be disabled, because this consumes memory.
+    pub fn enable_ipv6_rx(&self, enable: bool) {
+        let mut ot = self.activate();
+        let state = ot.state();
+
+        if enable {
+            state.ot.rx_ipv6_enabled = true;
+        } else {
+            state.ot.rx_ipv6_enabled = false;
+            if let Some(msg) = state.ot.rx_ipv6.try_take() {
+                unsafe {
+                    otMessageFree(msg);
+                }
+            }
+        }
     }
 
     /// This function starts/stops the Thread protocol operation.
@@ -871,6 +890,7 @@ impl OtResources {
                 radio_resources,
                 dataset_resources,
                 instance: core::ptr::null_mut(),
+                rx_ipv6_enabled: false,
                 rx_ipv6: Signal::new(),
                 alarm: Signal::new(),
                 tasklets: Signal::new(),
@@ -1177,7 +1197,15 @@ impl<'a> OtContext<'a> {
 
         let state = self.state();
 
-        if state.ot.rx_ipv6.signaled() {
+        if !state.ot.rx_ipv6_enabled || state.ot.rx_ipv6.signaled() {
+            if state.ot.rx_ipv6_enabled {
+                // Drop the message because the previous one is not consumed yet
+                warn!("Dropping RX Ipv6 message, buffer full");
+            } else {
+                // Drop the message because the RX is disabled
+                warn!("Dropping RX Ipv6 message, RX disabled");
+            }
+
             unsafe {
                 otMessageFree(msg);
             }
@@ -1385,6 +1413,11 @@ struct OtState<'a> {
     scan_callback: RefCell<Option<&'static mut dyn FnMut(Option<&ScanResult>)>>,
     /// Indicate that scanning has completed
     scan_done: Signal<()>,
+    /// Whether to egress IPv6 packets from OpenThread
+    /// If not necessary, this should be disabled, because otherwise the signal below
+    /// will be filled with a packet that is not consumed, and the packets of OpenThread
+    /// take precious RAM.
+    rx_ipv6_enabled: bool,
     /// An Ipv6 packet egressed from OpenThread and waiting to be ingressed somewhere else
     rx_ipv6: Signal<*mut otMessage>,
     /// `Some` in case there is a pending OpenThread awarm which is not due yet

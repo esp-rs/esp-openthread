@@ -70,6 +70,9 @@ impl<const MTU: usize> EnetRunner<'_, MTU> {
     where
         R: Radio,
     {
+        self.ot.enable_ipv6_rx(true);
+        let _guard = scopeguard::guard((), |_| self.ot.enable_ipv6_rx(false));
+
         let mut rx = pin!(Self::run_rx(&self.ot, &mut self.rx_runner));
         let mut tx = pin!(Self::run_tx(&self.ot, &mut self.tx_runner));
         let mut ot = pin!(Self::run_ot(&self.ot, &mut radio));

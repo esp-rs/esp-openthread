@@ -4,7 +4,7 @@ use core::future::poll_fn;
 use core::mem::MaybeUninit;
 use core::net::{Ipv6Addr, SocketAddrV6};
 
-use log::{debug, info, trace};
+use log::{debug, info, trace, warn};
 
 use crate::signal::Signal;
 use crate::sys::{
@@ -179,6 +179,7 @@ impl<'a> UdpSocket<'a> {
 
         let msg = unsafe { otUdpNewMessage(instance, core::ptr::null()) };
 
+        #[allow(clippy::field_reassign_with_default)]
         if !msg.is_null() {
             ot!(unsafe { otMessageAppend(msg, data.as_ptr() as *mut _, data.len() as _) })?;
 
@@ -230,33 +231,34 @@ impl<'a> UdpSocket<'a> {
         };
 
         let socket = &mut udp.sockets[slot];
-        if socket.rx.signaled() {
-            return;
-        }
+        if !socket.rx.signaled() {
+            let msg = unsafe { &*msg };
+            let msg_info = unsafe { &*msg_info };
+            let msg_len = unsafe { otMessageGetLength(msg) as usize };
 
-        let msg = unsafe { &*msg };
-        let msg_info = unsafe { &*msg_info };
-        let msg_len = unsafe { otMessageGetLength(msg) as usize };
+            let buf_len = udp.buf_len;
+            if msg_len <= buf_len {
+                let offset = slot * buf_len;
+                let buf = &mut udp.buffers[offset..offset + buf_len];
 
-        let buf_len = udp.buf_len;
-        if msg_len <= buf_len {
-            let offset = slot * buf_len;
-            let buf = &mut udp.buffers[offset..offset + buf_len];
+                unsafe {
+                    otMessageRead(
+                        msg,
+                        0,
+                        buf.as_mut_ptr() as *mut _,
+                        buf_len.min(msg_len) as _,
+                    );
+                };
 
-            unsafe {
-                otMessageRead(
-                    msg,
-                    0,
-                    buf.as_mut_ptr() as *mut _,
-                    buf_len.min(msg_len) as _,
-                );
-            };
-
-            socket.rx.signal((
-                msg_len,
-                to_sock_addr(&msg_info.mSockAddr, msg_info.mSockPort, 0),
-                to_sock_addr(&msg_info.mPeerAddr, msg_info.mPeerPort, 0),
-            ));
+                socket.rx.signal((
+                    msg_len,
+                    to_sock_addr(&msg_info.mSockAddr, msg_info.mSockPort, 0),
+                    to_sock_addr(&msg_info.mPeerAddr, msg_info.mPeerPort, 0),
+                ));
+            } else {
+                // Drop the message because the previous one is not consumed yet
+                warn!("Dropping RX UDP message, buffer full");
+            }
         }
     }
 }
