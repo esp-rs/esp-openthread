@@ -40,6 +40,8 @@ pub enum RadioErrorKind {
     TxAckFailed,
     /// Transmitting failed due to receiving an ACK frame failed
     RxAckFailed,
+    /// Receiving failed due to timeout when preparing an ACK frame
+    TxAckTimeout,
     /// Transmitting failed due to no ACK received
     RxAckTimeout,
     /// Transmitting failed due to invalid ACK received
@@ -294,6 +296,8 @@ pub enum MacRadioError<T> {
     TxAckFailed(T),
     /// Transmitting failed due to receiving an ACK frame failed
     RxAckFailed(T),
+    /// Receiving failed due to timeout when preparing an ACK frame
+    TxAckTimeout,
     /// Transmitting failed due to no ACK received
     RxAckTimeout,
     /// Transmitting failed due to invalid ACK received
@@ -313,6 +317,7 @@ where
             Self::RxAckInvalid => RadioErrorKind::RxAckInvalid,
             Self::TxAckFailed(_) => RadioErrorKind::TxAckFailed,
             Self::RxAckFailed(_) => RadioErrorKind::RxAckFailed,
+            Self::TxAckTimeout => RadioErrorKind::TxAckTimeout,
             Self::RxAckTimeout => RadioErrorKind::RxAckTimeout,
             Self::Io(e) => e.kind(),
         }
@@ -357,11 +362,13 @@ where
     T: MacRadioTimer,
 {
     /// The waiting timeout for a TX ACK to be received.
-    const TX_ACK_WAIT_US: u64 = 500 * 1000;
+    /// See https://github.com/openthread/openthread/blob/9398342b49a03cd140fae910b81cddf9084293a0/src/core/mac/sub_mac.hpp#L528
+    /// Currently much longer than what specified there
+    const TX_ACK_WAIT_US: u64 = 500 * 1000; //16 * 1000 * 10;
     /// The waiting timeout for an RX ACK to be sent.
     // TODO: Should be 190us, but we need to be more precise
     // and not use `embassy-time` with the NRF...
-    const RX_ACK_SEND_US: u64 = 50;
+    const RX_ACK_SEND_US: u64 = 10;
 
     /// Create a new enhanced MAC radio.
     ///

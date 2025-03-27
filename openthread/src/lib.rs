@@ -61,9 +61,9 @@ use sys::{
     otIp6IsEnabled, otIp6NewMessageFromBuffer, otIp6Send, otIp6SetEnabled, otIp6SetReceiveCallback,
     otMessage, otMessageFree, otMessagePriority_OT_MESSAGE_PRIORITY_NORMAL, otMessageRead,
     otMessageSettings, otOperationalDataset, otOperationalDatasetTlvs, otPlatAlarmMilliFired,
-    otPlatRadioReceiveDone, otPlatRadioTxDone, otPlatRadioTxStarted, otRadioFrame,
+    otPlatRadioReceiveDone, otPlatRadioTxDone, otPlatRadioTxStarted, otRadioCaps, otRadioFrame,
     otSetStateChangedCallback, otTaskletsProcess, otThreadGetDeviceRole, otThreadGetExtendedPanId,
-    otThreadSetEnabled, OT_RADIO_FRAME_MAX_SIZE,
+    otThreadSetEnabled, OT_RADIO_CAPS_ACK_TIMEOUT, OT_RADIO_FRAME_MAX_SIZE,
 };
 
 /// A newtype wrapper over the native OpenThread error type (`otError`).
@@ -829,7 +829,9 @@ impl<'a> OpenThread<'a> {
     {
         match err.kind() {
             RadioErrorKind::TxFailed => otError_OT_ERROR_CHANNEL_ACCESS_FAILURE,
-            RadioErrorKind::TxAckFailed => otError_OT_ERROR_NO_ACK,
+            RadioErrorKind::TxAckFailed
+            | RadioErrorKind::RxAckTimeout
+            | RadioErrorKind::RxAckInvalid => otError_OT_ERROR_NO_ACK,
             _ => otError_OT_ERROR_ABORT,
         }
     }
@@ -1203,7 +1205,7 @@ impl<'a> OtContext<'a> {
                 warn!("Dropping RX Ipv6 message, buffer full");
             } else {
                 // Drop the message because the RX is disabled
-                warn!("Dropping RX Ipv6 message, RX disabled");
+                trace!("Dropping RX Ipv6 message, RX disabled");
             }
 
             unsafe {
@@ -1247,8 +1249,8 @@ impl<'a> OtContext<'a> {
         mac.copy_from_slice(self.state().ot.ieee_eui64.as_ref());
     }
 
-    fn plat_radio_caps(&mut self) -> u8 {
-        let caps = 0; // TODO
+    fn plat_radio_caps(&mut self) -> otRadioCaps {
+        let caps = OT_RADIO_CAPS_ACK_TIMEOUT as _;
         trace!("Plat radio caps callback, caps: {caps}");
 
         caps
