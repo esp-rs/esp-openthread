@@ -305,7 +305,7 @@ impl<const UDP_SOCKETS: usize, const UDP_RX_SZ: usize> OtUdpResources<UDP_SOCKET
         }
     }
 
-    /// Initialize the resouces, as they start their life as `MaybeUninit` so as to avoid mem-moves.
+    /// Initialize the resources, as they start their life as `MaybeUninit` so as to avoid mem-moves.
     ///
     /// Returns:
     /// - A reference to a `RefCell<OtUdpState>` value that represents the initialized OpenThread UDP state.

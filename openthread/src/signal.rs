@@ -5,7 +5,7 @@ use core::task::{Context, Poll, Waker};
 /// A `Signal` primitive similar in spirit to `embassy_sync::Signal`, but with a few differences:
 /// - A public `poll_wait` method, so that multiple signals can be clustered behind a single `RefCell` - yet -
 ///   still possible to poll those, or await on those with `poll_fn`;
-/// - No interior mutabilitiy (a `Cell` or `RefCell`) as the expectation is that interior mutability is
+/// - No interior mutability (a `Cell` or `RefCell`) as the expectation is that interior mutability is
 ///   provided externally - with a single `RefCell` or suchlike - for a cluster of signals;
 /// - Method `poll_wait_signaled` to allow for polling and awaiting on the signal becoming triggered.
 pub struct Signal<T>(State<T>);

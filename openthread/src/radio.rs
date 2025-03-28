@@ -102,7 +102,7 @@ bitflags! {
     #[repr(transparent)]
     #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub struct MacCapabilities: u16 {
-        /// Radio supports automatic receival of ACKs for transmitted frames.
+        /// Radio supports automatic reception of ACKs for transmitted frames.
         const TX_ACK = 0x01;
         /// Radio supports automatic sending of ACKs for received frames.
         const RX_ACK = 0x02;

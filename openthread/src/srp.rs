@@ -83,7 +83,7 @@ impl<const SRP_SVCS: usize, const SRP_BUF_SZ: usize> OtSrpResources<SRP_SVCS, SR
         }
     }
 
-    /// Initialize the resouces, as they start their life as `MaybeUninit` so as to avoid mem-moves.
+    /// Initialize the resources, as they start their life as `MaybeUninit` so as to avoid mem-moves.
     ///
     /// Returns:
     /// - A reference to a `RefCell<OtSrpState>` value that represents the initialized OpenThread SRP state.

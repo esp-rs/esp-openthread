@@ -474,7 +474,7 @@ impl<'a> OpenThread<'a> {
             // The init->finalize->init sequence is necessary because
             // the OpenThread C library starts in initialized state -
             // however - our wrapper does not have a drop fn, so we have
-            // to make sure that the OpenThread signleton is not holding
+            // to make sure that the OpenThread singleton is not holding
             // dangling pointers to a previous / moved instance of our resources.
             state.ot.instance = unsafe {
                 let instance = otInstanceInitSingle();
@@ -810,7 +810,7 @@ impl<'a> OpenThread<'a> {
     /// IMPORTANT: The OpenThread native C API can ONLY be called when this method is called and
     /// the returned `OpenThread` instance is in scope.
     ///
-    /// IMPORTTANT: Do NOT hold on the `activate`d `OpenThread` instance accross `.await` points!
+    /// IMPORTANT: Do NOT hold on the `activate`d `OpenThread` instance accross `.await` points!
     ///
     /// Returns:
     /// - An `OpenThread` instance that represents the activated OpenThread stack.
@@ -868,7 +868,7 @@ impl OtResources {
         }
     }
 
-    /// Initialize the resouces, as they start their life as `MaybeUninit` so as to avoid mem-moves.
+    /// Initialize the resources, as they start their life as `MaybeUninit` so as to avoid mem-moves.
     ///
     /// Returns:
     /// - A reference to a `RefCell<OtState>` value that represents the initialized OpenThread state.
@@ -1029,7 +1029,7 @@ impl<'a> OtContext<'a> {
     /// (ideally, just to call one or a few OpenThread C functions) and should not persist across await points
     /// (see below).
     ///
-    /// The reason to have the notion of activation in the first place is because there are mutiple async agents that
+    /// The reason to have the notion of activation in the first place is because there are multiple async agents that
     /// are willing to operate on the same data, i.e.:
     /// - The radio async loop
     /// - The alarm async loop
@@ -1039,7 +1039,7 @@ impl<'a> OtContext<'a> {
     /// All of the above tasks operate on the same data (`OtState` / `OtUdpState`) by mutably borrowing it first, either
     /// directly, or by activating (= creating an `OtContext` type instance) and then calling an OpenThread C API.
     ///
-    /// Activation is automacally finished when the `OtContext` instance is dropped.
+    /// Activation is automatically finished when the `OtContext` instance is dropped.
     ///
     /// NOTE: Do NOT hold references to the `OtContext` instance across `.await` points!
     /// NOTE: Do NOT call `activate` twice without dropping the previous instance!
@@ -1435,7 +1435,7 @@ struct OtState<'a> {
     radio_conf: radio::Config,
     /// Resources for the radio (PHY data frames and their descriptors)
     radio_resources: &'a mut RadioResources,
-    /// Resouces for dealing with the operational dataset
+    /// Resources for dealing with the operational dataset
     dataset_resources: &'a mut DatasetResources,
 }
 

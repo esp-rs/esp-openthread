@@ -360,7 +360,7 @@ impl OpenThread<'_> {
         })
     }
 
-    /// Populates the internal OT TLV datasert structure with the given dataset in TLV slice format.
+    /// Populates the internal OT TLV dataset structure with the given dataset in TLV slice format.
     fn fill_dataset_tlv(state: &mut OtActiveState<'_>, dataset: &[u8]) -> Result<(), OtError> {
         if state.ot.dataset_resources.dataset_tlv.mTlvs.len() < dataset.len() {
             Err(OtError::new(otError_OT_ERROR_NO_BUFS))?;
@@ -372,7 +372,7 @@ impl OpenThread<'_> {
         Ok(())
     }
 
-    /// Populates the internal OT TLV datasert structure with the given dataset in HEX-TLV str format.
+    /// Populates the internal OT TLV dataset structure with the given dataset in HEX-TLV str format.
     fn fill_dataset_tlv_hexstr(
         state: &mut OtActiveState<'_>,
         dataset: &str,
