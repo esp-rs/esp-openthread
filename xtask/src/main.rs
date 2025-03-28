@@ -1,9 +1,39 @@
-use std::{path::PathBuf, process::Command};
+use std::env;
+use std::path::PathBuf;
 
-use anyhow::{anyhow, Result};
-use bindgen::Builder;
-use directories::UserDirs;
+use anyhow::Result;
+
+use clap::{Parser, Subcommand};
+
 use log::LevelFilter;
+
+use tempdir::TempDir;
+
+#[path = "../../openthread-sys/gen/builder.rs"]
+mod builder;
+
+// Arguments
+#[derive(Parser, Debug)]
+#[command(author, version, about = "Compile and generate bindings for OpenThread to be used in Rust.", long_about = None, subcommand_required = true)]
+struct Args {
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// Generate Rust bindings for openthread and generate .a libraries
+    Gen {
+        /// If the target is a riscv32 target, force the use of the Espressif RISCV GCC toolchain
+        /// (`riscv32-esp-elf-gcc`) rather than the derived `riscv32-unknown-elf-gcc` toolchain which is the "official" RISC-V one
+        /// (https://github.com/riscv-collab/riscv-gnu-toolchain)
+        #[arg(short = 'e', long)]
+        force_esp_riscv_toolchain: bool,
+
+        /// Target triple for which to generate bindings and `.a` libraries
+        target: String,
+    },
+}
 
 fn main() -> Result<()> {
     env_logger::Builder::new()
@@ -15,100 +45,45 @@ fn main() -> Result<()> {
     let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let workspace = workspace.parent().unwrap().canonicalize()?;
 
-    // Determine the $HOME directory, and subsequently the Espressif tools
-    // directory:
-    let home = UserDirs::new().unwrap().home_dir().to_path_buf();
-    let tools = home.join(".espressif").join("tools");
+    let sys_crate_root_path = workspace.join("openthread-sys");
 
-    generate_bindings(
-        &workspace,
-        tools.join(
-            "riscv32-esp-elf/esp-13.2.0_20240530/riscv32-esp-elf/riscv32-esp-elf/include/",
-        ),
-        tools.join("riscv32-esp-elf/esp-13.2.0_20240530/riscv32-esp-elf/riscv32-esp-elf/"),
-    )?;
+    let args = Args::parse();
 
-    Ok(())
-}
+    if let Some(Commands::Gen {
+        target,
+        force_esp_riscv_toolchain,
+    }) = args.command
+    {
+        let builder = builder::OpenThreadBuilder::new(
+            sys_crate_root_path.clone(),
+            Some(target.clone()),
+            // Fake host, but we do need to pass something to CMake
+            Some("x86_64-unknown-linux-gnu".into()),
+            None,
+            None,
+            None,
+            force_esp_riscv_toolchain,
+        );
 
-fn generate_bindings(
-    workspace: &PathBuf,
-    include_path: PathBuf,
-    sysroot_path: PathBuf,
-) -> Result<()> {
-    let sys_path = workspace.join("esp-openthread-sys");
+        let out = TempDir::new("openthread-sys-libs")?;
 
-    // Generate the bindings using `bindgen`:
-    log::info!("Generating bindings");
-    let bindings = Builder::default()
-        .clang_args([
-            &format!(
-                "-I{}",
-                sys_path
-                    .join("../build_openthread")
-                    .display()
-                    .to_string()
-                    .replace("\\", "/")
-                    .replace("//?/C:", "")
-            ),
-            &format!(
-                "-I{}",
-                sys_path
-                    .join("../build_openthread/openthread/include")
-                    .display()
-                    .to_string()
-                    .replace("\\", "/")
-                    .replace("//?/C:", "")
-            ),
-            &format!(
-                "-I{}",
-                sys_path
+        builder.compile(
+            out.path(),
+            Some(&sys_crate_root_path.join("libs").join(&target)),
+        )?;
+
+        let out = TempDir::new("openthread-sys-bindings")?;
+
+        builder.generate_bindings(
+            out.path(),
+            Some(
+                &sys_crate_root_path
+                    .join("src")
                     .join("include")
-                    .display()
-                    .to_string()
-                    .replace("\\", "/")
-                    .replace("//?/C:", "")
+                    .join(format!("{target}.rs")),
             ),
-            &format!(
-                "-I{}",
-                include_path
-                    .display()
-                    .to_string()
-                    .replace("\\", "/")
-                    .replace("//?/C:", "")
-            ),
-            &format!(
-                "--sysroot={}",
-                sysroot_path
-                    .display()
-                    .to_string()
-                    .replace("\\", "/")
-                    .replace("//?/C:", "")
-            ),
-            &format!(
-                "--target=riscv32"
-            ),
-        ])
-        .ctypes_prefix("crate::c_types")
-        .derive_debug(true)
-        .header(sys_path.join("include/include.h").to_string_lossy())
-        .layout_tests(false)
-        .raw_line("#![allow(non_camel_case_types,non_snake_case,non_upper_case_globals,dead_code)]")
-        .use_core()
-        .generate()
-        .map_err(|_| anyhow!("Failed to generate bindings"))?;
-
-    // Write out the bindings to the appropriate path:
-    let path = sys_path
-        .join("src")
-        .join("bindings.rs");
-    log::info!("Writing out bindings to: {}", path.display());
-    bindings.write_to_file(&path)?;
-
-    // Format the bindings:
-    Command::new("rustfmt")
-        .arg(path.to_string_lossy().to_string())
-        .output()?;
+        )?;
+    }
 
     Ok(())
 }

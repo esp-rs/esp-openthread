@@ -1,31 +1,73 @@
-# esp-openthread - WORK IN PROGRESS
+# openthread
 
-This is using the [Rust open source IEEE-802.15.4 driver](https://github.com/esp-rs/esp-ieee802154) and [OpenThread](https://openthread.io/) to provide a Thread implementation for ESP32 bare-metal Rust.
+[![CI](https://github.com/esp-rs/esp-openthread/actions/workflows/ci.yml/badge.svg)](https://github.com/esp-rs/esp-openthread/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/esp-openthread.svg)](https://crates.io/crates/esp-openthread)
+[![Documentation](https://img.shields.io/badge/docs-esp--rs-brightgreen)](https://esp-rs.github.io/esp-rs/esp-openthread/index.html)
+[![Matrix](https://img.shields.io/matrix/esp-rs:matrix.org?label=join%20matrix&color=BEC5C9&logo=matrix)](https://matrix.to/#/#esp-rs:matrix.org)
 
-The OpenThread libraries are pre-compiled for convenience. Find the build script in `build_openthread`
+Platform-agnostic, async Rust bindings for the [`OpenThread`](https://openthread.io/) library.
 
-## Goals
+Tailored for Rust embedded baremetal.
 
-- Provide MTD functionality.
+The [crate](openthread) does not depend on any platform features and only needs an implementation of a single trait - [`Radio`](openthread/src/radio.rs) - that represents the IEEE 802.15.4 PHY radio. 
+The radio might be located on the same die, or the user might provide an implementation that communicates with the actual radio over UART, SPI, USB, etc.
 
-## Maybe later goals
+Two IEEE 802.15.4 radios are supported out of the box:
+- The ESP32C6 and ESP32H2 radio (enable the `esp-ieee802154` feature; see [examples](examples/esp));
+- The NRF radio (enable the `embasy-nrf` feature; see [examples](examples/nrf)).
 
-- Provide sleepy end-device support
-- Provide FTD functionality
+## Build
+
+For certain MCUs / Rust targets, the OpenThread libraries are pre-compiled for convenience.
+Current list (might be extended upon request):
+- `riscv32imac-unknown-none-elf` (ESP32C6 and ESP32H2)
+- `thumbv7em-none-eabi` (NRF52)
+- `thumbv6m-none-eabi` No chip with IEEE802.15.4 radio on this target (to our knowledge), but can be used with `openthread` RCP (radio offloading)
+
+**For these targets you only need `rustc`/`cargo` as usual!**
+
+Small caveat: since `openthread` does a few calls into the C standard library (primarily `str*` functions), at link time, it is up to the user to poly-fill the `str*` syscalls - [either with the MCU ROM functions](examples/esp/.cargo/config.toml), or by [depending](examples/nrf/Cargo.toml) on [`tinyrlibc`](https://github.com/rust-embedded-community/tinyrlibc), or with both.
+
+### Build for other targets / custom build
+
+For targets where pre-compiled libs are not available (including for the Host itself), a standard `build.rs` build is also supported.
+For the on-the-fly OpenThread CMake build to work, you'll need to install and set in your `$PATH`:
+- The GCC toolchain correspponding to your Rust target, with **working** `foo-bar-gcc -print-sysroot` command
+- Recent Clang (for Espressif `xtensa`, [it must be the Espressif fork](https://crates.io/crates/espup), but for all other chips, the stock Clang would work)
+- CMake and Ninja
+
+As per above, since `openthread` does a few calls into the C standard library (primarily `str*` functions), the GCC toolchain needs to have the `newlib` (or other libc headers for e.g. non-embedded scenarios) in its sysroot, which is usually the case anyway. `newlib` however is only used _at compile-time_ on baremetal targets (for a few libc headers) and not linked-in.
+
+Examples of GCC toolchains that are known to work fine:
+- For ARM (Cortex M CPUs and others) - the [ARM GNU toolchain](https://developer.arm.com/Tools%20and%20Software/GNU%20Toolchain);
+  - Note that the Ubuntu `arm-none-eabi-gcc` system package does **NOT** work, as it does not print a sysroot, i.e. `arm-none-eabi-gcc -print-sysroot` returns an empty response, and furthermore, the `newlib` headers are installed in a separate location from the arch headers;
+- For RISCV - the [Espressif RISCV toolchain](https://github.com/espressif/crosstool-NG/releases). The ["official" RISCV GNU toolchain](https://github.com/riscv-collab/riscv-gnu-toolchain) should also work;
+- For xtensa (Espressif ESP32 and ESP32SXX MCUs) - the [Espressif xtensa toolchain](https://github.com/espressif/crosstool-NG/releases);
+- For the Host machine (non-embedded) - your pre-installed toolchain would work just fine.
+
+## Features
+
+- MTD (Minimal Thread Device) functionality
+- Optional integration with [`embassy-net`]() and [`edge-nal`]()
+- Out of the box support for the IEEE 802.15.4 radio in [Espressif](openthread/src/esp.rs) and [Nordic Semiconductor](openthread/src/nrf.rs) chips
+
+## Next
+
+- Sleepy end-device
+- FTD (Full Thread Device) functionality
 
 ## Non-Goals
 
-- BR functionality
+- Thread Border Router functionality
 
 ## Status
 
-Currently only basic functionality is tested.
-
-There are only few Rust-wrapper. Until everything is wrapped you need to use the raw bindings for more advanced functionality.
+The examples (native OpenThread UDP sockets; `embassy-net` integration; SRP) build and run on Espressif MCUs, with testing for NRF pending.
+The SRP code is not completely tested yet though.
 
 ## Testing
 
-Build and flash the [OT-CLI](https://github.com/espressif/esp-idf/tree/master/examples/openthread/ot_cli) on ESP32-C6 or ESP32-H2.
+Build and flash the [OT-CLI](https://github.com/espressif/esp-idf/tree/master/examples/openthread/ot_cli) on ESP32C6 or ESP32H2.
 
 ```
 > dataset set active 0e080000000000010000000300000b35060004001fffe002083a90e3a319a904940708fd1fa298dbd1e3290510fe0458f7db96354eaa6041b880ea9c0f030f4f70656e5468726561642d35386431010258d10410888f813c61972446ab616ee3c556a5910c0402a0f7f8

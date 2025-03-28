@@ -2,10 +2,23 @@
 name = "xtask"
 version = "0.1.0"
 edition = "2021"
+resolver = "2"
+categories = ["embedded", "hardware-support"]
+keywords = ["thread", "openthread", "embedded", "embassy"]
+description = "xtask for pregenerating OpemThread libs and bindings"
+repository = "https://github.com/ivmarkov/esp-openthread"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+rust-version = "1.84"
 
 [dependencies]
-anyhow      = "1.0.68"
-bindgen     = "0.69.4"
-directories = "4.0.1"
-env_logger  = "0.10.0"
-log         = "0.4.17"
+anyhow = "1"
+bindgen = "0.71"
+env_logger = "0.10"
+log = "0.4"
+cmake = "0.1.52"
+cc = "1.1"
+fs_extra = "1.3"
+embuild = "0.33"
+tempdir = "0.3"
+clap = { version = "4.4", features = ["derive"] }

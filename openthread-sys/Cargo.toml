@@ -1,0 +1,31 @@
+[package]
+name = "openthread-sys"
+version = "0.1.0"
+edition = "2021"
+resolver = "2"
+categories = ["embedded", "hardware-support"]
+keywords = ["thread", "openthread", "embedded", "embassy"]
+description = "Platform-agnostic, async Rust bindings for OpenThread"
+repository = "https://github.com/ivmarkov/esp-openthread"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+rust-version = "1.84"
+
+[features]
+default = []
+# Always generate the bindings during build, even if pre-built bindings for the build target are available
+force-generate-bindings = []
+# Force the use of the Espressif Riscv GCC toolchain, if the target is a `riscv32*-` target
+# If this feature is not enabled, the build will assume and use the "official" RiscV GCC toolchain:
+# https://github.com/riscv-collab/riscv-gnu-toolchain
+force-esp-riscv-toolchain = []
+
+[build-dependencies]
+anyhow = "1"
+bindgen = "0.71"
+env_logger = "0.10"
+log = "0.4"
+cmake = "0.1.52"
+cc = "1.1"
+fs_extra = "1.3"
+embuild = "0.33"
