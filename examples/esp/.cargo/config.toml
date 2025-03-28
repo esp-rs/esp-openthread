@@ -1,5 +1,5 @@
 [target.riscv32imac-unknown-none-elf]
-runner = "probe-rs run --chip esp32c6"
+runner = "espflash flash --monitor"
 
 [build]
 rustflags = [
