@@ -281,7 +281,7 @@ impl Drop for UdpSocket<'_> {
 /// thus avoiding expensive mem-moves.
 ///
 /// Can also be statically-allocated.
-pub struct OtUdpResources<const UDP_SOCKETS: usize, const UDP_RX_SZ: usize> {
+pub struct OtUdpResources<const UDP_SOCKETS: usize = 2, const UDP_RX_SZ: usize = 1500> {
     /// The UDP sockets that are available for use.
     sockets: MaybeUninit<[UdpSocketCtx; UDP_SOCKETS]>,
     /// The buffers that are used to store received UDP packets.

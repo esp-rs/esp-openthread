@@ -20,7 +20,7 @@ use esp_ieee802154::Ieee802154;
 use log::info;
 
 use openthread::esp::EspRadio;
-use openthread::{OpenThread, OtResources, OtUdpResources, UdpSocket};
+use openthread::{OpenThread, OtResources, OtUdpResources, RamSettings, UdpSocket};
 
 use rand_core::RngCore;
 
@@ -70,8 +70,18 @@ async fn main(spawner: Spawner) {
     let ot_resources = mk_static!(OtResources, OtResources::new());
     let ot_udp_resources =
         mk_static!(OtUdpResources<UDP_MAX_SOCKETS, UDP_SOCKETS_BUF>, OtUdpResources::new());
+    let ot_settings_buf = mk_static!([u8; 1024], [0; 1024]);
 
-    let ot = OpenThread::new_with_udp(ieee_eui64, rng, ot_resources, ot_udp_resources).unwrap();
+    let mut ot_settings = RamSettings::new(ot_settings_buf);
+
+    let ot = OpenThread::new_with_udp(
+        ieee_eui64,
+        rng,
+        &mut ot_settings,
+        ot_resources,
+        ot_udp_resources,
+    )
+    .unwrap();
 
     spawner
         .spawn(run_ot(

@@ -28,6 +28,7 @@ pub use dataset::*;
 pub use openthread_sys as sys;
 pub use radio::*;
 pub use scan::*;
+pub use settings::*;
 #[cfg(feature = "srp")]
 pub use srp::*;
 #[cfg(feature = "udp")]
@@ -45,6 +46,7 @@ pub mod nrf;
 mod platform;
 mod radio;
 mod scan;
+mod settings;
 mod signal;
 #[cfg(feature = "srp")]
 mod srp;
@@ -56,14 +58,15 @@ use sys::{
     otDeviceRole_OT_DEVICE_ROLE_DETACHED, otDeviceRole_OT_DEVICE_ROLE_DISABLED,
     otDeviceRole_OT_DEVICE_ROLE_LEADER, otDeviceRole_OT_DEVICE_ROLE_ROUTER, otError,
     otError_OT_ERROR_ABORT, otError_OT_ERROR_CHANNEL_ACCESS_FAILURE, otError_OT_ERROR_DROP,
-    otError_OT_ERROR_NONE, otError_OT_ERROR_NO_ACK, otError_OT_ERROR_NO_BUFS, otInstance,
-    otInstanceFinalize, otInstanceInitSingle, otIp6Address, otIp6GetUnicastAddresses,
-    otIp6IsEnabled, otIp6NewMessageFromBuffer, otIp6Send, otIp6SetEnabled, otIp6SetReceiveCallback,
-    otMessage, otMessageFree, otMessagePriority_OT_MESSAGE_PRIORITY_NORMAL, otMessageRead,
-    otMessageSettings, otOperationalDataset, otOperationalDatasetTlvs, otPlatAlarmMilliFired,
-    otPlatRadioReceiveDone, otPlatRadioTxDone, otPlatRadioTxStarted, otRadioCaps, otRadioFrame,
-    otSetStateChangedCallback, otTaskletsProcess, otThreadGetDeviceRole, otThreadGetExtendedPanId,
-    otThreadSetEnabled, OT_RADIO_CAPS_ACK_TIMEOUT, OT_RADIO_FRAME_MAX_SIZE,
+    otError_OT_ERROR_NONE, otError_OT_ERROR_NOT_FOUND, otError_OT_ERROR_NO_ACK,
+    otError_OT_ERROR_NO_BUFS, otInstance, otInstanceFinalize, otInstanceInitSingle, otIp6Address,
+    otIp6GetUnicastAddresses, otIp6IsEnabled, otIp6NewMessageFromBuffer, otIp6Send,
+    otIp6SetEnabled, otIp6SetReceiveCallback, otMessage, otMessageFree,
+    otMessagePriority_OT_MESSAGE_PRIORITY_NORMAL, otMessageRead, otMessageSettings,
+    otOperationalDataset, otOperationalDatasetTlvs, otPlatAlarmMilliFired, otPlatRadioReceiveDone,
+    otPlatRadioTxDone, otPlatRadioTxStarted, otRadioCaps, otRadioFrame, otSetStateChangedCallback,
+    otTaskletsProcess, otThreadGetDeviceRole, otThreadGetExtendedPanId, otThreadSetEnabled,
+    OT_RADIO_CAPS_ACK_TIMEOUT, OT_RADIO_FRAME_MAX_SIZE,
 };
 
 /// A newtype wrapper over the native OpenThread error type (`otError`).
@@ -142,11 +145,14 @@ impl<'a> OpenThread<'a> {
     pub fn new(
         ieee_eui64: [u8; 8],
         rng: &'a mut dyn OtRngCore,
+        settings: &mut dyn Settings,
         resources: &'a mut OtResources,
     ) -> Result<Self, OtError> {
         // Needed so that we convert from the the actual `'a` lifetime of `rng` to the fake `'static` lifetime in `OtResources`
         #[allow(clippy::missing_transmute_annotations)]
-        let state = resources.init(ieee_eui64, unsafe { core::mem::transmute(rng) });
+        let state = resources.init(ieee_eui64, unsafe { core::mem::transmute(rng) }, unsafe {
+            core::mem::transmute(settings)
+        });
 
         let mut this = Self {
             state,
@@ -175,12 +181,15 @@ impl<'a> OpenThread<'a> {
     pub fn new_with_udp<const UDP_SOCKETS: usize, const UDP_RX_SZ: usize>(
         ieee_eui64: [u8; 8],
         rng: &'a mut dyn OtRngCore,
+        settings: &mut dyn Settings,
         resources: &'a mut OtResources,
         udp_resources: &'a mut OtUdpResources<UDP_SOCKETS, UDP_RX_SZ>,
     ) -> Result<Self, OtError> {
         // Needed so that we convert from the the actual `'a` lifetime of `rng` to the fake `'static` lifetime in `OtResources`
         #[allow(clippy::missing_transmute_annotations)]
-        let state = resources.init(ieee_eui64, unsafe { core::mem::transmute(rng) });
+        let state = resources.init(ieee_eui64, unsafe { core::mem::transmute(rng) }, unsafe {
+            core::mem::transmute(settings)
+        });
         let udp_state = udp_resources.init();
 
         let mut this = Self {
@@ -209,12 +218,15 @@ impl<'a> OpenThread<'a> {
     pub fn new_with_srp<const SRP_SVCS: usize, const SRP_BUF_SZ: usize>(
         ieee_eui64: [u8; 8],
         rng: &'a mut dyn OtRngCore,
+        settings: &mut dyn Settings,
         resources: &'a mut OtResources,
         srp_resources: &'a mut OtSrpResources<SRP_SVCS, SRP_BUF_SZ>,
     ) -> Result<Self, OtError> {
         // Needed so that we convert from the the actual `'a` lifetime of `rng` to the fake `'static` lifetime in `OtResources`
         #[allow(clippy::missing_transmute_annotations)]
-        let state = resources.init(ieee_eui64, unsafe { core::mem::transmute(rng) });
+        let state = resources.init(ieee_eui64, unsafe { core::mem::transmute(rng) }, unsafe {
+            core::mem::transmute(settings)
+        });
         let srp_state = srp_resources.init();
 
         let mut this = Self {
@@ -249,13 +261,16 @@ impl<'a> OpenThread<'a> {
     >(
         ieee_eui64: [u8; 8],
         rng: &'a mut dyn OtRngCore,
+        settings: &mut dyn Settings,
         resources: &'a mut OtResources,
         udp_resources: &'a mut OtUdpResources<UDP_SOCKETS, UDP_RX_SZ>,
         srp_resources: &'a mut OtSrpResources<SRP_SVCS, SRP_BUF_SZ>,
     ) -> Result<Self, OtError> {
         // Needed so that we convert from the the actual `'a` lifetime of `rng` to the fake `'static` lifetime in `OtResources`
         #[allow(clippy::missing_transmute_annotations)]
-        let state = resources.init(ieee_eui64, unsafe { core::mem::transmute(rng) });
+        let state = resources.init(ieee_eui64, unsafe { core::mem::transmute(rng) }, unsafe {
+            core::mem::transmute(settings)
+        });
         let udp_state = udp_resources.init();
         let srp_state = srp_resources.init();
 
@@ -876,6 +891,7 @@ impl OtResources {
         &mut self,
         ieee_eui64: [u8; 8],
         rng: &'static mut dyn OtRngCore,
+        settings: &'static mut dyn Settings,
     ) -> &RefCell<OtState<'static>> {
         let radio_resources = unsafe { self.radio_resources.assume_init_mut() };
         let dataset_resources = unsafe { self.dataset_resources.assume_init_mut() };
@@ -886,7 +902,8 @@ impl OtResources {
         self.state.write(RefCell::new(unsafe {
             core::mem::transmute(OtState {
                 ieee_eui64,
-                rng: Some(rng),
+                rng,
+                settings,
                 scan_callback: RefCell::new(None),
                 scan_done: Signal::new(),
                 radio_resources,
@@ -1185,7 +1202,7 @@ impl<'a> OtContext<'a> {
     }
 
     fn plat_entropy_get(&mut self, buf: &mut [u8]) -> Result<(), OtError> {
-        self.state().ot.rng.as_mut().unwrap().fill_bytes(buf);
+        self.state().ot.rng.fill_bytes(buf);
 
         Ok(())
     }
@@ -1385,6 +1402,93 @@ impl<'a> OtContext<'a> {
 
         Ok(())
     }
+
+    fn plat_settings_init(&mut self, sensitive_keys: &[u16]) {
+        info!("Plat settings init callback, sensitive keys: {sensitive_keys:?}");
+    }
+
+    fn plat_settings_deinit(&mut self) {
+        info!("Plat settings deinit callback");
+    }
+
+    fn plat_settings_get(
+        &mut self,
+        key: u16,
+        index: core::ffi::c_int,
+        buf: &mut [u8],
+    ) -> Result<usize, OtError> {
+        trace!(
+            "Plat settings get callback, key: {key}, index: {index}, buf: {:02x?}",
+            buf
+        );
+
+        if index < 0 {
+            Err(OtError::new(otError_OT_ERROR_NOT_FOUND))?;
+        }
+
+        let state = self.state();
+
+        let settings = &mut state.ot.settings;
+
+        let len = settings
+            .get(key, index as _, buf)?
+            .ok_or(OtError::new(otError_OT_ERROR_NOT_FOUND))?;
+
+        Ok(len)
+    }
+
+    fn plat_settings_set(&mut self, key: u16, value: &[u8]) -> Result<(), OtError> {
+        trace!(
+            "Plat settings set callback, key: {key}, value: {:02x?}",
+            value
+        );
+
+        let state = self.state();
+
+        let settings = &mut state.ot.settings;
+
+        settings.set(key, value)?;
+
+        Ok(())
+    }
+
+    fn plat_settings_add(&mut self, key: u16, value: &[u8]) -> Result<(), OtError> {
+        trace!(
+            "Plat settings add callback, key: {key}, value: {:02x?}",
+            value
+        );
+
+        let state = self.state();
+
+        let settings = &mut state.ot.settings;
+
+        settings.add(key, value)?;
+
+        Ok(())
+    }
+
+    fn plat_settings_delete(&mut self, key: u16, index: core::ffi::c_int) -> Result<(), OtError> {
+        trace!("Plat settings delete callback, key: {key}, index: {index}");
+
+        if index < 0 {
+            Err(OtError::new(otError_OT_ERROR_NOT_FOUND))?;
+        }
+
+        let state = self.state();
+
+        let settings = &mut state.ot.settings;
+
+        if !settings.remove(key, Some(index as _))? {
+            Err(OtError::new(otError_OT_ERROR_NOT_FOUND))?;
+        }
+
+        Ok(())
+    }
+
+    fn plat_settings_wipe(&mut self) {
+        info!("Plat settings wipe callback");
+        self.state().ot.settings.clear().unwrap();
+    }
 }
 
 impl Drop for OtContext<'_> {
@@ -1409,7 +1513,9 @@ struct OtState<'a> {
     /// The IEEE EUI-64 address of the Radio device.
     ieee_eui64: [u8; 8],
     /// The random number generator associated with the `OtData` instance.
-    rng: Option<&'static mut dyn OtRngCore>,
+    rng: &'static mut dyn OtRngCore,
+    /// The OT settings
+    settings: &'static mut dyn Settings,
     /// The callback to invoke when network scanning is in progress
     #[allow(clippy::type_complexity)]
     scan_callback: RefCell<Option<&'static mut dyn FnMut(Option<&ScanResult>)>>,

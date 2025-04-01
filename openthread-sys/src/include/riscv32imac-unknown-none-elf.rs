@@ -229,9 +229,10 @@ pub const __CC_SUPPORTS_DYNAMIC_ARRAY_INIT: u32 = 1;
 pub const EXIT_FAILURE: u32 = 1;
 pub const EXIT_SUCCESS: u32 = 0;
 pub const RAND_MAX: u32 = 2147483647;
-pub const __bool_true_false_are_defined: u32 = 1;
 pub const true_: u32 = 1;
 pub const false_: u32 = 0;
+pub const __bool_true_false_are_defined: u32 = 1;
+pub const __GNUC_VA_LIST: u32 = 1;
 pub const __int20: u32 = 2;
 pub const __int20__: u32 = 2;
 pub const __INT8: &[u8; 3] = b"hh\0";
@@ -1504,8 +1505,8 @@ unsafe extern "C" {
     /// @returns  A string representation of an otError.
     pub fn otThreadErrorToString(aError: otError) -> *const ::core::ffi::c_char;
 }
-pub type __gnuc_va_list = __builtin_va_list;
 pub type va_list = __builtin_va_list;
+pub type __gnuc_va_list = __builtin_va_list;
 pub type intmax_t = __intmax_t;
 pub type uintmax_t = __uintmax_t;
 pub type int_least8_t = __int_least8_t;

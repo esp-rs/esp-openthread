@@ -193,11 +193,12 @@ impl OpenThreadBuilder {
             // Do not change from here below
             .define("OT_LOG_OUTPUT", "PLATFORM_DEFINED")
             .define("OT_PLATFORM", "external")
-            .define("OT_SETTINGS_RAM", "ON")
+            .define("OT_SETTINGS_RAM", "OFF")
             //.define("OT_COMPILE_WARNING_AS_ERROR", "ON "$@" "${OT_SRCDIR}"")
             // ... or else the build would fail with `arm-none-eabi-gcc` during the linking phase
             // with "undefined symbol `__exit`" error
             .define("BUILD_TESTING", "OFF")
+            .define("CMAKE_POLICY_VERSION_MINIMUM", "3.5") // For MbedTLS
             .profile("Release")
             .out_dir(&target_dir);
 

@@ -39,7 +39,7 @@ pub type SrpServiceSlot = usize;
 /// thus avoiding expensive mem-moves.
 ///
 /// Can also be statically-allocated.
-pub struct OtSrpResources<const SRP_SVCS: usize, const SRP_BUF_SZ: usize> {
+pub struct OtSrpResources<const SRP_SVCS: usize = 3, const SRP_BUF_SZ: usize = 300> {
     /// Memory for up to `SRP_SVCS` SRP services
     services: MaybeUninit<[otSrpClientService; SRP_SVCS]>,
     /// Whether a service slot in the above memory is taken
