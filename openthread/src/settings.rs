@@ -417,6 +417,10 @@ where
                     buf.copy_within(len.., 0);
                     self.len -= len;
 
+                    // Shrink the buffer pointer
+                    let new_buf_len = buf.len() - len;
+                    buf = &mut buf[..new_buf_len];
+
                     if (self.signal_change)(RamSettingsChange::Removed {
                         key,
                         index: current,
@@ -426,6 +430,9 @@ where
 
                     debug!("Removed key: {key}, index: {index:?}");
                     found = true;
+
+                    current += 1;
+                    continue;
                 }
 
                 current += 1;
