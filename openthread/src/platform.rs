@@ -3,6 +3,8 @@
 use core::cell::UnsafeCell;
 use core::ffi::{c_char, CStr};
 
+use portable_atomic::AtomicUsize;
+
 use openthread_sys::otError_OT_ERROR_NONE;
 
 use crate::sys::{otError, otInstance, otLogLevel, otLogRegion, otRadioFrame};
@@ -13,6 +15,9 @@ use crate::{IntoOtCode, OtActiveState, OtContext};
 pub(crate) struct SyncUnsafeCell<T>(pub UnsafeCell<T>);
 
 unsafe impl<T> Sync for SyncUnsafeCell<T> {}
+
+/// A global reference counter for OpenThread instances
+pub(crate) static OT_REFCNT: AtomicUsize = AtomicUsize::new(0);
 
 /// A static, mutable global state that allows OpenThnread to call us back via its `otPlat*` functions
 /// Look at `OtActiveState` and `OpenThread` for more information as to when this variable is set and unset

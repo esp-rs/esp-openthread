@@ -111,7 +111,8 @@ async fn main(spawner: Spawner) {
 
     let ot = OpenThread::new(ieee_eui64, rng, &mut ot_settings, ot_resources).unwrap();
 
-    let (_enet_controller, enet_driver_runner, enet_driver) = enet::new(ot, enet_driver_state);
+    let (_enet_controller, enet_driver_runner, enet_driver) =
+        enet::new(ot.clone(), enet_driver_state);
 
     info!("About to spawn OT runner");
 

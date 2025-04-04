@@ -658,6 +658,6 @@ where
     }
 
     fn deinit(&mut self) {
-        self.0.lock(|settings| settings.borrow_mut().deinit())
+        self.0.lock(|settings| settings.borrow_mut().deinit());
     }
 }

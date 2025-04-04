@@ -182,7 +182,7 @@ impl edge_nal::UdpConnect for OpenThread<'_> {
         remote: SocketAddr,
     ) -> Result<Self::Socket<'_>, Self::Error> {
         // TODO: Local
-        UdpSocket::connect(*self, &socket_addr_v6(remote)?)
+        UdpSocket::connect(self.clone(), &socket_addr_v6(remote)?)
     }
 }
 
@@ -195,7 +195,7 @@ impl edge_nal::UdpBind for OpenThread<'_> {
         Self: 'a;
 
     async fn bind(&self, addr: SocketAddr) -> Result<Self::Socket<'_>, Self::Error> {
-        UdpSocket::bind(*self, &socket_addr_v6(addr)?)
+        UdpSocket::bind(self.clone(), &socket_addr_v6(addr)?)
     }
 }
 

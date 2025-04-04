@@ -18,7 +18,9 @@ use embassy_time::Instant;
 
 use log::{debug, info, trace, warn};
 
-use platform::OT_ACTIVE_STATE;
+use portable_atomic::Ordering;
+
+use platform::{OT_ACTIVE_STATE, OT_REFCNT};
 
 use signal::Signal;
 
@@ -123,7 +125,6 @@ impl IntoOtCode for Result<(), OtError> {
 }
 
 /// A type representing one OpenThread instance.
-#[derive(Copy, Clone)]
 pub struct OpenThread<'a> {
     state: &'a RefCell<OtState<'static>>,
     #[cfg(feature = "udp")]
@@ -148,6 +149,15 @@ impl<'a> OpenThread<'a> {
         settings: &mut dyn Settings,
         resources: &'a mut OtResources,
     ) -> Result<Self, OtError> {
+        if OT_REFCNT
+            .compare_exchange(0, 1, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            // `OpenThread` is already instantiated; can't instantiate another instance
+            // until all `OpenThread` instances are dropped
+            Err(OtError::new(otError_OT_ERROR_NO_BUFS))?;
+        }
+
         // Needed so that we convert from the the actual `'a` lifetime of `rng` to the fake `'static` lifetime in `OtResources`
         #[allow(clippy::missing_transmute_annotations)]
         let state = resources.init(ieee_eui64, unsafe { core::mem::transmute(rng) }, unsafe {
@@ -485,18 +495,7 @@ impl<'a> OpenThread<'a> {
             let state = ot.state();
 
             // Initialize the OpenThread instance
-            //
-            // The init->finalize->init sequence is necessary because
-            // the OpenThread C library starts in initialized state -
-            // however - our wrapper does not have a drop fn, so we have
-            // to make sure that the OpenThread singleton is not holding
-            // dangling pointers to a previous / moved instance of our resources.
-            state.ot.instance = unsafe {
-                let instance = otInstanceInitSingle();
-                otInstanceFinalize(instance);
-
-                otInstanceInitSingle()
-            };
+            state.ot.instance = unsafe { otInstanceInitSingle() };
 
             info!("OpenThread instance initialized at {:p}", state.ot.instance);
 
@@ -852,6 +851,38 @@ impl<'a> OpenThread<'a> {
     }
 }
 
+impl Drop for OpenThread<'_> {
+    fn drop(&mut self) {
+        if OT_REFCNT.load(Ordering::SeqCst) == 1 {
+            // We are the last clone of `OpenThread` so we should finalize the OpenThread instance
+
+            let mut ot = self.activate();
+            let state = ot.state();
+
+            unsafe { otInstanceFinalize(state.ot.instance) };
+            info!("OpenThread instance finalized");
+        }
+
+        // Decrement the reference count
+        OT_REFCNT.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+impl Clone for OpenThread<'_> {
+    fn clone(&self) -> Self {
+        // Increment the reference count
+        OT_REFCNT.fetch_add(1, Ordering::SeqCst);
+
+        Self {
+            state: self.state,
+            #[cfg(feature = "udp")]
+            udp_state: self.udp_state,
+            #[cfg(feature = "srp")]
+            srp_state: self.srp_state,
+        }
+    }
+}
+
 /// The resources (data) that is necessary for the OpenThread stack to operate.
 ///
 /// A separate type so that it can be allocated outside of the OpenThread futures,
@@ -1202,12 +1233,14 @@ impl<'a> OtContext<'a> {
     }
 
     fn plat_entropy_get(&mut self, buf: &mut [u8]) -> Result<(), OtError> {
+        trace!("Entropy requested");
         self.state().ot.rng.fill_bytes(buf);
 
         Ok(())
     }
 
     fn plat_tasklets_signal_pending(&mut self) {
+        trace!("Tasklets signaled");
         self.state().ot.tasklets.signal(());
     }
 
@@ -1364,6 +1397,7 @@ impl<'a> OtContext<'a> {
 
     fn plat_radio_transmit_buffer(&mut self) -> *mut otRadioFrame {
         trace!("Plat radio transmit buffer callback");
+
         // TODO: This frame is private to us, perhaps don't store it in a RefCell?
         &mut self.state().ot.radio_resources.tns_frame
     }
@@ -1405,10 +1439,14 @@ impl<'a> OtContext<'a> {
 
     fn plat_settings_init(&mut self, sensitive_keys: &[u16]) {
         info!("Plat settings init callback, sensitive keys: {sensitive_keys:?}");
+        let state = self.state();
+        state.ot.settings.init(sensitive_keys);
     }
 
     fn plat_settings_deinit(&mut self) {
         info!("Plat settings deinit callback");
+        let state = self.state();
+        state.ot.settings.deinit();
     }
 
     fn plat_settings_get(
@@ -1487,6 +1525,7 @@ impl<'a> OtContext<'a> {
 
     fn plat_settings_wipe(&mut self) {
         info!("Plat settings wipe callback");
+
         self.state().ot.settings.clear().unwrap();
     }
 }

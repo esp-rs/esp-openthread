@@ -69,29 +69,34 @@ impl<'a> UdpSocket<'a> {
 
     /// Create a new unbound and unconnected UDP socket.
     fn new(ot: OpenThread<'a>) -> Result<Self, OtError> {
-        let mut active_ot = ot.activate();
-        let state = active_ot.state();
-        let instance = state.ot.instance;
-        let udp = state.udp()?;
+        let slot = {
+            let mut active_ot = ot.activate();
+            let state = active_ot.state();
+            let instance = state.ot.instance;
+            let udp = state.udp()?;
 
-        let slot = udp
-            .sockets
-            .iter()
-            .position(|socket| !socket.taken)
-            .ok_or(otError_OT_ERROR_NO_BUFS)?;
+            let slot = udp
+                .sockets
+                .iter()
+                .position(|socket| !socket.taken)
+                .ok_or(otError_OT_ERROR_NO_BUFS)?;
 
-        let socket = &mut udp.sockets[slot];
-        // TODO socket.socket = UdpSocketData::new();
-        socket.taken = true;
+            let socket = &mut udp.sockets[slot];
+            socket.ot_socket = Default::default();
+            socket.rx.reset();
+            socket.taken = true;
 
-        unsafe {
-            otUdpOpen(
-                instance,
-                &mut socket.ot_socket,
-                Some(Self::plat_c_udp_receive),
-                slot as *mut c_void,
-            );
-        }
+            unsafe {
+                otUdpOpen(
+                    instance,
+                    &mut socket.ot_socket,
+                    Some(Self::plat_c_udp_receive),
+                    slot as *mut c_void,
+                );
+            }
+
+            slot
+        };
 
         Ok(Self { ot, slot })
     }

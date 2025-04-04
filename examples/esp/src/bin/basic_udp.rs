@@ -85,7 +85,7 @@ async fn main(spawner: Spawner) {
 
     spawner
         .spawn(run_ot(
-            ot,
+            ot.clone(),
             EspRadio::new(Ieee802154::new(
                 peripherals.IEEE802154,
                 peripherals.RADIO_CLK,
@@ -93,7 +93,7 @@ async fn main(spawner: Spawner) {
         ))
         .unwrap();
 
-    spawner.spawn(run_ot_ip_info(ot)).unwrap();
+    spawner.spawn(run_ot_ip_info(ot.clone())).unwrap();
 
     info!("Dataset: {THREAD_DATASET}");
 

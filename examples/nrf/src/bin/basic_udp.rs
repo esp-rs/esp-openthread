@@ -126,11 +126,11 @@ async fn main(spawner: Spawner) {
 
     info!("Radio created");
 
-    spawner.spawn(run_ot(ot, proxy_radio)).unwrap();
+    spawner.spawn(run_ot(ot.clone(), proxy_radio)).unwrap();
 
     info!("About to spawn OT IP info");
 
-    spawner.spawn(run_ot_ip_info(ot)).unwrap();
+    spawner.spawn(run_ot_ip_info(ot.clone())).unwrap();
 
     info!("Dataset: {THREAD_DATASET}");
 
