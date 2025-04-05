@@ -687,10 +687,22 @@ impl<'a> ProxyRadio<'a> {
         resources.request_buf.write(Self::INIT_REQUEST);
         resources.response_buf.write(Self::INIT_RESPONSE);
 
-        #[allow(clippy::missing_transmute_annotations)]
+        let request_buf = unsafe { resources.request_buf.assume_init_mut() };
+        let response_buf = unsafe { resources.response_buf.assume_init_mut() };
+
         resources.state.write(ProxyRadioState::new(
-            unsafe { core::mem::transmute(resources.request_buf.assume_init_mut()) },
-            unsafe { core::mem::transmute(resources.response_buf.assume_init_mut()) },
+            unsafe {
+                core::mem::transmute::<
+                    &mut [ProxyRadioRequest; 1],
+                    &'static mut [ProxyRadioRequest; 1],
+                >(request_buf)
+            },
+            unsafe {
+                core::mem::transmute::<
+                    &mut [ProxyRadioResponse; 1],
+                    &'static mut [ProxyRadioResponse; 1],
+                >(response_buf)
+            },
         ));
 
         let state = unsafe { resources.state.assume_init_mut() };

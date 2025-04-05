@@ -31,7 +31,7 @@ use openthread::enet::{self, EnetDriver, EnetRunner};
 use openthread::nrf::{Ieee802154, NrfRadio};
 use openthread::{
     EmbassyTimeTimer, OpenThread, OtResources, PhyRadioRunner, ProxyRadio, ProxyRadioResources,
-    Radio,
+    Radio, SimpleRamSettings,
 };
 
 use rand_core::RngCore;
@@ -103,12 +103,16 @@ async fn main(spawner: Spawner) {
     RngCore::fill_bytes(rng, &mut ieee_eui64);
 
     let ot_resources = mk_static!(OtResources, OtResources::new());
+    let ot_settings_buf = mk_static!([u8; 1024], [0; 1024]);
     let enet_driver_state =
         mk_static!(enet::EnetDriverState<IPV6_PACKET_SIZE, 1, 1>, enet::EnetDriverState::new());
 
-    let ot = OpenThread::new(ieee_eui64, rng, ot_resources).unwrap();
+    let ot_settings = mk_static!(SimpleRamSettings, SimpleRamSettings::new(ot_settings_buf));
 
-    let (_enet_controller, enet_driver_runner, enet_driver) = enet::new(ot, enet_driver_state);
+    let ot = OpenThread::new(ieee_eui64, rng, ot_settings, ot_resources).unwrap();
+
+    let (_enet_controller, enet_driver_runner, enet_driver) =
+        enet::new(ot.clone(), enet_driver_state);
 
     info!("About to spawn OT runner");
 

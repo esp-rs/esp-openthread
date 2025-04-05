@@ -25,7 +25,8 @@ use log::info;
 
 use openthread::esp::EspRadio;
 use openthread::{
-    OpenThread, OtResources, OtRngCore, OtSrpResources, OtUdpResources, SrpConf, UdpSocket,
+    OpenThread, OtResources, OtRngCore, OtSrpResources, OtUdpResources, SimpleRamSettings, SrpConf,
+    UdpSocket,
 };
 
 use tinyrlibc as _;
@@ -81,10 +82,14 @@ async fn main(spawner: Spawner) {
         mk_static!(OtUdpResources<UDP_MAX_SOCKETS, UDP_SOCKETS_BUF>, OtUdpResources::new());
     let ot_srp_resources =
         mk_static!(OtSrpResources<SRP_MAX_SERVICES, SRP_SERVICE_BUF>, OtSrpResources::new());
+    let ot_settings_buf = mk_static!([u8; 1024], [0; 1024]);
+
+    let ot_settings = mk_static!(SimpleRamSettings, SimpleRamSettings::new(ot_settings_buf));
 
     let ot = OpenThread::new_with_udp_srp(
         ieee_eui64,
         rng,
+        ot_settings,
         ot_resources,
         ot_udp_resources,
         ot_srp_resources,
@@ -93,7 +98,7 @@ async fn main(spawner: Spawner) {
 
     spawner
         .spawn(run_ot(
-            ot,
+            ot.clone(),
             EspRadio::new(Ieee802154::new(
                 peripherals.IEEE802154,
                 peripherals.RADIO_CLK,
@@ -101,7 +106,7 @@ async fn main(spawner: Spawner) {
         ))
         .unwrap();
 
-    spawner.spawn(run_ot_info(ot)).unwrap();
+    spawner.spawn(run_ot_info(ot.clone())).unwrap();
 
     info!("Dataset: {THREAD_DATASET}");
 

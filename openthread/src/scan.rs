@@ -135,17 +135,19 @@ impl OpenThread<'_> {
                 return Err(OtError::new(otError_OT_ERROR_BUSY));
             }
 
-            let f: &mut dyn FnMut(Option<&ScanResult>) = &mut f;
-
-            let scan_callback = &state.ot.scan_callback;
-            #[allow(clippy::missing_transmute_annotations)]
             {
-                *scan_callback.borrow_mut() = Some(unsafe { core::mem::transmute(f) });
-            }
+                let f: &mut dyn FnMut(Option<&ScanResult>) = &mut f;
 
-            let _guard = scopeguard::guard((), |_| {
-                *scan_callback.borrow_mut() = None;
-            });
+                let scan_callback = &mut state.ot.scan_callback;
+                #[allow(clippy::missing_transmute_annotations)]
+                {
+                    *scan_callback = Some(unsafe { core::mem::transmute(f) });
+                }
+
+                let _guard = scopeguard::guard((), |_| {
+                    *scan_callback = None;
+                });
+            }
 
             ot!(unsafe {
                 otLinkActiveScan(
@@ -176,7 +178,7 @@ impl OpenThread<'_> {
         let last = scan_result.is_none();
 
         {
-            if let Some(f) = state.ot.scan_callback.borrow_mut().as_mut() {
+            if let Some(f) = state.ot.scan_callback.as_mut() {
                 let scan_result = scan_result.map(|s| s.into());
 
                 f(scan_result.as_ref());
@@ -184,7 +186,7 @@ impl OpenThread<'_> {
         }
 
         if last {
-            *state.ot.scan_callback.borrow_mut() = None;
+            state.ot.scan_callback = None;
             state.ot.scan_done.signal(());
         }
     }
