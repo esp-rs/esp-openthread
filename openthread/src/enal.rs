@@ -168,13 +168,13 @@ impl edge_nal::MulticastV6 for &UdpSocket<'_> {
 
 impl edge_nal::UdpSocket for &UdpSocket<'_> {}
 
-impl edge_nal::UdpConnect for OpenThread<'_> {
+impl<'a> edge_nal::UdpConnect for OpenThread<'a> {
     type Error = OtError;
 
-    type Socket<'a>
+    type Socket<'t>
         = UdpSocket<'a>
     where
-        Self: 'a;
+        Self: 't;
 
     async fn connect(
         &self,
@@ -186,13 +186,13 @@ impl edge_nal::UdpConnect for OpenThread<'_> {
     }
 }
 
-impl edge_nal::UdpBind for OpenThread<'_> {
+impl<'a> edge_nal::UdpBind for OpenThread<'a> {
     type Error = OtError;
 
-    type Socket<'a>
+    type Socket<'t>
         = UdpSocket<'a>
     where
-        Self: 'a;
+        Self: 't;
 
     async fn bind(&self, addr: SocketAddr) -> Result<Self::Socket<'_>, Self::Error> {
         UdpSocket::bind(self.clone(), &socket_addr_v6(addr)?)

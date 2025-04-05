@@ -126,11 +126,11 @@ impl IntoOtCode for Result<(), OtError> {
 
 /// A type representing one OpenThread instance.
 pub struct OpenThread<'a> {
-    state: &'a RefCell<OtState<'static>>,
+    state: &'a RefCell<OtState<'a>>,
     #[cfg(feature = "udp")]
-    udp_state: Option<&'a RefCell<OtUdpState<'static>>>,
+    udp_state: Option<&'a RefCell<OtUdpState<'a>>>,
     #[cfg(feature = "srp")]
-    srp_state: Option<&'a RefCell<OtSrpState<'static>>>,
+    srp_state: Option<&'a RefCell<OtSrpState<'a>>>,
 }
 
 impl<'a> OpenThread<'a> {
@@ -159,10 +159,19 @@ impl<'a> OpenThread<'a> {
         }
 
         // Needed so that we convert from the the actual `'a` lifetime of `rng` to the fake `'static` lifetime in `OtResources`
-        #[allow(clippy::missing_transmute_annotations)]
-        let state = resources.init(ieee_eui64, unsafe { core::mem::transmute(rng) }, unsafe {
-            core::mem::transmute(settings)
-        });
+        let state = resources.init(
+            ieee_eui64,
+            unsafe {
+                core::mem::transmute::<&'a mut dyn OtRngCore, &'static mut dyn OtRngCore>(rng)
+            },
+            unsafe {
+                core::mem::transmute::<&'a mut dyn Settings, &'static mut dyn Settings>(settings)
+            },
+        );
+
+        let state = unsafe {
+            core::mem::transmute::<&RefCell<OtState<'static>>, &'a RefCell<OtState<'a>>>(state)
+        };
 
         let mut this = Self {
             state,
@@ -196,11 +205,26 @@ impl<'a> OpenThread<'a> {
         udp_resources: &'a mut OtUdpResources<UDP_SOCKETS, UDP_RX_SZ>,
     ) -> Result<Self, OtError> {
         // Needed so that we convert from the the actual `'a` lifetime of `rng` to the fake `'static` lifetime in `OtResources`
-        #[allow(clippy::missing_transmute_annotations)]
-        let state = resources.init(ieee_eui64, unsafe { core::mem::transmute(rng) }, unsafe {
-            core::mem::transmute(settings)
-        });
+        let state = resources.init(
+            ieee_eui64,
+            unsafe {
+                core::mem::transmute::<&'a mut dyn OtRngCore, &'static mut dyn OtRngCore>(rng)
+            },
+            unsafe {
+                core::mem::transmute::<&'a mut dyn Settings, &'static mut dyn Settings>(settings)
+            },
+        );
+
+        let state = unsafe {
+            core::mem::transmute::<&RefCell<OtState<'static>>, &'a RefCell<OtState<'a>>>(state)
+        };
+
         let udp_state = udp_resources.init();
+        let udp_state = unsafe {
+            core::mem::transmute::<&RefCell<OtUdpState<'static>>, &'a RefCell<OtUdpState<'a>>>(
+                udp_state,
+            )
+        };
 
         let mut this = Self {
             state,
@@ -233,11 +257,26 @@ impl<'a> OpenThread<'a> {
         srp_resources: &'a mut OtSrpResources<SRP_SVCS, SRP_BUF_SZ>,
     ) -> Result<Self, OtError> {
         // Needed so that we convert from the the actual `'a` lifetime of `rng` to the fake `'static` lifetime in `OtResources`
-        #[allow(clippy::missing_transmute_annotations)]
-        let state = resources.init(ieee_eui64, unsafe { core::mem::transmute(rng) }, unsafe {
-            core::mem::transmute(settings)
-        });
+        let state = resources.init(
+            ieee_eui64,
+            unsafe {
+                core::mem::transmute::<&'a mut dyn OtRngCore, &'static mut dyn OtRngCore>(rng)
+            },
+            unsafe {
+                core::mem::transmute::<&'a mut dyn Settings, &'static mut dyn Settings>(settings)
+            },
+        );
+
+        let state = unsafe {
+            core::mem::transmute::<&RefCell<OtState<'static>>, &'a RefCell<OtState<'a>>>(state)
+        };
+
         let srp_state = srp_resources.init();
+        let srp_state = unsafe {
+            core::mem::transmute::<&RefCell<OtSrpState<'static>>, &'a RefCell<OtSrpState<'a>>>(
+                srp_state,
+            )
+        };
 
         let mut this = Self {
             state,
@@ -277,12 +316,34 @@ impl<'a> OpenThread<'a> {
         srp_resources: &'a mut OtSrpResources<SRP_SVCS, SRP_BUF_SZ>,
     ) -> Result<Self, OtError> {
         // Needed so that we convert from the the actual `'a` lifetime of `rng` to the fake `'static` lifetime in `OtResources`
-        #[allow(clippy::missing_transmute_annotations)]
-        let state = resources.init(ieee_eui64, unsafe { core::mem::transmute(rng) }, unsafe {
-            core::mem::transmute(settings)
-        });
+        // Needed so that we convert from the the actual `'a` lifetime of `rng` to the fake `'static` lifetime in `OtResources`
+        let state = resources.init(
+            ieee_eui64,
+            unsafe {
+                core::mem::transmute::<&'a mut dyn OtRngCore, &'static mut dyn OtRngCore>(rng)
+            },
+            unsafe {
+                core::mem::transmute::<&'a mut dyn Settings, &'static mut dyn Settings>(settings)
+            },
+        );
+
+        let state = unsafe {
+            core::mem::transmute::<&RefCell<OtState<'static>>, &'a RefCell<OtState<'a>>>(state)
+        };
+
         let udp_state = udp_resources.init();
+        let udp_state = unsafe {
+            core::mem::transmute::<&RefCell<OtUdpState<'static>>, &'a RefCell<OtUdpState<'a>>>(
+                udp_state,
+            )
+        };
+
         let srp_state = srp_resources.init();
+        let srp_state = unsafe {
+            core::mem::transmute::<&RefCell<OtSrpState<'static>>, &'a RefCell<OtSrpState<'a>>>(
+                srp_state,
+            )
+        };
 
         let mut this = Self {
             state,
@@ -459,7 +520,7 @@ impl<'a> OpenThread<'a> {
 
         let msg = poll_fn(move |cx| self.activate().state().ot.rx_ipv6.poll_wait(cx)).await;
 
-        let _ = self.activate();
+        let _ot = self.activate();
 
         let len = unsafe { otMessageRead(msg, 0, buf.as_mut_ptr() as *mut _, buf.len() as _) as _ };
 
@@ -927,27 +988,35 @@ impl OtResources {
         let radio_resources = unsafe { self.radio_resources.assume_init_mut() };
         let dataset_resources = unsafe { self.dataset_resources.assume_init_mut() };
 
+        let radio_resources = unsafe {
+            core::mem::transmute::<&mut RadioResources, &'static mut RadioResources>(
+                radio_resources,
+            )
+        };
+        let dataset_resources = unsafe {
+            core::mem::transmute::<&mut DatasetResources, &'static mut DatasetResources>(
+                dataset_resources,
+            )
+        };
+
         radio_resources.init();
 
-        #[allow(clippy::missing_transmute_annotations)]
-        self.state.write(RefCell::new(unsafe {
-            core::mem::transmute(OtState {
-                ieee_eui64,
-                rng,
-                settings,
-                scan_callback: RefCell::new(None),
-                scan_done: Signal::new(),
-                radio_resources,
-                dataset_resources,
-                instance: core::ptr::null_mut(),
-                rx_ipv6_enabled: false,
-                rx_ipv6: Signal::new(),
-                alarm: Signal::new(),
-                tasklets: Signal::new(),
-                changes: Signal::new(),
-                radio: Signal::new(),
-                radio_conf: Config::new(),
-            })
+        self.state.write(RefCell::new(OtState {
+            ieee_eui64,
+            rng,
+            settings,
+            scan_callback: None,
+            scan_done: Signal::new(),
+            radio_resources,
+            dataset_resources,
+            instance: core::ptr::null_mut(),
+            rx_ipv6_enabled: false,
+            rx_ipv6: Signal::new(),
+            alarm: Signal::new(),
+            tasklets: Signal::new(),
+            changes: Signal::new(),
+            radio: Signal::new(),
+            radio_conf: Config::new(),
         }));
 
         info!("OpenThread resources initialized");
@@ -1018,22 +1087,23 @@ impl From<otDeviceRole> for DeviceRole {
 /// for the duration of the activation.
 struct OtActiveState<'a> {
     /// The activated `OtState` instance.
-    ot: RefMut<'a, OtState<'static>>,
+    ot: RefMut<'a, OtState<'a>>,
     /// The activated `OtUdpState` instance.
     #[cfg(feature = "udp")]
-    udp: Option<RefMut<'a, OtUdpState<'static>>>,
+    udp: Option<RefMut<'a, OtUdpState<'a>>>,
     /// The activated `OtSrpState` instance.
     #[cfg(feature = "srp")]
-    srp: Option<RefMut<'a, OtSrpState<'static>>>,
+    srp: Option<RefMut<'a, OtSrpState<'a>>>,
 }
 
-impl OtActiveState<'_> {
+#[allow(clippy::needless_lifetimes)]
+impl<'a> OtActiveState<'a> {
     /// A utility to get a reference to the UDP state
     ///
     /// This method will return an error if the `OpenThread` instance was not
     /// initialized with UDP resources.
     #[cfg(feature = "udp")]
-    pub(crate) fn udp(&mut self) -> Result<&mut OtUdpState<'static>, OtError> {
+    pub(crate) fn udp(&mut self) -> Result<&mut OtUdpState<'a>, OtError> {
         let udp = self
             .udp
             .as_mut()
@@ -1047,7 +1117,7 @@ impl OtActiveState<'_> {
     /// This method will return an error if the `OpenThread` instance was not
     /// initialized with SRP resources.
     #[cfg(feature = "srp")]
-    pub(crate) fn srp(&mut self) -> Result<&mut OtSrpState<'static>, OtError> {
+    pub(crate) fn srp(&mut self) -> Result<&mut OtSrpState<'a>, OtError> {
         let srp = self
             .srp
             .as_mut()
@@ -1094,7 +1164,7 @@ impl<'a> OtContext<'a> {
     ///
     /// The above ^^^ will not lead to a memory corruption, but the code will panic due to an attempt
     /// to mutably borrow the `OtState` `RefCell`d data twice.
-    fn activate_for(ot: &'a OpenThread) -> Self {
+    fn activate_for(ot: &OpenThread<'a>) -> Self {
         assert!(unsafe { OT_ACTIVE_STATE.0.get().as_mut() }
             .unwrap()
             .is_none());
@@ -1108,10 +1178,10 @@ impl<'a> OtContext<'a> {
         };
 
         // Needed so that we convert from the fake `'static` lifetime in `OT_ACTIVE_STATE` to the actual `'a` lifetime of `ot`
-        #[allow(clippy::missing_transmute_annotations)]
         {
-            *unsafe { OT_ACTIVE_STATE.0.get().as_mut() }.unwrap() =
-                Some(unsafe { core::mem::transmute(active) });
+            *unsafe { OT_ACTIVE_STATE.0.get().as_mut() }.unwrap() = Some(unsafe {
+                core::mem::transmute::<OtActiveState<'_>, OtActiveState<'static>>(active)
+            });
         }
 
         Self {
@@ -1136,9 +1206,12 @@ impl<'a> OtContext<'a> {
     }
 
     /// Gets a reference to the `OtActiveState` instance owned by this `OtContext` instance.
-    #[allow(clippy::missing_transmute_annotations)]
     fn state(&mut self) -> &mut OtActiveState<'a> {
-        unsafe { core::mem::transmute(OT_ACTIVE_STATE.0.get().as_mut().unwrap().as_mut().unwrap()) }
+        unsafe {
+            core::mem::transmute::<&'static mut OtActiveState<'static>, &mut OtActiveState<'a>>(
+                OT_ACTIVE_STATE.0.get().as_mut().unwrap().as_mut().unwrap(),
+            )
+        }
     }
 
     /// Ingest an IPv6 packet into OpenThread.
@@ -1537,7 +1610,7 @@ impl Drop for OtContext<'_> {
             .is_some());
 
         if !self.callback {
-            *unsafe { OT_ACTIVE_STATE.0.get().as_mut() }.unwrap() = None;
+            unsafe { OT_ACTIVE_STATE.0.get().as_mut() }.unwrap().take();
         }
     }
 }
@@ -1552,12 +1625,12 @@ struct OtState<'a> {
     /// The IEEE EUI-64 address of the Radio device.
     ieee_eui64: [u8; 8],
     /// The random number generator associated with the `OtData` instance.
-    rng: &'static mut dyn OtRngCore,
+    rng: &'a mut dyn OtRngCore,
     /// The OT settings
-    settings: &'static mut dyn Settings,
+    settings: &'a mut dyn Settings,
     /// The callback to invoke when network scanning is in progress
     #[allow(clippy::type_complexity)]
-    scan_callback: RefCell<Option<&'static mut dyn FnMut(Option<&ScanResult>)>>,
+    scan_callback: Option<&'a mut dyn FnMut(Option<&ScanResult>)>,
     /// Indicate that scanning has completed
     scan_done: Signal<()>,
     /// Whether to egress IPv6 packets from OpenThread

@@ -314,23 +314,28 @@ impl<const UDP_SOCKETS: usize, const UDP_RX_SZ: usize> OtUdpResources<UDP_SOCKET
     ///
     /// Returns:
     /// - A reference to a `RefCell<OtUdpState>` value that represents the initialized OpenThread UDP state.
-    pub(crate) fn init(&mut self) -> &mut RefCell<OtUdpState<'static>> {
+    pub(crate) fn init(&mut self) -> &RefCell<OtUdpState<'static>> {
         self.sockets.write([Self::INIT_SOCKET; UDP_SOCKETS]);
         self.buffers.write([Self::INIT_BUFFERS; UDP_SOCKETS]);
 
+        let sockets = unsafe { self.sockets.assume_init_mut() };
+        let sockets = unsafe {
+            core::mem::transmute::<
+                &mut [UdpSocketCtx; UDP_SOCKETS],
+                &'static mut [UdpSocketCtx; UDP_SOCKETS],
+            >(sockets)
+        };
+
         let buffers: &mut [[u8; UDP_RX_SZ]; UDP_SOCKETS] =
             unsafe { self.buffers.assume_init_mut() };
+        let buffers: &'static mut [u8] = unsafe {
+            core::slice::from_raw_parts_mut(buffers.as_mut_ptr() as *mut _, UDP_RX_SZ * UDP_SOCKETS)
+        };
 
-        #[allow(clippy::missing_transmute_annotations)]
-        self.state.write(RefCell::new(unsafe {
-            core::mem::transmute(OtUdpState {
-                sockets: self.sockets.assume_init_mut(),
-                buffers: core::slice::from_raw_parts_mut(
-                    buffers.as_mut_ptr() as *mut _,
-                    UDP_RX_SZ * UDP_SOCKETS,
-                ),
-                buf_len: UDP_RX_SZ,
-            })
+        self.state.write(RefCell::new(OtUdpState {
+            sockets,
+            buffers,
+            buf_len: UDP_RX_SZ,
         }));
 
         info!("OpenThread UDP resources initialized");
