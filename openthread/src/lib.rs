@@ -146,7 +146,7 @@ impl<'a> OpenThread<'a> {
     pub fn new(
         ieee_eui64: [u8; 8],
         rng: &'a mut dyn OtRngCore,
-        settings: &mut dyn Settings,
+        settings: &'a mut dyn Settings,
         resources: &'a mut OtResources,
     ) -> Result<Self, OtError> {
         if OT_REFCNT
@@ -191,7 +191,7 @@ impl<'a> OpenThread<'a> {
     pub fn new_with_udp<const UDP_SOCKETS: usize, const UDP_RX_SZ: usize>(
         ieee_eui64: [u8; 8],
         rng: &'a mut dyn OtRngCore,
-        settings: &mut dyn Settings,
+        settings: &'a mut dyn Settings,
         resources: &'a mut OtResources,
         udp_resources: &'a mut OtUdpResources<UDP_SOCKETS, UDP_RX_SZ>,
     ) -> Result<Self, OtError> {
@@ -228,7 +228,7 @@ impl<'a> OpenThread<'a> {
     pub fn new_with_srp<const SRP_SVCS: usize, const SRP_BUF_SZ: usize>(
         ieee_eui64: [u8; 8],
         rng: &'a mut dyn OtRngCore,
-        settings: &mut dyn Settings,
+        settings: &'a mut dyn Settings,
         resources: &'a mut OtResources,
         srp_resources: &'a mut OtSrpResources<SRP_SVCS, SRP_BUF_SZ>,
     ) -> Result<Self, OtError> {
@@ -271,7 +271,7 @@ impl<'a> OpenThread<'a> {
     >(
         ieee_eui64: [u8; 8],
         rng: &'a mut dyn OtRngCore,
-        settings: &mut dyn Settings,
+        settings: &'a mut dyn Settings,
         resources: &'a mut OtResources,
         udp_resources: &'a mut OtUdpResources<UDP_SOCKETS, UDP_RX_SZ>,
         srp_resources: &'a mut OtSrpResources<SRP_SVCS, SRP_BUF_SZ>,

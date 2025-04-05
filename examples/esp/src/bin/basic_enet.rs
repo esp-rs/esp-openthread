@@ -24,7 +24,7 @@ use log::info;
 
 use openthread::enet::{self, EnetDriver, EnetRunner};
 use openthread::esp::EspRadio;
-use openthread::{OpenThread, OtResources, RamSettings};
+use openthread::{OpenThread, OtResources, SimpleRamSettings};
 
 use rand_core::RngCore;
 
@@ -78,9 +78,9 @@ async fn main(spawner: Spawner) {
     let enet_driver_state =
         mk_static!(enet::EnetDriverState<IPV6_PACKET_SIZE, 1, 1>, enet::EnetDriverState::new());
 
-    let mut ot_settings = RamSettings::new(ot_settings_buf);
+    let ot_settings = mk_static!(SimpleRamSettings, SimpleRamSettings::new(ot_settings_buf));
 
-    let ot = OpenThread::new(ieee_eui64, rng, &mut ot_settings, ot_resources).unwrap();
+    let ot = OpenThread::new(ieee_eui64, rng, ot_settings, ot_resources).unwrap();
 
     let (_enet_controller, enet_driver_runner, enet_driver) =
         enet::new(ot.clone(), enet_driver_state);

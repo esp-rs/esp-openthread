@@ -28,7 +28,7 @@ use log::info;
 use openthread::nrf::{Ieee802154, NrfRadio};
 use openthread::{
     EmbassyTimeTimer, OpenThread, OtResources, OtSrpResources, OtUdpResources, PhyRadioRunner,
-    ProxyRadio, ProxyRadioResources, Radio, RamSettings, SrpConf, UdpSocket,
+    ProxyRadio, ProxyRadioResources, Radio, SimpleRamSettings, SrpConf, UdpSocket,
 };
 
 use panic_rtt_target as _;
@@ -109,12 +109,12 @@ async fn main(spawner: Spawner) {
         mk_static!(OtSrpResources<SRP_MAX_SERVICES, SRP_SERVICE_BUF>, OtSrpResources::new());
     let ot_settings_buf = mk_static!([u8; 1024], [0; 1024]);
 
-    let mut ot_settings = RamSettings::new(ot_settings_buf);
+    let ot_settings = mk_static!(SimpleRamSettings, SimpleRamSettings::new(ot_settings_buf));
 
     let ot = OpenThread::new_with_udp_srp(
         ieee_eui64,
         rng,
-        &mut ot_settings,
+        ot_settings,
         ot_resources,
         ot_udp_resources,
         ot_srp_resources,

@@ -244,6 +244,19 @@ impl Settings for () {
     fn deinit(&mut self) {}
 }
 
+/// A type alias of `RamSettings` for the case where the signal changes' closure is a `fn`
+pub type SimpleRamSettings<'a> = RamSettings<'a, fn(RamSettingsChange) -> bool>;
+
+impl<'a> SimpleRamSettings<'a> {
+    /// Create a new `RamSettings` instance which never signals changes.
+    ///
+    /// # Arguments
+    /// - `buffer`: The RAM buffer where settings are cached
+    pub const fn new(buffer: &'a mut [u8]) -> Self {
+        Self::new_with_signal_change(buffer, |_| false)
+    }
+}
+
 /// A type implementing the `Settings` trait that stores settings in RAM
 ///
 /// Useful in cases where storing the settings in non-volatile storage is not important
@@ -262,16 +275,6 @@ pub struct RamSettings<'a, T> {
     signal_change: T,
     /// A signal to notify the user when the settings have changed
     changed_signal: Signal<()>,
-}
-
-impl<'a> RamSettings<'a, fn(RamSettingsChange) -> bool> {
-    /// Create a new `RamSettings` instance which never signals changes.
-    ///
-    /// # Arguments
-    /// - `buffer`: The RAM buffer where settings are cached
-    pub const fn new(buffer: &'a mut [u8]) -> Self {
-        Self::new_with_signal_change(buffer, |_| false)
-    }
 }
 
 impl<'a, T> RamSettings<'a, T>
