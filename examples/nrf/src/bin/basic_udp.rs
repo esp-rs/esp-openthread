@@ -24,7 +24,7 @@ use log::info;
 use openthread::nrf::{Ieee802154, NrfRadio};
 use openthread::{
     EmbassyTimeTimer, OpenThread, OtResources, OtUdpResources, PhyRadioRunner, ProxyRadio,
-    ProxyRadioResources, Radio, UdpSocket,
+    ProxyRadioResources, Radio, SimpleRamSettings, UdpSocket,
 };
 
 use panic_rtt_target as _;
@@ -96,8 +96,12 @@ async fn main(spawner: Spawner) {
     let ot_resources = mk_static!(OtResources, OtResources::new());
     let ot_udp_resources =
         mk_static!(OtUdpResources<UDP_MAX_SOCKETS, UDP_SOCKETS_BUF>, OtUdpResources::new());
+    let ot_settings_buf = mk_static!([u8; 1024], [0; 1024]);
 
-    let ot = OpenThread::new_with_udp(ieee_eui64, rng, ot_resources, ot_udp_resources).unwrap();
+    let ot_settings = mk_static!(SimpleRamSettings, SimpleRamSettings::new(ot_settings_buf));
+
+    let ot = OpenThread::new_with_udp(ieee_eui64, rng, ot_settings, ot_resources, ot_udp_resources)
+        .unwrap();
 
     info!("About to spawn OT runner");
 
@@ -116,11 +120,11 @@ async fn main(spawner: Spawner) {
 
     info!("Radio created");
 
-    spawner.spawn(run_ot(ot, proxy_radio)).unwrap();
+    spawner.spawn(run_ot(ot.clone(), proxy_radio)).unwrap();
 
     info!("About to spawn OT IP info");
 
-    spawner.spawn(run_ot_ip_info(ot)).unwrap();
+    spawner.spawn(run_ot_ip_info(ot.clone())).unwrap();
 
     info!("Dataset: {THREAD_DATASET}");
 

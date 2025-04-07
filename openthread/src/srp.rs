@@ -39,7 +39,7 @@ pub type SrpServiceSlot = usize;
 /// thus avoiding expensive mem-moves.
 ///
 /// Can also be statically-allocated.
-pub struct OtSrpResources<const SRP_SVCS: usize, const SRP_BUF_SZ: usize> {
+pub struct OtSrpResources<const SRP_SVCS: usize = 3, const SRP_BUF_SZ: usize = 300> {
     /// Memory for up to `SRP_SVCS` SRP services
     services: MaybeUninit<[otSrpClientService; SRP_SVCS]>,
     /// Whether a service slot in the above memory is taken
@@ -87,28 +87,43 @@ impl<const SRP_SVCS: usize, const SRP_BUF_SZ: usize> OtSrpResources<SRP_SVCS, SR
     ///
     /// Returns:
     /// - A reference to a `RefCell<OtSrpState>` value that represents the initialized OpenThread SRP state.
-    pub(crate) fn init(&mut self) -> &mut RefCell<OtSrpState<'static>> {
+    pub(crate) fn init(&mut self) -> &RefCell<OtSrpState<'static>> {
         self.services.write([Self::INIT_SERVICE; SRP_SVCS]);
         self.taken.write([false; SRP_SVCS]);
         self.conf.write(Self::INIT_BUFFERS);
         self.buffers.write([Self::INIT_BUFFERS; SRP_SVCS]);
 
-        let buffers: &mut [[u8; SRP_BUF_SZ]; SRP_SVCS] = unsafe { self.buffers.assume_init_mut() };
+        let services = unsafe { self.services.assume_init_mut() };
+        let services = unsafe {
+            core::mem::transmute::<
+                &mut [otSrpClientService; SRP_SVCS],
+                &'static mut [otSrpClientService; SRP_SVCS],
+            >(services)
+        };
 
-        #[allow(clippy::missing_transmute_annotations)]
-        self.state.write(RefCell::new(unsafe {
-            core::mem::transmute(OtSrpState {
-                services: self.services.assume_init_mut(),
-                taken: self.taken.assume_init_mut(),
-                conf: self.conf.assume_init_mut(),
-                conf_taken: false,
-                buffers: core::slice::from_raw_parts_mut(
-                    buffers.as_mut_ptr() as *mut _,
-                    SRP_BUF_SZ * SRP_SVCS,
-                ),
-                buf_len: SRP_BUF_SZ,
-                changes: Signal::new(),
-            })
+        let taken = unsafe { self.taken.assume_init_mut() };
+        let taken = unsafe {
+            core::mem::transmute::<&mut [bool; SRP_SVCS], &'static mut [bool; SRP_SVCS]>(taken)
+        };
+
+        let conf = unsafe { self.conf.assume_init_mut() };
+        let conf = unsafe {
+            core::mem::transmute::<&mut [u8; SRP_BUF_SZ], &'static mut [u8; SRP_BUF_SZ]>(conf)
+        };
+
+        let buffers: &mut [[u8; SRP_BUF_SZ]; SRP_SVCS] = unsafe { self.buffers.assume_init_mut() };
+        let buffers: &'static mut [u8] = unsafe {
+            core::slice::from_raw_parts_mut(buffers.as_mut_ptr() as *mut _, SRP_BUF_SZ * SRP_SVCS)
+        };
+
+        self.state.write(RefCell::new(OtSrpState {
+            services,
+            taken,
+            conf,
+            conf_taken: false,
+            buffers,
+            buf_len: SRP_BUF_SZ,
+            changes: Signal::new(),
         }));
 
         info!("OpenThread SRP resources initialized");

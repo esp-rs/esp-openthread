@@ -69,29 +69,34 @@ impl<'a> UdpSocket<'a> {
 
     /// Create a new unbound and unconnected UDP socket.
     fn new(ot: OpenThread<'a>) -> Result<Self, OtError> {
-        let mut active_ot = ot.activate();
-        let state = active_ot.state();
-        let instance = state.ot.instance;
-        let udp = state.udp()?;
+        let slot = {
+            let mut active_ot = ot.activate();
+            let state = active_ot.state();
+            let instance = state.ot.instance;
+            let udp = state.udp()?;
 
-        let slot = udp
-            .sockets
-            .iter()
-            .position(|socket| !socket.taken)
-            .ok_or(otError_OT_ERROR_NO_BUFS)?;
+            let slot = udp
+                .sockets
+                .iter()
+                .position(|socket| !socket.taken)
+                .ok_or(otError_OT_ERROR_NO_BUFS)?;
 
-        let socket = &mut udp.sockets[slot];
-        // TODO socket.socket = UdpSocketData::new();
-        socket.taken = true;
+            let socket = &mut udp.sockets[slot];
+            socket.ot_socket = Default::default();
+            socket.rx.reset();
+            socket.taken = true;
 
-        unsafe {
-            otUdpOpen(
-                instance,
-                &mut socket.ot_socket,
-                Some(Self::plat_c_udp_receive),
-                slot as *mut c_void,
-            );
-        }
+            unsafe {
+                otUdpOpen(
+                    instance,
+                    &mut socket.ot_socket,
+                    Some(Self::plat_c_udp_receive),
+                    slot as *mut c_void,
+                );
+            }
+
+            slot
+        };
 
         Ok(Self { ot, slot })
     }
@@ -281,7 +286,7 @@ impl Drop for UdpSocket<'_> {
 /// thus avoiding expensive mem-moves.
 ///
 /// Can also be statically-allocated.
-pub struct OtUdpResources<const UDP_SOCKETS: usize, const UDP_RX_SZ: usize> {
+pub struct OtUdpResources<const UDP_SOCKETS: usize = 2, const UDP_RX_SZ: usize = 1500> {
     /// The UDP sockets that are available for use.
     sockets: MaybeUninit<[UdpSocketCtx; UDP_SOCKETS]>,
     /// The buffers that are used to store received UDP packets.
@@ -309,23 +314,28 @@ impl<const UDP_SOCKETS: usize, const UDP_RX_SZ: usize> OtUdpResources<UDP_SOCKET
     ///
     /// Returns:
     /// - A reference to a `RefCell<OtUdpState>` value that represents the initialized OpenThread UDP state.
-    pub(crate) fn init(&mut self) -> &mut RefCell<OtUdpState<'static>> {
+    pub(crate) fn init(&mut self) -> &RefCell<OtUdpState<'static>> {
         self.sockets.write([Self::INIT_SOCKET; UDP_SOCKETS]);
         self.buffers.write([Self::INIT_BUFFERS; UDP_SOCKETS]);
 
+        let sockets = unsafe { self.sockets.assume_init_mut() };
+        let sockets = unsafe {
+            core::mem::transmute::<
+                &mut [UdpSocketCtx; UDP_SOCKETS],
+                &'static mut [UdpSocketCtx; UDP_SOCKETS],
+            >(sockets)
+        };
+
         let buffers: &mut [[u8; UDP_RX_SZ]; UDP_SOCKETS] =
             unsafe { self.buffers.assume_init_mut() };
+        let buffers: &'static mut [u8] = unsafe {
+            core::slice::from_raw_parts_mut(buffers.as_mut_ptr() as *mut _, UDP_RX_SZ * UDP_SOCKETS)
+        };
 
-        #[allow(clippy::missing_transmute_annotations)]
-        self.state.write(RefCell::new(unsafe {
-            core::mem::transmute(OtUdpState {
-                sockets: self.sockets.assume_init_mut(),
-                buffers: core::slice::from_raw_parts_mut(
-                    buffers.as_mut_ptr() as *mut _,
-                    UDP_RX_SZ * UDP_SOCKETS,
-                ),
-                buf_len: UDP_RX_SZ,
-            })
+        self.state.write(RefCell::new(OtUdpState {
+            sockets,
+            buffers,
+            buf_len: UDP_RX_SZ,
         }));
 
         info!("OpenThread UDP resources initialized");

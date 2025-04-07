@@ -107,7 +107,7 @@ impl<'a> From<&'a otActiveScanResult> for ScanResult<'a> {
     }
 }
 
-impl OpenThread<'_> {
+impl<'a> OpenThread<'a> {
     /// Perform an active scan for Thread networks.
     ///
     /// The scan will be performed on the specified channels for the specified duration.
@@ -116,6 +116,9 @@ impl OpenThread<'_> {
     /// - `channels`: The channel mask to scan.
     /// - `duration_millis`: The duration of the scan in milliseconds.
     /// - `f`: A closure that will be called for each scan result, and finally - with `None` - when the scan is complete.
+    ///
+    /// NOTE: The future returned by this method is currently NOT `core::mem::forget` safe.
+    /// Its constructor MUST run, so don't call `core::mem::forget` on it.
     pub async fn scan<F>(
         &self,
         channels: Channels,
@@ -135,17 +138,34 @@ impl OpenThread<'_> {
                 return Err(OtError::new(otError_OT_ERROR_BUSY));
             }
 
-            let f: &mut dyn FnMut(Option<&ScanResult>) = &mut f;
-
-            let scan_callback = &state.ot.scan_callback;
-            #[allow(clippy::missing_transmute_annotations)]
             {
-                *scan_callback.borrow_mut() = Some(unsafe { core::mem::transmute(f) });
-            }
+                let f: &mut dyn FnMut(Option<&ScanResult>) = &mut f;
 
-            let _guard = scopeguard::guard((), |_| {
-                *scan_callback.borrow_mut() = None;
-            });
+                let scan_callback = &mut state.ot.scan_callback;
+                *scan_callback = Some(unsafe {
+                    core::mem::transmute::<
+                        &mut dyn FnMut(Option<&ScanResult>),
+                        &'a mut dyn FnMut(Option<&ScanResult>),
+                    >(f)
+                });
+
+                // TODO: This is all great but still - the future - with its current design - is simply not `core::mem::forget` safe.
+                // Calling `core::mem::forget` on the future returned by this method would fool rustc that the `F` closure is
+                // no longer in use and it could be dropped, resulting in a potentially dangling pointer in our state struct.
+                //
+                // (
+                // Consider the case where the user passes as F just a `&mut dyn |_| {...}` - and then calls `core::mem::forget`
+                // on the future returned by `scan`. The compiler would assume that the `&mut dyn |_| {...}` reference is no longer in use,
+                // while it actually is still saved - with erased lifetime - in the `scan_callback` field of the `state` struct.
+                // )
+                //
+                // Think how to fix this. Might require a redesign of the `scan` API, where it no longer takes an `F` closure
+                // and/or (unfortunately) needs to use extra owned buffer memory in the "resources" to store the scan results so that
+                // these can be polled and fetched from the `scan` future.
+                let _guard = scopeguard::guard((), |_| {
+                    *scan_callback = None;
+                });
+            }
 
             ot!(unsafe {
                 otLinkActiveScan(
@@ -176,7 +196,7 @@ impl OpenThread<'_> {
         let last = scan_result.is_none();
 
         {
-            if let Some(f) = state.ot.scan_callback.borrow_mut().as_mut() {
+            if let Some(f) = state.ot.scan_callback.as_mut() {
                 let scan_result = scan_result.map(|s| s.into());
 
                 f(scan_result.as_ref());
@@ -184,7 +204,7 @@ impl OpenThread<'_> {
         }
 
         if last {
-            *state.ot.scan_callback.borrow_mut() = None;
+            state.ot.scan_callback = None;
             state.ot.scan_done.signal(());
         }
     }

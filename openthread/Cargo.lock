@@ -1070,6 +1070,7 @@ dependencies = [
  "heapless",
  "log",
  "openthread-sys",
+ "portable-atomic",
  "rand_core",
  "scopeguard",
 ]
