@@ -107,7 +107,7 @@ impl<'a> From<&'a otActiveScanResult> for ScanResult<'a> {
     }
 }
 
-impl OpenThread<'_> {
+impl<'a> OpenThread<'a> {
     /// Perform an active scan for Thread networks.
     ///
     /// The scan will be performed on the specified channels for the specified duration.
@@ -139,10 +139,12 @@ impl OpenThread<'_> {
                 let f: &mut dyn FnMut(Option<&ScanResult>) = &mut f;
 
                 let scan_callback = &mut state.ot.scan_callback;
-                #[allow(clippy::missing_transmute_annotations)]
-                {
-                    *scan_callback = Some(unsafe { core::mem::transmute(f) });
-                }
+                *scan_callback = Some(unsafe {
+                    core::mem::transmute::<
+                        &mut dyn FnMut(Option<&ScanResult>),
+                        &'a mut dyn FnMut(Option<&ScanResult>),
+                    >(f)
+                });
 
                 let _guard = scopeguard::guard((), |_| {
                     *scan_callback = None;
