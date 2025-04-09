@@ -8,8 +8,7 @@ use core::task::{Context, Poll};
 use embassy_sync::blocking_mutex::raw::RawMutex;
 use embassy_sync::blocking_mutex::Mutex;
 
-use log::{debug, warn};
-
+use crate::fmt::Bytes;
 use crate::signal::Signal;
 use crate::sys::{
     otError_OT_ERROR_INVALID_ARGS, otError_OT_ERROR_NOT_IMPLEMENTED, otError_OT_ERROR_NO_BUFS,
@@ -24,6 +23,7 @@ use crate::OtError;
 
 /// Settings error
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum SettingsError {
     /// Not enough space
     NoBufs,
@@ -48,6 +48,7 @@ impl From<SettingsError> for OtError {
 /// Keys in the range 0 - 0x7fff are reserved for OpenThread
 /// Keys in the range 0x8000 - 0xffff can be used by vendors
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u16)]
 pub enum SettingsKey {
     /// Active Operational Dataset
@@ -326,7 +327,7 @@ where
         index: usize,
         buf: &mut [u8],
     ) -> Result<Option<usize>, SettingsError> {
-        debug!("Getting key: {key}, index: {index:?}");
+        debug!("Getting key: {}, index: {}", key, index);
 
         let for_key = self.iter().filter(|setting| setting.0 == key);
         let setting = for_key
@@ -339,12 +340,14 @@ where
             buf[..len].copy_from_slice(setting.1);
 
             debug!(
-                "Got key: {key}, index: {index:?}, value: {value:02x?}",
-                value = &buf[..len]
+                "Got key: {}, index: {}, value: {}",
+                key,
+                index,
+                Bytes(&buf[..len])
             );
             Ok(Some(len))
         } else {
-            debug!("Key not found: {key}, index: {index:?}");
+            debug!("Key not found: {}, index: {}", key, index);
             Ok(None)
         }
     }
@@ -363,11 +366,11 @@ where
     /// - `Ok(())`: The setting was added
     /// - `Err(_)`: An error occurred, like out of storage space
     pub fn add(&mut self, key: u16, value: &[u8]) -> Result<(), SettingsError> {
-        debug!("Adding key: {key}, value: {value:02x?}");
+        debug!("Adding key: {}, value: {}", key, Bytes(value));
 
         let len = RamSetting::HDR_LEN + value.len();
         if self.buffer.len() - self.len < len {
-            warn!("Adding key: {key} failed, no space");
+            warn!("Adding key: {} failed, no space", key);
             Err(SettingsError::NoBufs)?;
         }
 
@@ -387,7 +390,7 @@ where
             self.changed_signal.signal(());
         }
 
-        debug!("Added key: {key}");
+        debug!("Added key: {}", key);
         Ok(())
     }
 
@@ -404,7 +407,7 @@ where
     /// - `Ok(false)`: The setting was not found
     /// - `Err(_)`: An error occurred
     pub fn remove(&mut self, key: u16, index: Option<usize>) -> Result<bool, SettingsError> {
-        debug!("Removing key: {key}, index: {index:?}");
+        debug!("Removing key: {}, index: {:?}", key, index);
 
         let mut found = false;
         let mut buf = &mut self.buffer[..self.len];
@@ -431,7 +434,7 @@ where
                         self.changed_signal.signal(());
                     }
 
-                    debug!("Removed key: {key}, index: {index:?}");
+                    debug!("Removed key: {}, index: {:?}", key, index);
                     found = true;
 
                     current += 1;
@@ -445,7 +448,7 @@ where
         }
 
         if !found {
-            debug!("Key not found: {key}, index: {index:?}");
+            debug!("Key not found: {}, index: {:?}", key, index);
         }
 
         Ok(found)

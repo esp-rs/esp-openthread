@@ -176,7 +176,7 @@ impl OpenThreadBuilder {
         let mut config = self.cmake_configurer.configure(Some(lib_dir));
 
         config
-            .define("OT_LOG_LEVEL", "DEBG")
+            .define("OT_LOG_LEVEL", "NOTE")
             .define("OT_FTD", "OFF")
             .define("OT_MTD", "ON")
             .define("OT_RCP", "OFF")

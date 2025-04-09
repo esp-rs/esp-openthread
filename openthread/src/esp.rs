@@ -5,8 +5,7 @@ use embassy_sync::signal::Signal;
 
 use esp_ieee802154::{Config as EspConfig, Error};
 
-use log::{debug, trace};
-
+use crate::fmt::Bytes;
 use crate::{
     Capabilities, Cca, Config, MacCapabilities, PsduMeta, Radio, RadioError, RadioErrorKind,
 };
@@ -98,7 +97,7 @@ impl Radio for EspRadio<'_> {
 
     async fn set_config(&mut self, config: &Config) -> Result<(), Self::Error> {
         if self.config != *config {
-            debug!("Setting radio config: {config:?}");
+            debug!("Setting radio config: {:?}", config);
 
             self.config = config.clone();
             self.update_driver_config();
@@ -115,7 +114,8 @@ impl Radio for EspRadio<'_> {
         TX_SIGNAL.reset();
 
         debug!(
-            "ESP Radio, about to transmit: {psdu:02x?} on channel {}",
+            "ESP Radio, about to transmit: {} on channel {}",
+            Bytes(psdu),
             self.config.channel
         );
 
@@ -150,8 +150,8 @@ impl Radio for EspRadio<'_> {
         psdu_buf[..psdu_len].copy_from_slice(&raw.data[1..][..psdu_len]);
 
         debug!(
-            "ESP Radio, received: {:02x?} on channel {}",
-            &psdu_buf[..psdu_len],
+            "ESP Radio, received: {} on channel {}",
+            Bytes(&psdu_buf[..psdu_len]),
             raw.channel
         );
 

@@ -10,17 +10,17 @@
 
 use core::net::{Ipv6Addr, SocketAddrV6};
 
+use log::info;
+
 use embassy_executor::Spawner;
 
-use esp_backtrace as _;
 use esp_hal::rng::Rng;
 use esp_hal::timer::systimer::SystemTimer;
 use esp_ieee802154::Ieee802154;
-
-use log::info;
+use {esp_backtrace as _, esp_println as _};
 
 use openthread::esp::EspRadio;
-use openthread::{OpenThread, OtResources, OtUdpResources, SimpleRamSettings, UdpSocket};
+use openthread::{BytesFmt, OpenThread, OtResources, OtUdpResources, SimpleRamSettings, UdpSocket};
 
 use rand_core::RngCore;
 
@@ -54,7 +54,7 @@ const THREAD_DATASET: &str = if let Some(dataset) = option_env!("THREAD_DATASET"
 
 #[esp_hal_embassy::main]
 async fn main(spawner: Spawner) {
-    esp_println::logger::init_logger(log::LevelFilter::Info);
+    esp_println::logger::init_logger_from_env();
 
     info!("Starting...");
 
@@ -89,7 +89,7 @@ async fn main(spawner: Spawner) {
 
     spawner.spawn(run_ot_ip_info(ot.clone())).unwrap();
 
-    info!("Dataset: {THREAD_DATASET}");
+    info!("Dataset: {}", THREAD_DATASET);
 
     ot.set_active_dataset_tlv_hexstr(THREAD_DATASET).unwrap();
     ot.enable_ipv6(true).unwrap();
@@ -101,14 +101,17 @@ async fn main(spawner: Spawner) {
     )
     .unwrap();
 
-    info!("Opened socket on port {BOUND_PORT} and waiting for packets...");
+    info!(
+        "Opened socket on port {} and waiting for packets...",
+        BOUND_PORT
+    );
 
     let buf: &mut [u8] = unsafe { mk_static!([u8; UDP_SOCKETS_BUF]).assume_init_mut() };
 
     loop {
         let (len, local, remote) = socket.recv(buf).await.unwrap();
 
-        info!("Got {:02x?} from {remote} on {local}", &buf[..len]);
+        info!("Got {} from {} on {}", BytesFmt(&buf[..len]), remote, local);
 
         socket.send(b"Hello", Some(&local), &remote).await.unwrap();
         info!("Sent `b\"Hello\"`");
@@ -136,7 +139,7 @@ async fn run_ot_ip_info(ot: OpenThread<'static>) -> ! {
         .unwrap();
 
         if cur_addrs != addrs {
-            info!("Got new IPv6 address(es) from OpenThread: {addrs:?}");
+            info!("Got new IPv6 address(es) from OpenThread: {:?}", addrs);
 
             cur_addrs = addrs;
 

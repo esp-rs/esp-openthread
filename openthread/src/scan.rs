@@ -1,8 +1,7 @@
 use core::ffi::{c_void, CStr};
 use core::future::poll_fn;
 
-use bitflags::bitflags;
-
+use crate::fmt::bitflags;
 use crate::sys::{
     otActiveScanResult, otError_OT_ERROR_BUSY, otInstance, otLinkActiveScan,
     otLinkIsActiveScanInProgress, OT_CHANNEL_10_MASK, OT_CHANNEL_11_MASK, OT_CHANNEL_12_MASK,
@@ -18,7 +17,8 @@ use crate::{ot, OpenThread, OtContext, OtError};
 bitflags! {
     /// Radio channels set.
     #[repr(transparent)]
-    #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    #[derive(Default)]
+    #[cfg_attr(not(feature = "defmt"), derive(Debug, Copy, Clone, Eq, PartialEq, Hash))]
     pub struct Channels: u32 {
         const CH_1 = OT_CHANNEL_1_MASK;
         const CH_2 = OT_CHANNEL_2_MASK;
@@ -51,6 +51,7 @@ bitflags! {
 
 /// An active scan result
 #[derive(Debug, Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ScanResult<'a> {
     /// IEEE 802.15.4 Extended Address
     pub ext_address: u64,
@@ -89,10 +90,10 @@ impl<'a> From<&'a otActiveScanResult> for ScanResult<'a> {
 
         Self {
             ext_address: u64::from_be_bytes(result.mExtAddress.m8),
-            network_name: CStr::from_bytes_until_nul(network_name)
-                .unwrap()
-                .to_str()
-                .unwrap(),
+            network_name: unwrap!(
+                unwrap!(CStr::from_bytes_until_nul(network_name), "Not a valid Cstr").to_str(),
+                "Not a valid UTF-8 string"
+            ),
             extended_pan_id: u64::from_be_bytes(result.mExtendedPanId.m8),
             steering_data: &result.mSteeringData.m8[..result.mSteeringData.mLength as _],
             pan_id: result.mPanId,

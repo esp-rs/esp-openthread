@@ -8,8 +8,6 @@ use core::future::Future;
 use core::mem::MaybeUninit;
 use core::pin::pin;
 
-use bitflags::bitflags;
-
 use embassy_futures::select::{select, Either};
 
 use embassy_sync::blocking_mutex::raw::{CriticalSectionRawMutex, RawMutex};
@@ -18,15 +16,15 @@ use embassy_sync::zerocopy_channel::{Channel, Receiver, Sender};
 
 use embassy_time::Instant;
 
-use log::{debug, trace};
-
 use mac::MacHeader;
 
+use crate::fmt::{bitflags, Bytes};
 use crate::sys::OT_RADIO_FRAME_MAX_SIZE;
 
 /// The error kind for radio errors.
 // TODO: Fill in with extra variants
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum RadioErrorKind {
     /// Invalid TX frame
     TxInvalid,
@@ -64,6 +62,7 @@ impl RadioError for RadioErrorKind {
 
 /// Carrier sense or Energy Detection (ED) mode.
 #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Cca {
     /// Carrier sense
     #[default]
@@ -86,7 +85,8 @@ pub enum Cca {
 bitflags! {
     /// Radio PHY capabilities.
     #[repr(transparent)]
-    #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    #[derive(Default)]
+    #[cfg_attr(not(feature = "defmt"), derive(Debug, Copy, Clone, Eq, PartialEq, Hash))]
     pub struct Capabilities: u16 {
         /// Radio supports receiving during idle state.
         const RX_WHEN_IDLE = 0x01;
@@ -100,7 +100,8 @@ bitflags! {
 bitflags! {
     /// Radio MAC capabilities.
     #[repr(transparent)]
-    #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    #[derive(Default)]
+    #[cfg_attr(not(feature = "defmt"), derive(Debug, Copy, Clone, Eq, PartialEq, Hash))]
     pub struct MacCapabilities: u16 {
         /// Radio supports automatic reception of ACKs for transmitted frames.
         const TX_ACK = 0x01;
@@ -119,6 +120,7 @@ bitflags! {
 
 /// Radio configuration.
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Config {
     /// Channel number
     pub channel: u8,
@@ -170,6 +172,7 @@ impl Default for Config {
 
 /// Meta-data associated with the received IEEE 802.15.4 frame
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct PsduMeta {
     /// Length of the PSDU in the frame
     pub len: usize,
@@ -321,6 +324,16 @@ where
             Self::RxAckTimeout => RadioErrorKind::RxAckTimeout,
             Self::Io(e) => e.kind(),
         }
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl<T> defmt::Format for MacRadioError<T>
+where
+    T: RadioError,
+{
+    fn format(&self, fmt: defmt::Formatter<'_>) {
+        defmt::write!(fmt, "{}", self.kind())
     }
 }
 
@@ -507,14 +520,15 @@ where
 
             let psdu = &psdu_buf[..psdu_meta.len];
 
-            trace!("MacRadio, received: {psdu:02x?}, meta: {psdu_meta:?}");
+            trace!("MacRadio, received: {}, meta: {:?}", Bytes(psdu), psdu_meta);
 
             let mac_caps = self.radio.mac_caps();
 
             if mac_caps != MacCapabilities::all() {
                 if self.mac_header.load(psdu).is_none() {
                     trace!(
-                        "MacRadio, received frame with invalid MAC header, dropping: {psdu:02x?}"
+                        "MacRadio, received frame with invalid MAC header, dropping: {}",
+                        Bytes(psdu)
                     );
                     continue;
                 }
@@ -524,7 +538,10 @@ where
                         && self.mac_header.pan_id != MacHeader::BROADCAST_PAN_ID
                         && self.mac_header.pan_id != self.pan_id
                     {
-                        trace!("MacRadio, filtering out frame: {psdu:02x?}, PAN ID does not match");
+                        trace!(
+                            "MacRadio, filtering out frame: {}, PAN ID does not match",
+                            Bytes(psdu)
+                        );
                         continue;
                     }
 
@@ -532,7 +549,10 @@ where
                         && self.mac_header.dst_short_addr != MacHeader::BROADCAST_SHORT_ADDR
                         && self.mac_header.dst_short_addr != self.short_addr
                     {
-                        trace!("MacRadio, filtering out frame: {psdu:02x?}, short address does not match");
+                        trace!(
+                            "MacRadio, filtering out frame: {}, short address does not match",
+                            Bytes(psdu)
+                        );
                         continue;
                     }
 
@@ -540,7 +560,10 @@ where
                         && self.mac_header.dst_ext_addr != MacHeader::BROADCAST_EXT_ADDR
                         && self.mac_header.dst_ext_addr != self.ext_addr
                     {
-                        trace!("MacRadio, filtering out frame: {psdu:02x?}, extended address does not match");
+                        trace!(
+                            "MacRadio, filtering out frame: {}, extended address does not match",
+                            Bytes(psdu)
+                        );
                         continue;
                     }
 
@@ -548,7 +571,7 @@ where
                         let ack_len = self.mac_header.prep_ack(&mut self.ack_psdu_buf);
                         let ack_psdu = &mut self.ack_psdu_buf[..ack_len];
 
-                        trace!("MacRadio, about to transmit ACK: {ack_psdu:02x?}");
+                        trace!("MacRadio, about to transmit ACK: {}", Bytes(ack_psdu));
 
                         if self.timer.now() < ack_at {
                             self.timer.wait(ack_at).await;
@@ -562,7 +585,7 @@ where
                 }
             }
 
-            trace!("MacRadio, received frame: {psdu:02x?}");
+            trace!("MacRadio, received frame: {}", Bytes(psdu));
 
             break Ok(psdu_meta);
         }
@@ -748,7 +771,7 @@ impl Radio for ProxyRadio<'_> {
         psdu: &[u8],
         ack_psdu_buf: Option<&mut [u8]>,
     ) -> Result<Option<PsduMeta>, Self::Error> {
-        trace!("ProxyRadio, about to transmit: {psdu:02x?}");
+        trace!("ProxyRadio, about to transmit: {}", Bytes(psdu));
 
         self.process_cancelled().await;
 
@@ -758,9 +781,9 @@ impl Radio for ProxyRadio<'_> {
             req.tx = true;
             req.config = self.config.clone();
             req.psdu.clear();
-            req.psdu.extend_from_slice(psdu).unwrap();
+            unwrap!(req.psdu.extend_from_slice(psdu));
 
-            debug!("ProxyRadio, transmit request sent: {req:?}");
+            debug!("ProxyRadio, transmit request sent: {:?}", req);
 
             self.request.send_done();
         }
@@ -777,7 +800,7 @@ impl Radio for ProxyRadio<'_> {
 
         let resp = self.response.receive().await;
 
-        debug!("ProxyRadio, transmit response received: {resp:?}");
+        debug!("ProxyRadio, transmit response received: {:?}", resp);
 
         let psdu_meta = (ack_psdu_buf.is_some() && !resp.psdu.is_empty()).then_some(PsduMeta {
             len: resp.psdu.len(),
@@ -815,7 +838,7 @@ impl Radio for ProxyRadio<'_> {
             req.config = self.config.clone();
             req.psdu.clear();
 
-            debug!("ProxyRadio, receive request sent: {req:?}");
+            debug!("ProxyRadio, receive request sent: {:?}", req);
 
             self.request.send_done();
         }
@@ -832,7 +855,7 @@ impl Radio for ProxyRadio<'_> {
 
         let resp = self.response.receive().await;
 
-        debug!("ProxyRadio, receive response received: {resp:?}");
+        debug!("ProxyRadio, receive response received: {:?}", resp);
 
         match resp.result {
             Ok(()) => {
@@ -935,7 +958,7 @@ impl PhyRadioRunner<'_> {
         response.psdu_channel = 0;
         response.psdu_rssi = None;
 
-        trace!("PhyRadioRunner, processing request: {request:?}");
+        trace!("PhyRadioRunner, processing request: {:?}", request);
 
         // Always first set the configuration relevant for the current TX/RX request
         // The PHY driver should have intelligence to skip the configuration update if the new
@@ -944,16 +967,13 @@ impl PhyRadioRunner<'_> {
             .await?
             .map_err(|e| e.kind());
 
-        trace!("PhyRadioRunner, configuration set: {result:?}");
+        trace!("PhyRadioRunner, configuration set: {:?}", result);
 
         let result = if result.is_err() {
             // Setting driver configuration resulted in an error, so skip the rest of the processing
             result
         } else {
-            response
-                .psdu
-                .resize_default(response.psdu.capacity())
-                .unwrap();
+            unwrap!(response.psdu.resize_default(response.psdu.capacity()));
 
             let result = if request.tx {
                 Self::with_cancel(
@@ -983,7 +1003,7 @@ impl PhyRadioRunner<'_> {
 
         response.result = result;
 
-        debug!("PhyRadioRunner, processed response: {response:?}");
+        debug!("PhyRadioRunner, processed response: {:?}", response);
 
         response_sender.send_done();
 
@@ -1066,6 +1086,7 @@ impl<'a> ProxyRadioState<'a> {
 
 /// A proxy radio request.
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 struct ProxyRadioRequest {
     /// Transmit or receive
     tx: bool,
@@ -1088,6 +1109,7 @@ impl ProxyRadioRequest {
 
 /// A proxy radio response.
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 struct ProxyRadioResponse {
     /// The result of the TX/RX operation
     result: Result<(), RadioErrorKind>,
@@ -1197,7 +1219,7 @@ mod mac {
             Self::ensure_len(psdu, Self::ADDRS_OFFSET + Self::CRC_LEN)?;
 
             self.fcf =
-                u16::from_le_bytes(psdu[Self::FCF_OFFSET..Self::SEQ_OFFSET].try_into().unwrap());
+                u16::from_le_bytes(unwrap!(psdu[Self::FCF_OFFSET..Self::SEQ_OFFSET].try_into()));
             self.seq = psdu[Self::SEQ_OFFSET];
 
             let _frame_type = FrameType::get(self.fcf)?;
@@ -1213,16 +1235,16 @@ mod mac {
                 FrameAddrMode::Short => {
                     Self::ensure_len(psdu, Self::ADDRS_OFFSET + 2 + 2 + Self::CRC_LEN)?;
 
-                    self.pan_id = u16::from_le_bytes(psdu[3..5].try_into().unwrap());
-                    self.dst_short_addr = u16::from_le_bytes(psdu[5..7].try_into().unwrap());
+                    self.pan_id = u16::from_le_bytes(unwrap!(psdu[3..5].try_into()));
+                    self.dst_short_addr = u16::from_le_bytes(unwrap!(psdu[5..7].try_into()));
                     self.dst_ext_addr = Self::BROADCAST_EXT_ADDR;
                 }
                 FrameAddrMode::Extended => {
                     Self::ensure_len(psdu, Self::ADDRS_OFFSET + 2 + 8 + Self::CRC_LEN)?;
 
-                    self.pan_id = u16::from_le_bytes(psdu[3..5].try_into().unwrap());
+                    self.pan_id = u16::from_le_bytes(unwrap!(psdu[3..5].try_into()));
                     // See platform.rs, `otPlatRadioSetExtendedAddress` impl
-                    self.dst_ext_addr = u64::from_be_bytes(psdu[5..13].try_into().unwrap());
+                    self.dst_ext_addr = u64::from_be_bytes(unwrap!(psdu[5..13].try_into()));
                     self.dst_short_addr = Self::BROADCAST_SHORT_ADDR;
                 }
             }
@@ -1259,7 +1281,7 @@ mod mac {
         /// Return `true` if the frame is an ACK frame and is an ACK for the given source sequence number.
         #[inline(always)]
         pub fn ack_for(&self, src_seq: u8) -> bool {
-            matches!(FrameType::get(self.fcf).unwrap(), FrameType::Ack) && src_seq == self.seq
+            matches!(unwrap!(FrameType::get(self.fcf)), FrameType::Ack) && src_seq == self.seq
         }
 
         #[inline(always)]
@@ -1270,6 +1292,7 @@ mod mac {
 
     /// The supported IEEE 802.15.4 frame versions
     #[derive(Debug)]
+    #[cfg_attr(feature = "defmt", derive(defmt::Format))]
     enum FrameVersion {
         IEEE802154_2003,
         IEEE802154_2006,
@@ -1291,6 +1314,7 @@ mod mac {
 
     /// The supported IEEE 802.15.4 frame types
     #[derive(Debug)]
+    #[cfg_attr(feature = "defmt", derive(defmt::Format))]
     enum FrameType {
         Beacon,
         Data,
@@ -1316,6 +1340,7 @@ mod mac {
 
     /// The supported IEEE 802.15.4 frame address modes
     #[derive(Debug)]
+    #[cfg_attr(feature = "defmt", derive(defmt::Format))]
     enum FrameAddrMode {
         NotPresent,
         Short,

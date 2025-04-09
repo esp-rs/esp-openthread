@@ -4,8 +4,6 @@ use core::future::poll_fn;
 use core::mem::MaybeUninit;
 use core::net::{Ipv6Addr, SocketAddrV6};
 
-use log::{debug, info, trace, warn};
-
 use crate::signal::Signal;
 use crate::sys::{
     otError_OT_ERROR_DROP, otError_OT_ERROR_NO_BUFS, otIp6Address, otIp6Address__bindgen_ty_1,
@@ -13,7 +11,7 @@ use crate::sys::{
     otNetifIdentifier_OT_NETIF_THREAD, otSockAddr, otUdpBind, otUdpClose, otUdpConnect,
     otUdpNewMessage, otUdpOpen, otUdpSend, otUdpSocket,
 };
-use crate::{ot, to_ot_addr, to_sock_addr, OpenThread, OtContext, OtError};
+use crate::{ot, to_ot_addr, to_sock_addr, Bytes, OpenThread, OtContext, OtError};
 
 /// An OpenThread native UDP socket
 pub struct UdpSocket<'a> {
@@ -36,7 +34,7 @@ impl<'a> UdpSocket<'a> {
             unsafe {
                 otUdpBind(
                     state.ot.instance,
-                    &mut state.udp.as_mut().unwrap().sockets[this.slot].ot_socket,
+                    &mut unwrap!(state.udp.as_mut()).sockets[this.slot].ot_socket,
                     &to_ot_addr(local),
                     otNetifIdentifier_OT_NETIF_THREAD,
                 );
@@ -214,7 +212,7 @@ impl<'a> UdpSocket<'a> {
                 trace!("UDP message dropped");
             }
 
-            debug!("Transmitted UDP packet: {:02x?}", data);
+            debug!("Transmitted UDP packet: {}", Bytes(data));
 
             Ok(())
         } else {
@@ -272,9 +270,11 @@ impl Drop for UdpSocket<'_> {
     fn drop(&mut self) {
         let mut ot = self.ot.activate();
         let instance = ot.state().ot.instance;
-        let udp = ot.state().udp().unwrap();
+        let udp = unwrap!(ot.state().udp());
 
-        ot!(unsafe { otUdpClose(instance, &mut udp.sockets[self.slot].ot_socket) }).unwrap();
+        unwrap!(ot!(unsafe {
+            otUdpClose(instance, &mut udp.sockets[self.slot].ot_socket)
+        }));
 
         udp.sockets[self.slot].taken = false;
     }

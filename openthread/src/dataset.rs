@@ -12,6 +12,7 @@ use crate::{ot, OpenThread, OtActiveState, OtError};
 
 /// Active or Pending Operational Dataset
 #[derive(Debug, Clone, Default, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct OperationalDataset<'a> {
     /// Active Timestamp
     pub active_timestamp: Option<ThreadTimestamp>,
@@ -214,6 +215,7 @@ impl OperationalDataset<'_> {
 
 /// Security Policy
 #[derive(Debug, Clone, Default, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct SecurityPolicy {
     /// The value for thrKeyRotation in units of hours.
     pub rotation_time: u16,
@@ -242,6 +244,7 @@ pub struct SecurityPolicy {
 /// Thread Dataset timestamp
 // TODO: Do we need both "seconds" and "ticks"? Revisit this later.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ThreadTimestamp {
     pub seconds: u64,
     pub ticks: u16,

@@ -8,3 +8,6 @@ target = "thumbv7em-none-eabi"
 [unstable]
 build-std = ["core", "alloc", "panic_abort"]
 #build-std-features = ["panic_immediate_abort"]
+
+[env]
+DEFMT_LOG="info"

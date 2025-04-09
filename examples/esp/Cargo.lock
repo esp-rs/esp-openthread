@@ -273,6 +273,7 @@ dependencies = [
  "critical-section",
  "document-features",
  "embassy-executor-macros",
+ "log",
 ]
 
 [[package]]
@@ -306,6 +307,7 @@ dependencies = [
  "embedded-io-async",
  "embedded-nal-async",
  "heapless",
+ "log",
  "managed",
  "smoltcp",
 ]
