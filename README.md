@@ -62,8 +62,7 @@ Examples of GCC toolchains that are known to work fine:
 
 ## Status
 
-The examples (native OpenThread UDP sockets; `embassy-net` integration; SRP) build and run on Espressif MCUs, with testing for NRF pending.
-The SRP code is not completely tested yet though.
+The examples (native OpenThread UDP sockets; `embassy-net` integration; SRP) build and run on Espressif MCUs, and on the NRF52840.
 
 ## Testing
 
