@@ -1,10 +1,12 @@
 fn main() {
-    linker_be_nice();
-    println!("cargo:rustc-link-arg=-Tdefmt.x");
+    // Uncomment the two lines below to enable defmt support
+    //linker_be_nice();
+    //println!("cargo:rustc-link-arg=-Tdefmt.x");
     // make sure linkall.x is the last linker script (otherwise might cause problems with flip-link)
     println!("cargo:rustc-link-arg=-Tlinkall.x");
 }
 
+#[allow(unused)]
 fn linker_be_nice() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() > 1 {

@@ -31,24 +31,24 @@ esp32c6 = [ "esp-hal-embassy/esp32c6", "esp-ieee802154/esp32c6", "esp-backtrace/
 esp32h2 = [ "esp-hal-embassy/esp32h2", "esp-ieee802154/esp32h2", "esp-backtrace/esp32h2", "esp-println/esp32h2"]
 
 [dependencies]
-embassy-executor = { version = "0.7", features = ["task-arena-size-32768", "defmt"] }
+embassy-executor = { version = "0.7", features = ["task-arena-size-32768", "log"] }
 embassy-sync = "0.6"
 embassy-futures = "0.1"
 embassy-time = "0.4"
-embassy-net = { version = "0.6", features = ["proto-ipv6", "medium-ip", "udp", "defmt"] }
-esp-hal = { version = "0.23.1", features = ["defmt"] }
+embassy-net = { version = "0.6", features = ["proto-ipv6", "medium-ip", "udp", "log"] }
+esp-hal = { version = "0.23.1", features = ["log"] }
 esp-hal-embassy = "0.6"
 esp-alloc = { version = "0.6", optional = true }
-esp-backtrace = { version = "0.15", features = ["panic-handler", "exception-handler", "defmt"] }
-esp-println = { version = "0.13", features = ["defmt-espflash"] }
-esp-ieee802154 = "0.5"
-defmt = "0.3"
+esp-backtrace = { version = "0.15", features = ["panic-handler", "exception-handler", "println"] }
+esp-println = { version = "0.13", features = ["log"] }
+esp-ieee802154 = { version= "0.5", features = ["log"] }
+log = "0.4"
 heapless = "0.8"
 critical-section = "1.2"
 rand_core = "0.6"
 static_cell = "2.1"
 
-openthread = { path = "../../openthread", features = ["udp", "srp", "embassy-net-driver-channel", "esp-ieee802154", "isupper", "defmt"] }
+openthread = { path = "../../openthread", features = ["udp", "srp", "embassy-net-driver-channel", "esp-ieee802154", "isupper", "log"] }
 tinyrlibc = { version = "0.5", default-features = false, features = ["utoa", "strtoul"] }
 
 [[bin]]

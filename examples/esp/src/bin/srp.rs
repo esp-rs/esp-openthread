@@ -14,7 +14,7 @@
 use core::fmt::Write;
 use core::net::{Ipv6Addr, SocketAddrV6};
 
-use defmt::info;
+use log::info;
 
 use embassy_executor::Spawner;
 
@@ -30,8 +30,6 @@ use openthread::{
 };
 
 use tinyrlibc as _;
-
-use defmt as _;
 
 macro_rules! mk_static {
     ($t:ty) => {{
@@ -64,7 +62,7 @@ const THREAD_DATASET: &str = if let Some(dataset) = option_env!("THREAD_DATASET"
 
 #[esp_hal_embassy::main]
 async fn main(spawner: Spawner) {
-    //esp_println::logger::init_logger(log::LevelFilter::Info);
+    esp_println::logger::init_logger_from_env();
 
     info!("Starting...");
 
