@@ -1,7 +1,5 @@
 use core::net::{Ipv4Addr, SocketAddr, SocketAddrV6};
 
-use log::warn;
-
 use crate::sys::otError_OT_ERROR_FAILED;
 use crate::{OpenThread, OtError, UdpSocket};
 

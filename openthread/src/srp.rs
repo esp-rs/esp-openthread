@@ -6,8 +6,6 @@ use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 use core::net::{Ipv6Addr, SocketAddrV6};
 
-use log::{debug, info, trace};
-
 use crate::signal::Signal;
 use crate::sys::{
     otDnsTxtEntry, otError_OT_ERROR_INVALID_ARGS, otError_OT_ERROR_INVALID_STATE,
@@ -200,6 +198,23 @@ impl Display for SrpState {
     }
 }
 
+#[cfg(feature = "defmt")]
+impl defmt::Format for SrpState {
+    fn format(&self, f: defmt::Formatter<'_>) {
+        match self {
+            Self::ToAdd => defmt::write!(f, "To add"),
+            Self::Adding => defmt::write!(f, "Adding"),
+            Self::ToRefresh => defmt::write!(f, "To refresh"),
+            Self::Refreshing => defmt::write!(f, "Refreshing"),
+            Self::ToRemove => defmt::write!(f, "To remove"),
+            Self::Removing => defmt::write!(f, "Removing"),
+            Self::Removed => defmt::write!(f, "Removed"),
+            Self::Registered => defmt::write!(f, "Registered"),
+            Self::Other(state) => defmt::write!(f, "Other ({})", state),
+        }
+    }
+}
+
 #[allow(non_upper_case_globals)]
 #[allow(non_snake_case)]
 impl From<otSrpClientItemState> for SrpState {
@@ -220,6 +235,7 @@ impl From<otSrpClientItemState> for SrpState {
 
 /// The SRP configuration of the OpenThread stack.
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct SrpConf<'a> {
     /// SRP hostname
     pub host_name: &'a str,
@@ -406,6 +422,47 @@ where
     }
 }
 
+#[cfg(feature = "defmt")]
+impl<'a, SI, TI> defmt::Format for SrpService<'a, SI, TI>
+where
+    SI: Iterator<Item = &'a str> + Clone,
+    TI: Iterator<Item = (&'a str, &'a [u8])> + Clone,
+{
+    fn format(&self, f: defmt::Formatter<'_>) {
+        defmt::write!(
+            f,
+            "SRP Service {{name: {}, instance: {}, port: {}, priority: {}, weight: {}, lease: {}, keylease: {}, labels: [",
+            self.name,
+            self.instance_name,
+            self.port,
+            self.priority,
+            self.weight,
+            self.lease_secs,
+            self.key_lease_secs
+        );
+
+        for (index, label) in self.subtype_labels.clone().enumerate() {
+            if index > 0 {
+                defmt::write!(f, ", ");
+            }
+
+            defmt::write!(f, "{}", label);
+        }
+
+        defmt::write!(f, "], txt: [");
+
+        for (index, value) in self.txt_entries.clone().enumerate() {
+            if index > 0 {
+                defmt::write!(f, ", ");
+            }
+
+            defmt::write!(f, "{}: {:?}", value.0, value.1);
+        }
+
+        defmt::write!(f, "]}}")
+    }
+}
+
 /// Type alias for an SRP service as returned by
 /// `OpenThread::srp_services`.
 pub type OutSrpService<'a> = SrpService<'a, OutSrpSubtypeLabelsIter<'a>, OutSrpTxtEntriesIter<'a>>;
@@ -433,7 +490,10 @@ impl<'a> Iterator for OutSrpSubtypeLabelsIter<'a> {
             None
         } else {
             self.index += 1;
-            Some(unsafe { CStr::from_ptr(label as _).to_str().unwrap() })
+            Some(unwrap!(
+                unsafe { CStr::from_ptr(label as _) }.to_str(),
+                "Invalid UTF-8 in SRP subtype label"
+            ))
         }
     }
 }
@@ -463,7 +523,10 @@ impl<'a> Iterator for OutSrpTxtEntriesIter<'a> {
         let entry = unsafe { &*entry };
 
         Some((
-            unsafe { CStr::from_ptr(entry.mKey).to_str().unwrap() },
+            unwrap!(
+                unsafe { CStr::from_ptr(entry.mKey) }.to_str(),
+                "Invalid UTF-8 in SRP TXT entry key"
+            ),
             unsafe { core::slice::from_raw_parts(entry.mValue, entry.mValueLength as _) },
         ))
     }
@@ -473,12 +536,18 @@ impl<'a> From<&'a otSrpClientService> for OutSrpService<'a> {
     fn from(ot_srp: &'a otSrpClientService) -> Self {
         Self {
             name: if !ot_srp.mName.is_null() {
-                unsafe { CStr::from_ptr(ot_srp.mName).to_str().unwrap() }
+                unwrap!(
+                    unsafe { CStr::from_ptr(ot_srp.mName) }.to_str(),
+                    "Invalid UTF-8 in SRP service name"
+                )
             } else {
                 ""
             },
             instance_name: if !ot_srp.mInstanceName.is_null() {
-                unsafe { CStr::from_ptr(ot_srp.mInstanceName).to_str().unwrap() }
+                unwrap!(
+                    unsafe { CStr::from_ptr(ot_srp.mInstanceName) }.to_str(),
+                    "Invalid UTF-8 in SRP instance name"
+                )
             } else {
                 ""
             },
@@ -515,11 +584,14 @@ impl OpenThread<'_> {
         let instance = ot.state().ot.instance;
         let srp = ot.state().srp()?;
 
-        let info = unsafe { otSrpClientGetHostInfo(instance).as_ref().unwrap() };
+        let info = unwrap!(unsafe { otSrpClientGetHostInfo(instance).as_ref() });
 
         let conf = SrpConf {
             host_name: if !info.mName.is_null() {
-                unsafe { CStr::from_ptr(info.mName).to_str().unwrap() }
+                unwrap!(
+                    unsafe { CStr::from_ptr(info.mName) }.to_str(),
+                    "Invalid UTF-8 in SRP host name"
+                )
             } else {
                 ""
             },
@@ -669,7 +741,7 @@ impl OpenThread<'_> {
         let instance = ot.state().ot.instance;
         let _ = ot.state().srp()?;
 
-        let addr = unsafe { otSrpClientGetServerAddress(instance).as_ref().unwrap() };
+        let addr = unwrap!(unsafe { otSrpClientGetServerAddress(instance).as_ref() });
         let addr = to_sock_addr(&addr.mAddress, addr.mPort, 0);
 
         // OT documentation notes that if the SRP client is not running
@@ -696,11 +768,7 @@ impl OpenThread<'_> {
         while !service_ptr.is_null() {
             let service = unsafe { &*service_ptr };
 
-            let slot = srp
-                .services
-                .iter()
-                .position(|s| core::ptr::eq(s, service))
-                .unwrap();
+            let slot = unwrap!(srp.services.iter().position(|s| core::ptr::eq(s, service)));
 
             f(Some((&service.into(), service.mState.into(), slot)));
 
@@ -772,10 +840,10 @@ impl OpenThread<'_> {
         if immediate {
             ot!(unsafe { otSrpClientClearService(instance, &mut srp.services[slot]) })?;
             srp.taken[slot] = false;
-            debug!("Service {slot} cleared immeidately");
+            debug!("Service {} cleared immeidately", slot);
         } else {
             ot!(unsafe { otSrpClientRemoveService(instance, &mut srp.services[slot]) })?;
-            debug!("Service {slot} scheduled for removal");
+            debug!("Service {} scheduled for removal", slot);
         }
 
         Ok(())
@@ -819,11 +887,7 @@ impl OpenThread<'_> {
     pub async fn srp_wait_changed(&self) {
         if self.activate().state().srp().is_ok() {
             poll_fn(move |cx| {
-                self.activate()
-                    .state()
-                    .srp
-                    .as_mut()
-                    .unwrap()
+                unwrap!(self.activate().state().srp.as_mut())
                     .changes
                     .poll_wait(cx)
             })
@@ -850,16 +914,12 @@ impl OtContext<'_> {
             }
 
             while let Some(service) = removed_services {
-                let slot = srp
-                    .services
-                    .iter()
-                    .position(|s| core::ptr::eq(s, service))
-                    .unwrap();
+                let slot = unwrap!(srp.services.iter().position(|s| core::ptr::eq(s, service)));
 
                 removed_services = unsafe { service.mNext.as_ref() };
 
                 srp.taken[slot] = false;
-                info!("SRP service at slot {slot} removed");
+                info!("SRP service at slot {} removed", slot);
             }
         }
     }
@@ -928,7 +988,10 @@ fn store_str<'t>(str: &str, buf: &'t mut [u8]) -> Result<(&'t CStr, &'t mut [u8]
     str_buf[str.len()] = 0;
 
     Ok((
-        CStr::from_bytes_with_nul(&str_buf[..data_len]).unwrap(),
+        unwrap!(
+            CStr::from_bytes_with_nul(&str_buf[..data_len]),
+            "Invalid Cstr"
+        ),
         rem_buf,
     ))
 }

@@ -14,22 +14,24 @@
 use core::fmt::Write;
 use core::net::{Ipv6Addr, SocketAddrV6};
 
+use defmt::info;
+
 use embassy_executor::Spawner;
 
-use esp_backtrace as _;
 use esp_hal::rng::Rng;
 use esp_hal::timer::systimer::SystemTimer;
 use esp_ieee802154::Ieee802154;
-
-use log::info;
+use {esp_backtrace as _, esp_println as _};
 
 use openthread::esp::EspRadio;
 use openthread::{
-    OpenThread, OtResources, OtRngCore, OtSrpResources, OtUdpResources, SimpleRamSettings, SrpConf,
-    UdpSocket,
+    BytesFmt, OpenThread, OtResources, OtRngCore, OtSrpResources, OtUdpResources,
+    SimpleRamSettings, SrpConf, UdpSocket,
 };
 
 use tinyrlibc as _;
+
+use defmt as _;
 
 macro_rules! mk_static {
     ($t:ty) => {{
@@ -62,7 +64,7 @@ const THREAD_DATASET: &str = if let Some(dataset) = option_env!("THREAD_DATASET"
 
 #[esp_hal_embassy::main]
 async fn main(spawner: Spawner) {
-    esp_println::logger::init_logger(log::LevelFilter::Info);
+    //esp_println::logger::init_logger(log::LevelFilter::Info);
 
     info!("Starting...");
 
@@ -108,7 +110,7 @@ async fn main(spawner: Spawner) {
 
     spawner.spawn(run_ot_info(ot.clone())).unwrap();
 
-    info!("Dataset: {THREAD_DATASET}");
+    info!("Dataset: {}", THREAD_DATASET);
 
     ot.srp_autostart().unwrap();
 
@@ -155,14 +157,17 @@ async fn main(spawner: Spawner) {
     )
     .unwrap();
 
-    info!("Opened socket on port {BOUND_PORT} and waiting for packets...");
+    info!(
+        "Opened socket on port {} and waiting for packets...",
+        BOUND_PORT
+    );
 
     let buf: &mut [u8] = unsafe { mk_static!([u8; UDP_SOCKETS_BUF]).assume_init_mut() };
 
     loop {
         let (len, local, remote) = socket.recv(buf).await.unwrap();
 
-        info!("Got {:02x?} from {remote} on {local}", &buf[..len]);
+        info!("Got {} from {} on {}", BytesFmt(&buf[..len]), remote, local);
 
         socket.send(b"Hello", Some(&local), &remote).await.unwrap();
         info!("Sent `b\"Hello\"`");
@@ -202,14 +207,14 @@ async fn run_ot_info(ot: OpenThread<'static>) -> ! {
         .unwrap();
 
         if cur_addrs != addrs || cur_state != state || cur_server_addr != server_addr {
-            info!("Got new IPv6 address(es) and/or SRP state from OpenThread:\nIP addrs: {addrs:?}\nSRP state: {state:?}\nSRP server addr: {server_addr:?}");
+            info!("Got new IPv6 address(es) and/or SRP state from OpenThread:\nIP addrs: {:?}\nSRP state: {:?}\nSRP server addr: {:?}", addrs, state, server_addr);
 
             cur_addrs = addrs;
             cur_state = state;
             cur_server_addr = server_addr;
 
             ot.srp_conf(|conf, state, empty| {
-                info!("SRP conf: {conf:?}, state: {state}, empty: {empty}");
+                info!("SRP conf: {:?}, state: {}, empty: {}", conf, state, empty);
 
                 Ok(())
             })
@@ -217,7 +222,7 @@ async fn run_ot_info(ot: OpenThread<'static>) -> ! {
 
             ot.srp_services(|service| {
                 if let Some((service, state, slot)) = service {
-                    info!("SRP service: {service}, state: {state}, slot: {slot}");
+                    info!("SRP service: {}, state: {}, slot: {}", service, state, slot);
                 }
             })
             .unwrap();

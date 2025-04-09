@@ -16,8 +16,7 @@ use embassy_futures::select::{Either, Either3};
 
 use embassy_time::Instant;
 
-use log::{debug, info, trace, warn};
-
+use fmt::Bytes;
 use portable_atomic::Ordering;
 
 use platform::{OT_ACTIVE_STATE, OT_REFCNT};
@@ -27,6 +26,7 @@ use signal::Signal;
 pub use rand_core::{Error as OtRngCoreError, RngCore as OtRngCore};
 
 pub use dataset::*;
+pub use fmt::Bytes as BytesFmt;
 pub use openthread_sys as sys;
 pub use radio::*;
 pub use scan::*;
@@ -35,6 +35,9 @@ pub use settings::*;
 pub use srp::*;
 #[cfg(feature = "udp")]
 pub use udp::*;
+
+// This mod MUST go first, so that the others see its macros.
+pub(crate) mod fmt;
 
 mod dataset;
 #[cfg(all(feature = "edge-nal", feature = "udp"))]
@@ -77,6 +80,7 @@ use sys::{
 ///
 /// Brings extra ergonomics to the error handling, by providing a more Rust-like API.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct OtError(otError);
 
 impl OtError {
@@ -431,7 +435,7 @@ impl<'a> OpenThread<'a> {
         let mut addrs_ptr = unsafe { otIp6GetUnicastAddresses(state.ot.instance) };
 
         while !addrs_ptr.is_null() {
-            let addrs = unsafe { addrs_ptr.as_ref() }.unwrap();
+            let addrs = unwrap!(unsafe { addrs_ptr.as_ref() });
 
             f(Some((
                 unsafe { addrs.mAddress.mFields.m8 }.into(),
@@ -528,7 +532,7 @@ impl<'a> OpenThread<'a> {
             otMessageFree(msg);
         }
 
-        debug!("Received IPv6 packet: {:02x?}", &buf[..len]);
+        debug!("Received IPv6 packet: {}", Bytes(&buf[..len]));
 
         Ok(len)
     }
@@ -558,7 +562,7 @@ impl<'a> OpenThread<'a> {
             // Initialize the OpenThread instance
             state.ot.instance = unsafe { otInstanceInitSingle() };
 
-            info!("OpenThread instance initialized at {:p}", state.ot.instance);
+            info!("OpenThread instance initialized");
 
             ot!(unsafe {
                 otSetStateChangedCallback(
@@ -601,7 +605,10 @@ impl<'a> OpenThread<'a> {
                 continue;
             };
 
-            trace!("Got trigger alarm request: {when}, waiting for it to trigger");
+            trace!(
+                "Got trigger alarm request: {}, waiting for it to trigger",
+                when
+            );
 
             loop {
                 let result =
@@ -610,7 +617,7 @@ impl<'a> OpenThread<'a> {
                 match result {
                     Either::First(new_when) => {
                         if let Some(new_when) = new_when {
-                            trace!("Alarm interrupted by a new alarm: {new_when}");
+                            trace!("Alarm interrupted by a new alarm: {}", new_when);
                             when = new_when;
                         } else {
                             debug!("Alarm cancelled");
@@ -689,14 +696,14 @@ impl<'a> OpenThread<'a> {
             trace!("Waiting for radio command");
 
             let mut cmd = radio_cmd().await;
-            debug!("Got radio command: {cmd:?}");
+            debug!("Got radio command: {:?}", cmd);
 
             // TODO: Borrow it from the resources
             let mut psdu_buf = [0_u8; OT_RADIO_FRAME_MAX_SIZE as usize];
             let mut ack_psdu_buf = [0_u8; OT_RADIO_FRAME_MAX_SIZE as usize];
 
             loop {
-                radio.set_config(cmd.conf()).await.unwrap();
+                unwrap!(radio.set_config(cmd.conf()).await);
 
                 match cmd {
                     RadioCommand::Tx(_) => {
@@ -718,7 +725,10 @@ impl<'a> OpenThread<'a> {
                             psdu_len
                         };
 
-                        trace!("About to Tx 802.15.4 frame {:02x?}", &psdu_buf[..psdu_len]);
+                        trace!(
+                            "About to Tx 802.15.4 frame {}",
+                            Bytes(&psdu_buf[..psdu_len])
+                        );
 
                         let result = {
                             let mut new_cmd = pin!(radio_cmd());
@@ -745,7 +755,7 @@ impl<'a> OpenThread<'a> {
                                     );
                                 }
 
-                                debug!("Tx interrupted by new command: {new_cmd:?}");
+                                debug!("Tx interrupted by new command: {:?}", new_cmd);
 
                                 cmd = new_cmd;
                             }
@@ -756,7 +766,7 @@ impl<'a> OpenThread<'a> {
 
                                 match result {
                                     Ok(maybe_ack_psdu_meta) => {
-                                        debug!("Tx done, ack frame: {maybe_ack_psdu_meta:?}");
+                                        debug!("Tx done, ack frame: {:?}", maybe_ack_psdu_meta);
 
                                         let ack_frame_ptr =
                                             if let Some(ack_psdu_meta) = maybe_ack_psdu_meta {
@@ -784,7 +794,7 @@ impl<'a> OpenThread<'a> {
                                         }
                                     }
                                     Err(err) => {
-                                        debug!("Tx failed: {err:?}");
+                                        debug!("Tx failed: {:?}", err);
 
                                         unsafe {
                                             otPlatRadioTxDone(
@@ -813,7 +823,7 @@ impl<'a> OpenThread<'a> {
 
                         match result {
                             Either::First(new_cmd) => {
-                                debug!("Rx interrupted by new command: {new_cmd:?}");
+                                debug!("Rx interrupted by new command: {:?}", new_cmd);
 
                                 cmd = new_cmd;
                             }
@@ -825,7 +835,11 @@ impl<'a> OpenThread<'a> {
                                     Ok(rcv_psdu_meta) => {
                                         let rcv_psdu = &psdu_buf[..rcv_psdu_meta.len];
 
-                                        debug!("Rx done, got frame: {rcv_psdu_meta:?}, {rcv_psdu:02x?}");
+                                        debug!(
+                                            "Rx done, got frame: {:?}, {}",
+                                            rcv_psdu_meta,
+                                            Bytes(rcv_psdu)
+                                        );
 
                                         let instance = state.ot.instance;
                                         let radio_resources = &mut state.ot.radio_resources;
@@ -846,7 +860,7 @@ impl<'a> OpenThread<'a> {
                                         }
                                     }
                                     Err(err) => {
-                                        debug!("Rx failed: {err:?}");
+                                        debug!("Rx failed: {:?}", err);
 
                                         // Reporting receive failure because we got a driver error
                                         unsafe {
@@ -1033,6 +1047,7 @@ impl Default for OtResources {
 
 /// Thread network status.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct NetStatus {
     /// The device role in the OpenThread network.
     pub role: DeviceRole,
@@ -1044,6 +1059,7 @@ pub struct NetStatus {
 
 /// The device role in the OpenThread network.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum DeviceRole {
     /// The device is disabled.
     Disabled,
@@ -1165,9 +1181,7 @@ impl<'a> OtContext<'a> {
     /// The above ^^^ will not lead to a memory corruption, but the code will panic due to an attempt
     /// to mutably borrow the `OtState` `RefCell`d data twice.
     fn activate_for(ot: &OpenThread<'a>) -> Self {
-        assert!(unsafe { OT_ACTIVE_STATE.0.get().as_mut() }
-            .unwrap()
-            .is_none());
+        assert!(unwrap!(unsafe { OT_ACTIVE_STATE.0.get().as_mut() }).is_none());
 
         let active = OtActiveState {
             ot: ot.state.borrow_mut(),
@@ -1179,7 +1193,7 @@ impl<'a> OtContext<'a> {
 
         // Needed so that we convert from the fake `'static` lifetime in `OT_ACTIVE_STATE` to the actual `'a` lifetime of `ot`
         {
-            *unsafe { OT_ACTIVE_STATE.0.get().as_mut() }.unwrap() = Some(unsafe {
+            *unwrap!(unsafe { OT_ACTIVE_STATE.0.get().as_mut() }) = Some(unsafe {
                 core::mem::transmute::<OtActiveState<'_>, OtActiveState<'static>>(active)
             });
         }
@@ -1195,9 +1209,7 @@ impl<'a> OtContext<'a> {
     ///
     /// This method is called when the OpenThread C library calls us back.
     fn callback(_instance: *const otInstance) -> Self {
-        assert!(unsafe { OT_ACTIVE_STATE.0.get().as_mut() }
-            .unwrap()
-            .is_some());
+        assert!(unwrap!(unsafe { OT_ACTIVE_STATE.0.get().as_mut() }).is_some());
 
         Self {
             callback: true,
@@ -1209,7 +1221,7 @@ impl<'a> OtContext<'a> {
     fn state(&mut self) -> &mut OtActiveState<'a> {
         unsafe {
             core::mem::transmute::<&'static mut OtActiveState<'static>, &mut OtActiveState<'a>>(
-                OT_ACTIVE_STATE.0.get().as_mut().unwrap().as_mut().unwrap(),
+                unwrap!(unwrap!(OT_ACTIVE_STATE.0.get().as_mut()).as_mut()),
             )
         }
     }
@@ -1235,7 +1247,7 @@ impl<'a> OtContext<'a> {
             if res != otError_OT_ERROR_DROP {
                 ot!(res)?;
 
-                debug!("Transmitted IPv6 packet: {:02x?}", packet);
+                debug!("Transmitted IPv6 packet: {}", Bytes(packet));
             } else {
                 // OpenThread will intentionally drop some multicast and ICMPv6 packets
                 // which are not required for the Thread network.
@@ -1350,7 +1362,7 @@ impl<'a> OtContext<'a> {
     }
 
     fn plat_alarm_set(&mut self, at0_ms: u32, adt_ms: u32) -> Result<(), OtError> {
-        trace!("Plat alarm set callback: {at0_ms}, {adt_ms}");
+        trace!("Plat alarm set callback: {}, {}", at0_ms, adt_ms);
 
         let instant = embassy_time::Instant::from_millis(at0_ms as _)
             + embassy_time::Duration::from_millis(adt_ms as _);
@@ -1368,27 +1380,27 @@ impl<'a> OtContext<'a> {
     }
 
     fn plat_radio_ieee_eui64(&mut self, mac: &mut [u8; 8]) {
-        trace!("Plat radio IEEE EUI64 callback, MAC: {:02x?}", mac);
+        trace!("Plat radio IEEE EUI64 callback, MAC: {}", Bytes(mac));
         mac.copy_from_slice(self.state().ot.ieee_eui64.as_ref());
     }
 
     fn plat_radio_caps(&mut self) -> otRadioCaps {
         let caps = OT_RADIO_CAPS_ACK_TIMEOUT as _;
-        trace!("Plat radio caps callback, caps: {caps}");
+        trace!("Plat radio caps callback, caps: {}", caps);
 
         caps
     }
 
     fn plat_radio_is_enabled(&mut self) -> bool {
         let enabled = true; // TODO
-        trace!("Plat radio is enabled callback, enabled: {enabled}");
+        trace!("Plat radio is enabled callback, enabled: {}", enabled);
 
         enabled
     }
 
     fn plat_radio_get_rssi(&mut self) -> i8 {
         let rssi = -128; // TODO
-        trace!("Plat radio get RSSI callback, RSSI: {rssi}");
+        trace!("Plat radio get RSSI callback, RSSI: {}", rssi);
 
         rssi
     }
@@ -1396,14 +1408,20 @@ impl<'a> OtContext<'a> {
     // from https://github.com/espressif/esp-idf/blob/release/v5.3/components/openthread/src/port/esp_openthread_radio.c#L35
     fn plat_radio_receive_sensititivy(&mut self) -> i8 {
         let sens = 0; // TODO
-        trace!("Plat radio receive sensitivity callback, sensitivity: {sens}");
+        trace!(
+            "Plat radio receive sensitivity callback, sensitivity: {}",
+            sens
+        );
 
         sens
     }
 
     fn plat_radio_get_promiscuous(&mut self) -> bool {
         let promiscuous = false; // TODO
-        trace!("Plat radio get promiscuous callback, promiscuous: {promiscuous}");
+        trace!(
+            "Plat radio get promiscuous callback, promiscuous: {}",
+            promiscuous
+        );
 
         promiscuous
     }
@@ -1419,7 +1437,10 @@ impl<'a> OtContext<'a> {
     }
 
     fn plat_radio_set_promiscuous(&mut self, promiscuous: bool) {
-        info!("Plat radio set promiscuous callback, promiscuous: {promiscuous}");
+        info!(
+            "Plat radio set promiscuous callback, promiscuous: {}",
+            promiscuous
+        );
 
         let state = self.state();
 
@@ -1429,7 +1450,10 @@ impl<'a> OtContext<'a> {
     }
 
     fn plat_radio_set_extended_address(&mut self, address: u64) {
-        info!("Plat radio set extended address callback, addr: 0x{address:08x}");
+        info!(
+            "Plat radio set extended address callback, addr: 0x{:08x}",
+            address
+        );
 
         let state = self.state();
 
@@ -1439,7 +1463,10 @@ impl<'a> OtContext<'a> {
     }
 
     fn plat_radio_set_short_address(&mut self, address: u16) {
-        info!("Plat radio set short address callback, addr: 0x{address:02x}");
+        info!(
+            "Plat radio set short address callback, addr: 0x{:02x}",
+            address
+        );
 
         let state = self.state();
 
@@ -1449,7 +1476,7 @@ impl<'a> OtContext<'a> {
     }
 
     fn plat_radio_set_pan_id(&mut self, pan_id: u16) {
-        info!("Plat radio set PAN ID callback, PAN ID: 0x{pan_id:02x}");
+        info!("Plat radio set PAN ID callback, PAN ID: 0x{:02x}", pan_id);
 
         let state = self.state();
 
@@ -1459,7 +1486,10 @@ impl<'a> OtContext<'a> {
     }
 
     fn plat_radio_energy_scan(&mut self, channel: u8, duration: u16) -> Result<(), OtError> {
-        info!("Plat radio energy scan callback, channel {channel}, duration {duration}");
+        info!(
+            "Plat radio energy scan callback, channel {}, duration {}",
+            channel, duration
+        );
         unreachable!()
     }
 
@@ -1477,7 +1507,7 @@ impl<'a> OtContext<'a> {
 
     fn plat_radio_transmit(&mut self, frame: &otRadioFrame) -> Result<(), OtError> {
         trace!(
-            "Plat radio transmit callback: {}, {:02x?}",
+            "Plat radio transmit callback: {}, {:?}",
             frame.mLength,
             frame.mPsdu
         );
@@ -1499,7 +1529,7 @@ impl<'a> OtContext<'a> {
     }
 
     fn plat_radio_receive(&mut self, channel: u8) -> Result<(), OtError> {
-        trace!("Plat radio receive callback, channel: {channel}");
+        trace!("Plat radio receive callback, channel: {}", channel);
 
         let state = self.state();
 
@@ -1511,7 +1541,10 @@ impl<'a> OtContext<'a> {
     }
 
     fn plat_settings_init(&mut self, sensitive_keys: &[u16]) {
-        info!("Plat settings init callback, sensitive keys: {sensitive_keys:?}");
+        info!(
+            "Plat settings init callback, sensitive keys: {:?}",
+            sensitive_keys
+        );
         let state = self.state();
         state.ot.settings.init(sensitive_keys);
     }
@@ -1529,8 +1562,10 @@ impl<'a> OtContext<'a> {
         buf: &mut [u8],
     ) -> Result<usize, OtError> {
         trace!(
-            "Plat settings get callback, key: {key}, index: {index}, buf: {:02x?}",
-            buf
+            "Plat settings get callback, key: {}, index: {}, buf len: {}",
+            key,
+            index,
+            buf.len()
         );
 
         if index < 0 {
@@ -1550,8 +1585,9 @@ impl<'a> OtContext<'a> {
 
     fn plat_settings_set(&mut self, key: u16, value: &[u8]) -> Result<(), OtError> {
         trace!(
-            "Plat settings set callback, key: {key}, value: {:02x?}",
-            value
+            "Plat settings set callback, key: {}, value: {}",
+            key,
+            Bytes(value)
         );
 
         let state = self.state();
@@ -1565,8 +1601,9 @@ impl<'a> OtContext<'a> {
 
     fn plat_settings_add(&mut self, key: u16, value: &[u8]) -> Result<(), OtError> {
         trace!(
-            "Plat settings add callback, key: {key}, value: {:02x?}",
-            value
+            "Plat settings add callback, key: {}, value: {}",
+            key,
+            Bytes(value)
         );
 
         let state = self.state();
@@ -1579,7 +1616,11 @@ impl<'a> OtContext<'a> {
     }
 
     fn plat_settings_delete(&mut self, key: u16, index: core::ffi::c_int) -> Result<(), OtError> {
-        trace!("Plat settings delete callback, key: {key}, index: {index}");
+        trace!(
+            "Plat settings delete callback, key: {}, index: {}",
+            key,
+            index
+        );
 
         if index < 0 {
             Err(OtError::new(otError_OT_ERROR_NOT_FOUND))?;
@@ -1599,18 +1640,16 @@ impl<'a> OtContext<'a> {
     fn plat_settings_wipe(&mut self) {
         info!("Plat settings wipe callback");
 
-        self.state().ot.settings.clear().unwrap();
+        unwrap!(self.state().ot.settings.clear());
     }
 }
 
 impl Drop for OtContext<'_> {
     fn drop(&mut self) {
-        assert!(unsafe { OT_ACTIVE_STATE.0.get().as_mut() }
-            .unwrap()
-            .is_some());
+        assert!(unwrap!(unsafe { OT_ACTIVE_STATE.0.get().as_mut() }).is_some());
 
         if !self.callback {
-            unsafe { OT_ACTIVE_STATE.0.get().as_mut() }.unwrap().take();
+            unwrap!(unsafe { OT_ACTIVE_STATE.0.get().as_mut() }).take();
         }
     }
 }
@@ -1659,6 +1698,7 @@ struct OtState<'a> {
 
 /// A command for the radio runner to process.
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum RadioCommand {
     /// Transmit a frame with the provided configuration
     /// The data of the frame is in `OtData::radio_resources.snd_frame` and `OtData::radio_resources.snd_psdu`

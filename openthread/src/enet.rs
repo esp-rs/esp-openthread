@@ -83,11 +83,11 @@ impl<const MTU: usize> EnetRunner<'_, MTU> {
 
     async fn run_rx(rx: &OpenThread<'_>, rx_runner: &mut RxRunner<'_, MTU>) -> ! {
         loop {
-            rx.wait_rx_available().await.unwrap();
+            unwrap!(rx.wait_rx_available().await);
 
             let buf = rx_runner.rx_buf().await;
 
-            let len = rx.rx(buf).await.unwrap();
+            let len = unwrap!(rx.rx(buf).await);
 
             rx_runner.rx_done(len);
         }
@@ -97,7 +97,7 @@ impl<const MTU: usize> EnetRunner<'_, MTU> {
         loop {
             let buf = tx_runner.tx_buf().await;
 
-            tx.tx(buf).unwrap();
+            unwrap!(tx.tx(buf));
 
             tx_runner.tx_done();
         }

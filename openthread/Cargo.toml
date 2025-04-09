@@ -19,13 +19,15 @@ default = []
 edge-nal = ["udp", "dep:edge-nal"]
 udp = []
 srp = ["udp"]
+defmt = ["dep:defmt", "heapless/defmt-03"]
 force-generate-bindings = ["openthread-sys/force-generate-bindings"]
 force-esp-riscv-toolchain = ["openthread-sys/force-esp-riscv-toolchain"]
 isupper = [] # Provide internal implementation of the `isupper` C fn
 
 [dependencies]
 openthread-sys = { path = "../openthread-sys" }
-log = { version = "0.4", default-features = false }
+log = { version = "0.4", default-features = false, optional = true }
+defmt = { version = "0.3", default-features = false, optional = true }
 scopeguard = { version = "1", default-features = false }
 rand_core = "0.6"
 embassy-sync = "0.6"

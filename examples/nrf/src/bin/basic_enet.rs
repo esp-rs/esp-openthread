@@ -10,6 +10,8 @@
 
 use core::net::Ipv6Addr;
 
+use defmt::info;
+
 use embassy_executor::InterruptExecutor;
 use embassy_executor::Spawner;
 
@@ -25,13 +27,11 @@ use embassy_nrf::{bind_interrupts, peripherals, radio};
 
 use heapless::Vec;
 
-use log::info;
-
 use openthread::enet::{self, EnetDriver, EnetRunner};
 use openthread::nrf::{Ieee802154, NrfRadio};
 use openthread::{
-    EmbassyTimeTimer, OpenThread, OtResources, PhyRadioRunner, ProxyRadio, ProxyRadioResources,
-    Radio, SimpleRamSettings,
+    BytesFmt, EmbassyTimeTimer, OpenThread, OtResources, PhyRadioRunner, ProxyRadio,
+    ProxyRadioResources, Radio, SimpleRamSettings,
 };
 
 use rand_core::RngCore;
@@ -72,8 +72,6 @@ const BOUND_PORT: u16 = 1212;
 const IPV6_PACKET_SIZE: usize = 1280;
 const ENET_MAX_SOCKETS: usize = 2;
 
-const LOG_RINGBUF_SIZE: usize = 4096;
-
 const THREAD_DATASET: &str = if let Some(dataset) = option_env!("THREAD_DATASET") {
     dataset
 } else {
@@ -87,11 +85,7 @@ async fn main(spawner: Spawner) {
 
     let p = embassy_nrf::init(config);
 
-    rtt_target::rtt_init_log!(
-        log::LevelFilter::Info,
-        rtt_target::ChannelMode::NoBlockSkip,
-        LOG_RINGBUF_SIZE
-    );
+    rtt_target::rtt_init_defmt!();
 
     info!("Starting...");
 
@@ -142,7 +136,7 @@ async fn main(spawner: Spawner) {
 
     spawner.spawn(run_enet(enet_runner)).unwrap();
 
-    info!("Dataset: {THREAD_DATASET}");
+    info!("Dataset: {}", THREAD_DATASET);
 
     ot.set_active_dataset_tlv_hexstr(THREAD_DATASET).unwrap();
     ot.enable_ipv6(true).unwrap();
@@ -162,7 +156,7 @@ async fn main(spawner: Spawner) {
         .unwrap();
 
         if !addrs.is_empty() {
-            info!("Got IPv6 address(es) from OpenThread: {addrs:?}");
+            info!("Got IPv6 address(es) from OpenThread: {:?}", addrs);
 
             // NOTE: Ideally, we should track any changes to the OpenThread Ipv6 conf with `ot_controller.wait_changed()`
             // and re-initialize the embassy-net config with the new Ip and prefix.
@@ -171,7 +165,7 @@ async fn main(spawner: Spawner) {
                 .find(|(addr, _)| addr.is_unicast_link_local())
                 .expect("No link-local address found");
 
-            info!("Will bind to link-local {linklocal_addr} Ipv6 addr");
+            info!("Will bind to link-local {} Ipv6 addr", linklocal_addr);
 
             stack.set_config_v6(ConfigV6::Static(StaticConfigV6 {
                 address: Ipv6Cidr::new(*linklocal_addr, *linklocal_prefix),
@@ -191,7 +185,10 @@ async fn main(spawner: Spawner) {
 
     socket.bind(BOUND_PORT).unwrap();
 
-    info!("Opened socket on port {BOUND_PORT} and waiting for packets...");
+    info!(
+        "Opened socket on port {} and waiting for packets...",
+        BOUND_PORT
+    );
 
     let buf: &mut [u8] = unsafe { mk_static!([u8; IPV6_PACKET_SIZE]).assume_init_mut() };
 
@@ -206,8 +203,8 @@ async fn main(spawner: Spawner) {
         ) = socket.recv_from(buf).await.unwrap();
 
         info!(
-            "Got {:02x?} from {} on {:?}",
-            &buf[..len],
+            "Got {} from {} on {:?}",
+            BytesFmt(&buf[..len]),
             endpoint,
             local_address
         );

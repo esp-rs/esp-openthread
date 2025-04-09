@@ -64,9 +64,9 @@ extern "C" fn otPlatAlarmMilliStop(instance: *const otInstance) -> otError {
 
 #[no_mangle]
 extern "C" fn otPlatRadioGetIeeeEui64(instance: *const otInstance, mac: *mut u8) {
-    let mac = unsafe { core::ptr::slice_from_raw_parts_mut(mac, 8).as_mut() }.unwrap();
+    let mac = unwrap!(unsafe { core::ptr::slice_from_raw_parts_mut(mac, 8).as_mut() });
 
-    OtContext::callback(instance).plat_radio_ieee_eui64(mac.try_into().unwrap());
+    OtContext::callback(instance).plat_radio_ieee_eui64(unwrap!(mac.try_into()));
 }
 
 #[no_mangle]
@@ -138,11 +138,9 @@ extern "C" fn otPlatRadioGetPromiscuous(instance: *const otInstance) -> bool {
 
 #[no_mangle]
 extern "C" fn otPlatRadioSetExtendedAddress(instance: *const otInstance, address: *const u8) {
-    OtContext::callback(instance).plat_radio_set_extended_address(u64::from_be_bytes(
-        unsafe { core::slice::from_raw_parts(address, 8) }
-            .try_into()
-            .unwrap(),
-    ));
+    OtContext::callback(instance).plat_radio_set_extended_address(u64::from_be_bytes(unwrap!(
+        unsafe { core::slice::from_raw_parts(address, 8) }.try_into()
+    )));
 }
 
 #[no_mangle]
@@ -279,21 +277,25 @@ extern "C" fn otPlatLog(
     _format: *const c_char,
     str: *const c_char,
 ) -> otError {
-    #[allow(non_snake_case)]
-    #[allow(unused)]
-    let level = match level {
-        0 => None,
-        1 /*CRIT*/ => Some(log::Level::Error),
-        2 /*WARN*/ => Some(log::Level::Warn),
-        3 /*NOTE*/ => Some(log::Level::Info),
-        4 /*INFO*/ => Some(log::Level::Debug),
-        5 /*DEBG*/ => Some(log::Level::Trace),
-        _ => Some(log::Level::Trace),
-    };
-
-    if let Some(level) = level {
+    if level > 0 {
         if let Ok(str) = unsafe { CStr::from_ptr(str) }.to_str() {
-            ::log::log!(level, "[OpenThread] {}", str);
+            match level {
+                1 /*CRIT*/ => {
+                    info!("[OpenThread] {}", str);
+                }
+                2 /*WARN*/ => {
+                    warn!("[OpenThread] {}", str);
+                }
+                3 /*NOTE*/ => {
+                    info!("[OpenThread] {}", str);
+                }
+                4 /*INFO*/ => {
+                    debug!("[OpenThread] {}", str);
+                }
+                _ /*DEBG*/ => {
+                    trace!("[OpenThread] {}", str);
+                }
+            }
         }
     }
 

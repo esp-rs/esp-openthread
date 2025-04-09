@@ -10,6 +10,8 @@
 
 use core::net::{Ipv6Addr, SocketAddrV6};
 
+use defmt::info;
+
 use embassy_executor::InterruptExecutor;
 use embassy_executor::Spawner;
 
@@ -19,12 +21,10 @@ use embassy_nrf::peripherals::{RADIO, RNG};
 use embassy_nrf::rng::{self, Rng};
 use embassy_nrf::{bind_interrupts, peripherals, radio};
 
-use log::info;
-
 use openthread::nrf::{Ieee802154, NrfRadio};
 use openthread::{
-    EmbassyTimeTimer, OpenThread, OtResources, OtUdpResources, PhyRadioRunner, ProxyRadio,
-    ProxyRadioResources, Radio, SimpleRamSettings, UdpSocket,
+    BytesFmt, EmbassyTimeTimer, OpenThread, OtResources, OtUdpResources, PhyRadioRunner,
+    ProxyRadio, ProxyRadioResources, Radio, SimpleRamSettings, UdpSocket,
 };
 
 use panic_rtt_target as _;
@@ -65,8 +65,6 @@ const BOUND_PORT: u16 = 1212;
 const UDP_SOCKETS_BUF: usize = 1280;
 const UDP_MAX_SOCKETS: usize = 2;
 
-const LOG_RINGBUF_SIZE: usize = 4096;
-
 const THREAD_DATASET: &str = if let Some(dataset) = option_env!("THREAD_DATASET") {
     dataset
 } else {
@@ -80,11 +78,7 @@ async fn main(spawner: Spawner) {
 
     let p = embassy_nrf::init(config);
 
-    rtt_target::rtt_init_log!(
-        log::LevelFilter::Info,
-        rtt_target::ChannelMode::NoBlockSkip,
-        LOG_RINGBUF_SIZE
-    );
+    rtt_target::rtt_init_defmt!();
 
     info!("Starting...");
 
@@ -126,7 +120,7 @@ async fn main(spawner: Spawner) {
 
     spawner.spawn(run_ot_ip_info(ot.clone())).unwrap();
 
-    info!("Dataset: {THREAD_DATASET}");
+    info!("Dataset: {}", THREAD_DATASET);
 
     ot.set_active_dataset_tlv_hexstr(THREAD_DATASET).unwrap();
     ot.enable_ipv6(true).unwrap();
@@ -138,14 +132,17 @@ async fn main(spawner: Spawner) {
     )
     .unwrap();
 
-    info!("Opened socket on port {BOUND_PORT} and waiting for packets...");
+    info!(
+        "Opened socket on port {} and waiting for packets...",
+        BOUND_PORT
+    );
 
     let buf: &mut [u8] = unsafe { mk_static!([u8; UDP_SOCKETS_BUF]).assume_init_mut() };
 
     loop {
         let (len, local, remote) = socket.recv(buf).await.unwrap();
 
-        info!("Got {:02x?} from {remote} on {local}", &buf[..len]);
+        info!("Got {} from {} on {}", BytesFmt(&buf[..len]), remote, local);
 
         socket.send(b"Hello", Some(&local), &remote).await.unwrap();
         info!("Sent `b\"Hello\"`");
@@ -183,7 +180,7 @@ async fn run_ot_ip_info(ot: OpenThread<'static>) -> ! {
         .unwrap();
 
         if cur_addrs != addrs {
-            info!("Got new IPv6 address(es) from OpenThread: {addrs:?}");
+            info!("Got new IPv6 address(es) from OpenThread: {:?}", addrs);
 
             cur_addrs = addrs;
 

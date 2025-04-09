@@ -2,8 +2,7 @@
 
 pub use embassy_nrf::radio::ieee802154::{Cca as RadioCca, Packet};
 
-use log::{debug, trace};
-
+use crate::fmt::Bytes;
 use crate::{
     Capabilities, Cca, Config, MacCapabilities, PsduMeta, Radio, RadioError, RadioErrorKind,
 };
@@ -76,7 +75,7 @@ where
 
     async fn set_config(&mut self, config: &Config) -> Result<(), Self::Error> {
         if self.config != *config {
-            debug!("Setting radio config: {config:?}");
+            debug!("Setting radio config: {:?}", config);
 
             self.config = config.clone();
             self.update_driver_config();
@@ -90,7 +89,7 @@ where
         psdu: &[u8],
         _ack_psdu_buf: Option<&mut [u8]>,
     ) -> Result<Option<PsduMeta>, Self::Error> {
-        debug!("NRF Radio, about to transmit: {psdu:02x?}");
+        debug!("NRF Radio, about to transmit: {}", Bytes(psdu));
 
         let mut packet = Packet::new();
         // TODO: `embassy-nrf` driver wants the PSDU without the CRC,
@@ -123,7 +122,7 @@ where
             let len = packet.len() as _;
             psdu_buf[..len].copy_from_slice(&packet);
 
-            debug!("NRF Radio, received: {:02x?}", &psdu_buf[..len]);
+            debug!("NRF Radio, received: {}", Bytes(&psdu_buf[..len]));
 
             let lqi = packet.lqi();
             let rssi = lqi as _; // TODO: Convert LQI to RSSI

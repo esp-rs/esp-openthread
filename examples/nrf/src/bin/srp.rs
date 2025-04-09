@@ -14,6 +14,8 @@
 use core::fmt::Write;
 use core::net::{Ipv6Addr, SocketAddrV6};
 
+use defmt::info;
+
 use embassy_executor::InterruptExecutor;
 use embassy_executor::Spawner;
 
@@ -23,12 +25,10 @@ use embassy_nrf::peripherals::{RADIO, RNG};
 use embassy_nrf::rng::{self, Rng};
 use embassy_nrf::{bind_interrupts, peripherals, radio};
 
-use log::info;
-
 use openthread::nrf::{Ieee802154, NrfRadio};
 use openthread::{
-    EmbassyTimeTimer, OpenThread, OtResources, OtSrpResources, OtUdpResources, PhyRadioRunner,
-    ProxyRadio, ProxyRadioResources, Radio, SimpleRamSettings, SrpConf, UdpSocket,
+    BytesFmt, EmbassyTimeTimer, OpenThread, OtResources, OtSrpResources, OtUdpResources,
+    PhyRadioRunner, ProxyRadio, ProxyRadioResources, Radio, SimpleRamSettings, SrpConf, UdpSocket,
 };
 
 use panic_rtt_target as _;
@@ -72,8 +72,6 @@ const UDP_MAX_SOCKETS: usize = 2;
 const SRP_SERVICE_BUF: usize = 300;
 const SRP_MAX_SERVICES: usize = 2;
 
-const LOG_RINGBUF_SIZE: usize = 4096;
-
 const THREAD_DATASET: &str = if let Some(dataset) = option_env!("THREAD_DATASET") {
     dataset
 } else {
@@ -87,11 +85,7 @@ async fn main(spawner: Spawner) {
 
     let p = embassy_nrf::init(config);
 
-    rtt_target::rtt_init_log!(
-        log::LevelFilter::Info,
-        rtt_target::ChannelMode::NoBlockSkip,
-        LOG_RINGBUF_SIZE
-    );
+    rtt_target::rtt_init_defmt!();
 
     info!("Starting...");
 
@@ -144,7 +138,7 @@ async fn main(spawner: Spawner) {
 
     spawner.spawn(run_ot_info(ot.clone())).unwrap();
 
-    info!("Dataset: {THREAD_DATASET}");
+    info!("Dataset: {}", THREAD_DATASET);
 
     ot.srp_autostart().unwrap();
 
@@ -191,14 +185,17 @@ async fn main(spawner: Spawner) {
     )
     .unwrap();
 
-    info!("Opened socket on port {BOUND_PORT} and waiting for packets...");
+    info!(
+        "Opened socket on port {} and waiting for packets...",
+        BOUND_PORT
+    );
 
     let buf: &mut [u8] = unsafe { mk_static!([u8; UDP_SOCKETS_BUF]).assume_init_mut() };
 
     loop {
         let (len, local, remote) = socket.recv(buf).await.unwrap();
 
-        info!("Got {:02x?} from {remote} on {local}", &buf[..len]);
+        info!("Got {} from {} on {}", BytesFmt(&buf[..len]), remote, local);
 
         socket.send(b"Hello", Some(&local), &remote).await.unwrap();
         info!("Sent `b\"Hello\"`");
@@ -248,14 +245,14 @@ async fn run_ot_info(ot: OpenThread<'static>) -> ! {
         .unwrap();
 
         if cur_addrs != addrs || cur_state != state || cur_server_addr != server_addr {
-            info!("Got new IPv6 address(es) and/or SRP state from OpenThread:\nIP addrs: {addrs:?}\nSRP state: {state:?}\nSRP server addr: {server_addr:?}");
+            info!("Got new IPv6 address(es) and/or SRP state from OpenThread:\nIP addrs: {:?}\nSRP state: {:?}\nSRP server addr: {:?}", addrs, state, server_addr);
 
             cur_addrs = addrs;
             cur_state = state;
             cur_server_addr = server_addr;
 
             ot.srp_conf(|conf, state, empty| {
-                info!("SRP conf: {conf:?}, state: {state}, empty: {empty}");
+                info!("SRP conf: {:?}, state: {}, empty: {}", conf, state, empty);
 
                 Ok(())
             })
@@ -263,7 +260,7 @@ async fn run_ot_info(ot: OpenThread<'static>) -> ! {
 
             ot.srp_services(|service| {
                 if let Some((service, state, slot)) = service {
-                    info!("SRP service: {service}, state: {state}, slot: {slot}");
+                    info!("SRP service: {}, state: {}, slot: {}", service, state, slot);
                 }
             })
             .unwrap();

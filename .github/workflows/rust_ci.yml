@@ -38,7 +38,10 @@ jobs:
         run: cd openthread; cargo fmt -- --check
 
       - name: Build | Clippy
-        run: cd openthread; cargo clippy --no-deps --features udp,srp,edge-nal,embassy-net-driver-channel -- -Dwarnings
+        run: cd openthread; cargo clippy --no-deps --features udp,srp,edge-nal,embassy-net-driver-channel,log -- -Dwarnings
+
+      - name: Build | Clippy - defmt
+        run: cd openthread; cargo clippy --no-deps --features udp,srp,edge-nal,embassy-net-driver-channel,defmt -- -Dwarnings
 
       - name: Build | Compile
         run: cd openthread; cargo build
