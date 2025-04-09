@@ -402,20 +402,20 @@ where
 
         for (index, label) in self.subtype_labels.clone().enumerate() {
             if index > 0 {
-                write!(f, ", ")?;
+                write!(f, ", {}", label)?;
+            } else {
+                write!(f, "{}", label)?;
             }
-
-            write!(f, "{}", label)?;
         }
 
         write!(f, "], txt: [")?;
 
         for (index, value) in self.txt_entries.clone().enumerate() {
             if index > 0 {
-                write!(f, ", ")?;
+                write!(f, ", {}: {:?}", value.0, value.1)?;
+            } else {
+                write!(f, "{}: {:?}", value.0, value.1)?;
             }
-
-            write!(f, "{}: {:?}", value.0, value.1)?;
         }
 
         write!(f, "]}}")
@@ -443,20 +443,20 @@ where
 
         for (index, label) in self.subtype_labels.clone().enumerate() {
             if index > 0 {
-                defmt::write!(f, ", ");
+                defmt::write!(f, ", {}", label);
+            } else {
+                defmt::write!(f, "{}", label);
             }
-
-            defmt::write!(f, "{}", label);
         }
 
         defmt::write!(f, "], txt: [");
 
         for (index, value) in self.txt_entries.clone().enumerate() {
             if index > 0 {
-                defmt::write!(f, ", ");
+                defmt::write!(f, ", {}: {:?}", value.0, value.1);
+            } else {
+                defmt::write!(f, "{}: {:?}", value.0, value.1);
             }
-
-            defmt::write!(f, "{}: {:?}", value.0, value.1);
         }
 
         defmt::write!(f, "]}}")

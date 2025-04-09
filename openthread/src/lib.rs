@@ -1221,7 +1221,10 @@ impl<'a> OtContext<'a> {
     fn state(&mut self) -> &mut OtActiveState<'a> {
         unsafe {
             core::mem::transmute::<&'static mut OtActiveState<'static>, &mut OtActiveState<'a>>(
-                unwrap!(unwrap!(OT_ACTIVE_STATE.0.get().as_mut()).as_mut()),
+                unwrap!(
+                    unwrap!(OT_ACTIVE_STATE.0.get().as_mut()).as_mut(),
+                    "OpenThread is not activated"
+                ),
             )
         }
     }

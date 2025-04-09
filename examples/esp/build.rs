@@ -1,6 +1,6 @@
 fn main() {
-    // Uncomment the two lines below to enable defmt support
-    //linker_be_nice();
+    linker_be_nice();
+    // Uncomment to enable defmt support
     //println!("cargo:rustc-link-arg=-Tdefmt.x");
     // make sure linkall.x is the last linker script (otherwise might cause problems with flip-link)
     println!("cargo:rustc-link-arg=-Tlinkall.x");
