@@ -27,7 +27,7 @@ isupper = [] # Provide internal implementation of the `isupper` C fn
 [dependencies]
 openthread-sys = { path = "../openthread-sys" }
 log = { version = "0.4", default-features = false, optional = true }
-defmt = { version = "0.3", default-features = false, optional = true }
+defmt = { version = "0.3", default-features = false, optional = true, features = ["ip_in_core"] }
 scopeguard = { version = "1", default-features = false }
 rand_core = "0.6"
 embassy-sync = "0.6"
